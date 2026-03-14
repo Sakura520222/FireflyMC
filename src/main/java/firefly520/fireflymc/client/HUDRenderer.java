@@ -13,6 +13,7 @@ import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.FormattedText;
 import net.minecraft.network.chat.MutableComponent;
+import firefly520.fireflymc.Config;
 
 
 public class HUDRenderer
@@ -71,9 +72,16 @@ public class HUDRenderer
     // 背景已设为透明
     // guiGraphics.fill(x, startY - 2, x + baseWidth + 10, startY + totalHeight, BACKGROUND_COLOR);
 
+    // 从配置读取缩放值
+    float scale = Config.CLIENT.HUD_SCALE.get().floatValue();
 
-    int y = startY;
+    // 应用缩放
+    guiGraphics.pose().pushPose();
+    guiGraphics.pose().scale(scale, scale, 1.0F);
 
+    // 调整坐标以补偿缩放
+    x = (int)(x / scale);
+    int y = (int)(startY / scale);
 
     // 服务器名称
     guiGraphics.drawString(font, SERVER_NAME, x + 5, y, TEXT_COLOR);
@@ -122,7 +130,10 @@ public class HUDRenderer
     y += lineHeight;
 
     // 渲染玩家列表
-    y = renderPlayerList(guiGraphics, font, x, y, baseWidth, lineHeight, player);
+    renderPlayerList(guiGraphics, font, x, y, baseWidth, lineHeight, player);
+
+    // 恢复缩放
+    guiGraphics.pose().popPose();
   }
 
 
