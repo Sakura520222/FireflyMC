@@ -1,0 +1,27 @@
+modLoader="javafml"
+loaderVersion="[1,)"
+license="All Rights Reserved"
+
+[[mods]]
+modId="fireflymc"
+version="2.0.0"
+displayName="FireflyMC GUI"
+description="""
+在游戏左侧显示服务器信息的客户端模组
+显示内容包括服务器名称、在线人数和官网链接
+"""
+authors="FireflyMC"
+
+[[dependencies.fireflymc]]
+    modId="neoforge"
+    type="required"
+    versionRange="[21.1,)"
+    ordering="NONE"
+    side="CLIENT"
+
+[[dependencies.fireflymc]]
+    modId="minecraft"
+    type="required"
+    versionRange="[1.21.1,1.22)"
+    ordering="NONE"
+    side="CLIENT"
