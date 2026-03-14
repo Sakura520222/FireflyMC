@@ -5,12 +5,12 @@ license="All Rights Reserved"
 [[mods]]
 modId="fireflymc"
 version="2.0.0"
-displayName="FireflyMC GUI"
+displayName="FireflyMC"
 description="""
 在游戏左侧显示服务器信息的客户端模组
 显示内容包括服务器名称、在线人数和官网链接
 """
-authors="FireflyMC"
+authors="Firefly520222"
 
 [[dependencies.fireflymc]]
     modId="neoforge"

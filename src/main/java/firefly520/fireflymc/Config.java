@@ -18,12 +18,17 @@ public class Config {
     public final ModConfigSpec.DoubleValue HUD_SCALE;
 
     public ClientConfig(ModConfigSpec.Builder builder) {
-      builder.push("界面设置");
+      // 给配置节指定翻译键，官方推荐格式：<modid>.config.<节名>
+      builder.push("hud_settings")
+              .translation("fireflymc.config.hud_settings");
 
+      // 给配置项指定翻译键，官方推荐格式：<modid>.config.<节名>.<键名>
       HUD_SCALE = builder
-              .comment("HUD 缩放值，范围 0.5 到 1.0")
-              .defineInRange("缩放大小", 0.75, 0.5, 1.0);
+              .comment("HUD interface scale value, range 0.5 to 1.0")
+              .translation("fireflymc.config.hud_settings.hud_scale") // 官方强制指定翻译键
+              .defineInRange("hud_scale", 0.75, 0.5, 1.0);
 
+      // 退出配置节
       builder.pop();
     }
   }

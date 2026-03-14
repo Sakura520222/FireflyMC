@@ -1,0 +1,11 @@
+{
+  "mod.fireflymc.name": "FireflyMC",
+  "mod.fireflymc.description": "FireflyMC 服务器专用模组",
+  "fml.menu.mods.info.description.fireflymc": "FireflyMC 服务器专用模组",
+
+  "fireflymc.configuration.hud_settings": "HUD 设置",
+  "fireflymc.config.hud_settings.hud_scale": "HUD 缩放",
+  "fireflymc.config.hud_settings.hud_scale.tooltip": "调整 HUD 界面的大小，取值范围 0.5~1.0，默认 0.75",
+
+  "fireflymc.configuration.section.fireflymc-client.toml": "客户端配置"
+}
