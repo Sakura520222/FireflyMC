@@ -4,18 +4,14 @@ import firefly520.fireflymc.network.ModHandshakePayload;
 import firefly520.fireflymc.network.ModPayloadHandler;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
-import net.neoforged.bus.api.SubscribeEvent;
-import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.neoforge.event.entity.player.PlayerEvent;
 import net.neoforged.neoforge.network.PacketDistributor;
 
 /**
  * 全局事件处理器
  */
-@EventBusSubscriber(modid = FireflyMCMod.MODID, bus = EventBusSubscriber.Bus.GAME)
 public class ModEventHandler {
 
-    @SubscribeEvent
     public static void onPlayerLoggedIn(PlayerEvent.PlayerLoggedInEvent event) {
         if (event.getEntity() instanceof ServerPlayer serverPlayer) {
             ModPayloadHandler.VERIFIED_PLAYERS.remove(serverPlayer.getUUID());
@@ -44,7 +40,6 @@ public class ModEventHandler {
         }
     }
 
-    @SubscribeEvent
     public static void onPlayerLoggedOut(PlayerEvent.PlayerLoggedOutEvent event) {
         if (event.getEntity() instanceof ServerPlayer serverPlayer) {
             ModPayloadHandler.VERIFIED_PLAYERS.remove(serverPlayer.getUUID());

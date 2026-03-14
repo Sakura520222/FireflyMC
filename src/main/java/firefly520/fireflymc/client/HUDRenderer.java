@@ -11,7 +11,6 @@ import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.multiplayer.ClientPacketListener;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.network.chat.Component;
-import net.minecraft.network.chat.FormattedText;
 import net.minecraft.network.chat.MutableComponent;
 import firefly520.fireflymc.Config;
 
@@ -27,8 +26,6 @@ public class HUDRenderer
 
 
   private static final int TEXT_COLOR = 16777215;
-
-  private static final int BACKGROUND_COLOR = -2147483648;
 
 
   public static void render(GuiGraphics guiGraphics) {
@@ -54,7 +51,6 @@ public class HUDRenderer
 
 
     Font font = mc.font;
-    int screenWidth = mc.getWindow().getGuiScaledWidth();
     int screenHeight = mc.getWindow().getGuiScaledHeight();
 
 
