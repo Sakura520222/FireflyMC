@@ -1,0 +1,64 @@
+plugins {
+    id 'eclipse'
+    id 'maven-publish'
+    id 'net.neoforged.moddev' version '2.0.140'
+}
+
+version = "2.0.0"
+group = "top.firefly520.fireflymc"
+base.archivesName = "fireflymc"
+
+neoForge {
+    version = "21.1.219"
+
+    runs {
+        configureEach {
+            logLevel = org.slf4j.event.Level.INFO
+        }
+
+        client {
+            systemProperty 'neoforge.logs.directory', 'logs'
+        }
+
+        server {
+            systemProperty 'neoforge.logs.directory', 'logs'
+        }
+    }
+}
+
+repositories {
+}
+
+dependencies {
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+}
+
+tasks.named('jar', Jar).configure {
+    manifest {
+        attributes([
+                'Specification-Title'     : 'fireflymc',
+                'Specification-Vendor'    : 'FireflyMC',
+                'Specification-Version'   : '1',
+                'Implementation-Title'    : project.name,
+                'Implementation-Version'  : "${version}",
+                'Implementation-Vendor'   : 'FireflyMC',
+                'Implementation-Timestamp': new Date().format("yyyy-MM-dd'T'HH:mm:ssZ")
+        ])
+    }
+}
+
+publishing {
+    publications {
+        mavenJava(MavenPublication) {
+            artifact jar
+        }
+    }
+    repositories {
+        maven {
+            url "file://${project.projectDir}/mcmodsrepo"
+        }
+    }
+}
