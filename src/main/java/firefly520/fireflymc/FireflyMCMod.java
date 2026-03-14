@@ -1,8 +1,8 @@
-/*    */ package top.firefly520.fireflymc;
+/*    */ package firefly520.fireflymc;
 /*    */ 
 /*    */ import net.neoforged.bus.api.IEventBus;
 /*    */ import net.neoforged.fml.common.Mod;
-/*    */ import top.firefly520.fireflymc.client.ClientHandler;
+/*    */ import firefly520.fireflymc.client.ClientHandler;
 /*    */ 
 /*    */ @Mod("fireflymc")
 /*    */ public class FireflyMCMod

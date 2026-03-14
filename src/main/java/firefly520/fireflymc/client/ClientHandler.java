@@ -1,4 +1,4 @@
-/*    */ package top.firefly520.fireflymc.client;
+/*    */ package firefly520.fireflymc.client;
 /*    */ 
 /*    */ import net.neoforged.api.distmarker.Dist;
 /*    */ import net.neoforged.bus.api.SubscribeEvent;

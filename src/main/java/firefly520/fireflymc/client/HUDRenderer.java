@@ -1,109 +1,136 @@
-/*     */ package top.firefly520.fireflymc.client;
-/*     */ 
-/*     */ import java.util.Objects;
-/*     */ import net.minecraft.client.Minecraft;
-/*     */ import net.minecraft.client.gui.Font;
-/*     */ import net.minecraft.client.gui.GuiGraphics;
-/*     */ import net.minecraft.client.multiplayer.ClientPacketListener;
-/*     */ import net.minecraft.client.player.LocalPlayer;
-/*     */ import net.minecraft.network.chat.Component;
-/*     */ import net.minecraft.network.chat.FormattedText;
-/*     */ import net.minecraft.network.chat.MutableComponent;
-/*     */ 
-/*     */ 
-/*     */ public class HUDRenderer
-/*     */ {
-/*  16 */   private static final Component SERVER_NAME = (Component)Component.literal("FireflyMC 2.0.0");
-/*  17 */   private static final Component WEBSITE_URL = (Component)Component.literal("https://mc.firefly520.top");
-/*  18 */   private static final Component PLAYER_COUNT_PREFIX = (Component)Component.literal("在线人数: ");
-/*     */ 
-/*     */   
-/*     */   private static final int TEXT_COLOR = 16777215;
-/*     */   
-/*     */   private static final int BACKGROUND_COLOR = -2147483648;
-/*     */ 
-/*     */   
-/*     */   public static void render(GuiGraphics guiGraphics) {
-/*  27 */     Minecraft mc = Minecraft.getInstance();
-/*     */ 
-/*     */     
-/*  30 */     if (mc.screen != null) {
-/*     */       return;
-/*     */     }
-/*     */ 
-/*     */     
-/*  35 */     LocalPlayer player = mc.player;
-/*  36 */     if (player == null) {
-/*     */       return;
-/*     */     }
-/*     */ 
-/*     */     
-/*  41 */     int playerCount = getPlayerCount(player);
-/*     */ 
-/*     */     
-/*  44 */     Font font = mc.font;
-/*  45 */     int screenWidth = mc.getWindow().getGuiScaledWidth();
-/*  46 */     int screenHeight = mc.getWindow().getGuiScaledHeight();
-/*     */ 
-/*     */     
-/*  49 */     Objects.requireNonNull(font); int lineHeight = 9 + 2;
-/*  50 */     int totalHeight = lineHeight * 3 + 4;
-/*  51 */     int startY = (screenHeight - totalHeight) / 2;
-/*  52 */     int x = 5;
-/*     */ 
-/*     */     
-/*  55 */     int serverNameWidth = font.width((FormattedText)SERVER_NAME);
-/*  56 */     int playerCountWidth = font.width((FormattedText)PLAYER_COUNT_PREFIX) + font.width((FormattedText)Component.literal(String.valueOf(playerCount)));
-/*  57 */     int websiteUrlWidth = font.width((FormattedText)WEBSITE_URL);
-/*  58 */     int maxWidth = Math.max(Math.max(serverNameWidth, playerCountWidth), websiteUrlWidth) + 10;
-/*     */ 
-/*     */     
-/*  61 */     guiGraphics.fill(x, startY - 2, x + maxWidth, startY + totalHeight, -2147483648);
-/*     */ 
-/*     */     
-/*  64 */     int y = startY;
-/*     */ 
-/*     */     
-/*  67 */     guiGraphics.drawString(font, SERVER_NAME, x + 5, y, 16777215);
-/*  68 */     y += lineHeight;
-/*     */ 
-/*     */ 
-/*     */ 
-/*     */     
-/*  73 */     MutableComponent mutableComponent = Component.literal("").append(PLAYER_COUNT_PREFIX).append((Component)Component.literal(String.valueOf(playerCount)));
-/*  74 */     guiGraphics.drawString(font, (Component)mutableComponent, x + 5, y, 16777215);
-/*  75 */     y += lineHeight;
-/*     */ 
-/*     */     
-/*  78 */     guiGraphics.drawString(font, WEBSITE_URL, x + 5, y, 16777215);
-/*     */   }
-/*     */ 
-/*     */ 
-/*     */ 
-/*     */ 
-/*     */ 
-/*     */   
-/*     */   private static int getPlayerCount(LocalPlayer player) {
-/*  87 */     ClientPacketListener connection = player.connection;
-/*  88 */     if (connection != null) {
-/*     */       
-/*     */       try {
-/*  91 */         if (connection.getOnlinePlayers() != null) {
-/*  92 */           return connection.getOnlinePlayers().size();
-/*     */         }
-/*  94 */       } catch (Exception e) {
-/*     */         
-/*  96 */         return 1;
-/*     */       } 
-/*     */     }
-/*     */ 
-/*     */     
-/* 101 */     return 1;
-/*     */   }
-/*     */ }
+package firefly520.fireflymc.client;
+
+import java.util.Objects;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.Font;
+import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.multiplayer.ClientPacketListener;
+import net.minecraft.client.player.LocalPlayer;
+import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.FormattedText;
+import net.minecraft.network.chat.MutableComponent;
 
 
-/* Location:              D:\MC\.minecraft\versions\FireflyMC-1.21.1-NeoForge\mods\fireflymc-2.0.0.jar!\top\firefly520\fireflymc\client\HUDRenderer.class
- * Java compiler version: 21 (65.0)
- * JD-Core Version:       1.1.3
- */
+public class HUDRenderer
+{
+  private static final Component SERVER_NAME = Component.literal("FireflyMC 2.0.0");
+  private static final Component WEBSITE_URL = Component.literal("https://mc.firefly520.top");
+  private static final Component PLAYER_COUNT_PREFIX = Component.literal("在线人数: ");
+
+
+  private static final int TEXT_COLOR = 16777215;
+
+  private static final int BACKGROUND_COLOR = -2147483648;
+
+
+  public static void render(GuiGraphics guiGraphics) {
+    Minecraft mc = Minecraft.getInstance();
+
+
+    if (mc.screen != null) {
+      return;
+    }
+
+
+    LocalPlayer player = mc.player;
+    if (player == null) {
+      return;
+    }
+
+
+    int playerCount = getPlayerCount(player);
+
+
+    Font font = mc.font;
+    int screenWidth = mc.getWindow().getGuiScaledWidth();
+    int screenHeight = mc.getWindow().getGuiScaledHeight();
+
+
+    Objects.requireNonNull(font); int lineHeight = 9 + 2;
+
+    // 基准宽度：服务器名称宽度
+    int baseWidth = font.width(SERVER_NAME);
+
+    // 计算网址换行后的行数
+    int urlLines = font.split(WEBSITE_URL, baseWidth).size();
+
+    // 总高度 = 服务器名(1行) + 在线人数(1行) + 网址(urlLines行)
+    int totalHeight = lineHeight * (2 + urlLines) + 4;
+    int startY = (screenHeight - totalHeight) / 2;
+    int x = 5;
+
+
+    // 背景已设为透明
+    // guiGraphics.fill(x, startY - 2, x + baseWidth + 10, startY + totalHeight, BACKGROUND_COLOR);
+
+
+    int y = startY;
+
+
+    // 服务器名称
+    guiGraphics.drawString(font, SERVER_NAME, x + 5, y, TEXT_COLOR);
+    y += lineHeight;
+
+
+
+
+    // 在线人数
+    MutableComponent mutableComponent = Component.literal("").append(PLAYER_COUNT_PREFIX).append(Component.literal(String.valueOf(playerCount)));
+    guiGraphics.drawString(font, mutableComponent, x + 5, y, TEXT_COLOR);
+    y += lineHeight;
+
+
+    // 网址（跑马灯滚动）
+    String urlText = WEBSITE_URL.getString();
+    int urlWidth = font.width(urlText);
+
+    if (urlWidth <= baseWidth) {
+      // 文本短，不需要滚动，直接显示
+      guiGraphics.drawString(font, WEBSITE_URL, x + 5, y, TEXT_COLOR);
+    } else {
+      // 跑马灯效果：循环滚动显示网址
+      long time = System.currentTimeMillis();
+      int scrollSpeed = 200; // 每个位置显示200毫秒
+      int cycle = urlText.length() + 5; // 滚动周期（字符数+空格缓冲）
+      int offset = (int) ((time / scrollSpeed) % cycle);
+
+      // 构造滚动文本：在末尾添加空格和开头部分以实现循环
+      String scrollText = urlText + "     " + urlText.substring(0, Math.min(offset, urlText.length()));
+
+      // 从offset位置开始截取最多能显示的字符
+      int maxChars = 0;
+      int testWidth = 0;
+      for (int i = offset; i < scrollText.length(); i++) {
+        int charWidth = font.width(scrollText.substring(i, i + 1));
+        if (testWidth + charWidth > baseWidth) break;
+        testWidth += charWidth;
+        maxChars++;
+      }
+
+      String visibleText = scrollText.substring(offset, Math.min(offset + maxChars, scrollText.length()));
+      guiGraphics.drawString(font, Component.literal(visibleText), x + 5, y, TEXT_COLOR);
+    }
+  }
+
+
+
+
+
+  private static int getPlayerCount(LocalPlayer player) {
+    ClientPacketListener connection = player.connection;
+    if (connection != null) {
+
+      try {
+        if (connection.getOnlinePlayers() != null) {
+          return connection.getOnlinePlayers().size();
+        }
+      } catch (Exception e) {
+
+        return 1;
+      }
+    }
+
+
+    return 1;
+  }
+}
