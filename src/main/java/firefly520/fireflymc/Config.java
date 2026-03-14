@@ -21,8 +21,8 @@ public class Config {
       builder.push("界面设置");
 
       HUD_SCALE = builder
-              .comment("HUD 缩放值，范围 0.5 到 2.0")
-              .defineInRange("缩放大小", 0.75, 0.5, 2.0);
+              .comment("HUD 缩放值，范围 0.5 到 1.0")
+              .defineInRange("缩放大小", 0.75, 0.5, 1.0);
 
       builder.pop();
     }
