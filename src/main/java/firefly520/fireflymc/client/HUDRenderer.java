@@ -39,6 +39,10 @@ public class HUDRenderer
       return;
     }
 
+    // 同步F1隐藏GUI功能
+    if (mc.options.hideGui) {
+      return;
+    }
 
     LocalPlayer player = mc.player;
     if (player == null) {
