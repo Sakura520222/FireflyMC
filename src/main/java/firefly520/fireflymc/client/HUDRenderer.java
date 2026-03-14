@@ -65,23 +65,23 @@ public class HUDRenderer
     // 总高度 = 服务器名(1行) + 在线人数(1行) + 网址(urlLines行) + 分隔线(1行) + 玩家列表(MAX_VISIBLE_PLAYERS行)
     int playerListHeight = lineHeight * (MAX_VISIBLE_PLAYERS + 1); // +1 for separator
     int totalHeight = lineHeight * (2 + urlLines) + playerListHeight + 6;
-    int startY = (screenHeight - totalHeight) / 2;
     int x = 5;
 
-
     // 背景已设为透明
-    // guiGraphics.fill(x, startY - 2, x + baseWidth + 10, startY + totalHeight, BACKGROUND_COLOR);
+    // guiGraphics.fill(x, y - 2, x + baseWidth + 10, y + totalHeight, BACKGROUND_COLOR);
 
     // 从配置读取缩放值
     float scale = Config.CLIENT.HUD_SCALE.get().floatValue();
 
+    // 计算缩放后的屏幕尺寸，用于正确计算居中位置
+    int scaledHeight = (int)(screenHeight / scale);
+
+    // 基于缩放后的屏幕尺寸计算垂直居中位置
+    int y = (scaledHeight - totalHeight) / 2;
+
     // 应用缩放
     guiGraphics.pose().pushPose();
     guiGraphics.pose().scale(scale, scale, 1.0F);
-
-    // 调整坐标以补偿缩放
-    x = (int)(x / scale);
-    int y = (int)(startY / scale);
 
     // 服务器名称
     guiGraphics.drawString(font, SERVER_NAME, x + 5, y, TEXT_COLOR);
