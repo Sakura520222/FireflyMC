@@ -1,9 +1,11 @@
 package firefly520.fireflymc;
 
+import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.fml.ModContainer;
 import net.neoforged.fml.common.Mod;
 import net.neoforged.fml.config.ModConfig;
+import net.neoforged.fml.loading.FMLEnvironment;
 import net.neoforged.neoforge.client.gui.ConfigurationScreen;
 import net.neoforged.neoforge.client.gui.IConfigScreenFactory;
 import firefly520.fireflymc.client.ClientHandler;
@@ -17,14 +19,14 @@ public class FireflyMCMod {
     // 1. 注册客户端配置（官方标准写法）
     modContainer.registerConfig(ModConfig.Type.CLIENT, Config.CLIENT_SPEC);
 
-    // 2. 注册配置界面（官方文档推荐写法，无编译歧义）
-    modContainer.registerExtensionPoint(
-            IConfigScreenFactory.class,
-            ConfigurationScreen::new
-    );
-
-    // 3. 注册客户端事件
-    modEventBus.addListener(ClientHandler::onClientSetup);
+    // 2. 只在客户端注册配置界面和客户端事件
+    if (FMLEnvironment.dist == Dist.CLIENT) {
+      modContainer.registerExtensionPoint(
+              IConfigScreenFactory.class,
+              ConfigurationScreen::new
+      );
+      modEventBus.addListener(ClientHandler::onClientSetup);
+    }
 
     System.out.println("Loading FireflyMC 2.0.0");
   }

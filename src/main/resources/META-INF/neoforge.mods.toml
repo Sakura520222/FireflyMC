@@ -17,11 +17,11 @@ authors="Firefly520222"
     type="required"
     versionRange="[21.1,)"
     ordering="NONE"
-    side="CLIENT"
+    side="BOTH"
 
 [[dependencies.fireflymc]]
     modId="minecraft"
     type="required"
     versionRange="[1.21.1,1.22)"
     ordering="NONE"
-    side="CLIENT"
+    side="BOTH"

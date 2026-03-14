@@ -5,7 +5,7 @@
 
   "fireflymc.configuration.hud_settings": "HUD Settings",
   "fireflymc.config.hud_settings.hud_scale": "HUD Scale",
-  "fireflymc.config.hud_settings.hud_scale.tooltip": "Adjust the size of the HUD interface, range 0.5~1.0, default 0.75",
+  "fireflymc.config.hud_settings.hud_scale.tooltip": "Adjust the size of the HUD interface, range 0.5~1.0, default 0.5",
 
   "fireflymc.configuration.section.fireflymc-client.toml": "Client Settings"
 }

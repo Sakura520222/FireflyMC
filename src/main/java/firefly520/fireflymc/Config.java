@@ -26,7 +26,7 @@ public class Config {
       HUD_SCALE = builder
               .comment("HUD interface scale value, range 0.5 to 1.0")
               .translation("fireflymc.config.hud_settings.hud_scale") // 官方强制指定翻译键
-              .defineInRange("hud_scale", 0.75, 0.5, 1.0);
+              .defineInRange("hud_scale", 0.5, 0.5, 1.0);
 
       // 退出配置节
       builder.pop();
