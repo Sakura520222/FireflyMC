@@ -15,7 +15,7 @@ import firefly520.fireflymc.network.ModNetwork;
 @Mod(FireflyMCMod.MODID)
 public class FireflyMCMod {
   public static final String MODID = "fireflymc";
-  public static final String VERSION = "2.1.1";
+  public static final String VERSION = "2.2.0";
 
   public FireflyMCMod(IEventBus modEventBus, ModContainer modContainer) {
     // 1. 注册客户端配置（官方标准写法）
@@ -38,6 +38,6 @@ public class FireflyMCMod {
     NeoForge.EVENT_BUS.addListener(ModEventHandler::onPlayerLoggedIn);
     NeoForge.EVENT_BUS.addListener(ModEventHandler::onPlayerLoggedOut);
 
-    System.out.println("Loading FireflyMC 2.1.1");
+    System.out.println("Loading FireflyMC 2.2.0");
   }
 }

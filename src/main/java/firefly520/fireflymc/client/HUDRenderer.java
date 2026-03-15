@@ -17,7 +17,7 @@ import firefly520.fireflymc.Config;
 
 public class HUDRenderer
 {
-  private static final Component SERVER_NAME = Component.literal("FireflyMC 2.1.1");
+  private static final Component SERVER_NAME = Component.literal("FireflyMC 2.2.0");
   private static final Component WEBSITE_URL = Component.literal("https://mc.firefly520.top");
   private static final Component PLAYER_COUNT_PREFIX = Component.literal("在线人数: ");
 
