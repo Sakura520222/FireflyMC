@@ -1,5 +1,7 @@
 package firefly520.fireflymc.client.screen;
 
+import java.util.List;
+
 import com.mojang.blaze3d.systems.RenderSystem;
 import firefly520.fireflymc.client.ClientState;
 import net.minecraft.util.Mth;
@@ -9,6 +11,7 @@ import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.util.FormattedCharSequence;
 import net.neoforged.neoforge.network.PacketDistributor;
 
 /**
@@ -109,14 +112,11 @@ public class RulesScreen extends Screen {
         // 绘制樱花粉色边框
         drawRoundedBorder(guiGraphics, dialogX, dialogY, dialogWidth, dialogHeight, 8, BORDER_COLOR, 2);
 
-        // 绘制标题
-        guiGraphics.drawCenteredString(
-                this.font,
-                Component.translatable("fireflymc.rules.title"),
-                this.width / 2,
-                dialogY + 20,
-                TITLE_COLOR
-        );
+        // 绘制标题（手动居中，禁用阴影）
+        Component title = Component.translatable("fireflymc.rules.title");
+        int titleX = this.width / 2 - this.font.width(title) / 2;
+        guiGraphics.drawString(this.font, title.getVisualOrderText(),
+                (float)titleX, (float)(dialogY + 20), TITLE_COLOR, false);
 
         // 绘制分隔线
         int separatorY = dialogY + 45;
@@ -143,9 +143,9 @@ public class RulesScreen extends Screen {
         int contentStartY = contentTopY;
 
         // 行1：行为准则标题
-        guiGraphics.drawString(this.font,
-                Component.translatable("fireflymc.rules.section1"),
-                startX, contentY, HIGHLIGHT_COLOR);
+        Component section1 = Component.translatable("fireflymc.rules.section1");
+        guiGraphics.drawString(this.font, section1.getVisualOrderText(),
+                (float)startX, (float)contentY, HIGHLIGHT_COLOR, false);
         contentY += lineHeight;
 
         // 行1-1到1-3
@@ -161,9 +161,9 @@ public class RulesScreen extends Screen {
         contentY += lineHeight / 2;
 
         // 行2：领地规范标题
-        guiGraphics.drawString(this.font,
-                Component.translatable("fireflymc.rules.section2"),
-                startX, contentY, HIGHLIGHT_COLOR);
+        Component section2 = Component.translatable("fireflymc.rules.section2");
+        guiGraphics.drawString(this.font, section2.getVisualOrderText(),
+                (float)startX, (float)contentY, HIGHLIGHT_COLOR, false);
         contentY += lineHeight;
 
         // 行2-1到2-7（完整内容）
@@ -191,9 +191,9 @@ public class RulesScreen extends Screen {
         contentY += lineHeight / 2;
 
         // 行3：游戏守则标题
-        guiGraphics.drawString(this.font,
-                Component.translatable("fireflymc.rules.section3"),
-                startX, contentY, HIGHLIGHT_COLOR);
+        Component section3 = Component.translatable("fireflymc.rules.section3");
+        guiGraphics.drawString(this.font, section3.getVisualOrderText(),
+                (float)startX, (float)contentY, HIGHLIGHT_COLOR, false);
         contentY += lineHeight;
 
         // 行3-1到3-4
@@ -212,9 +212,9 @@ public class RulesScreen extends Screen {
         contentY += lineHeight / 2;
 
         // 行4：违规处置标题
-        guiGraphics.drawString(this.font,
-                Component.translatable("fireflymc.rules.section4"),
-                startX, contentY, HIGHLIGHT_COLOR);
+        Component section4 = Component.translatable("fireflymc.rules.section4");
+        guiGraphics.drawString(this.font, section4.getVisualOrderText(),
+                (float)startX, (float)contentY, HIGHLIGHT_COLOR, false);
         contentY += lineHeight;
 
         // 行4-1
@@ -292,26 +292,20 @@ public class RulesScreen extends Screen {
             guiGraphics.fill(scrollbarX, thumbY, scrollbarX + scrollbarWidth, thumbY + thumbHeight, 0x80FFC0CB);
         }
 
-        // 底部信息
+        // 底部信息（手动居中，禁用阴影）
         int footerY = dialogY + dialogHeight - 50;
-        guiGraphics.drawCenteredString(
-                this.font,
-                Component.translatable("fireflymc.rules.contact"),
-                this.width / 2,
-                footerY,
-                0xFF666666
-        );
+        Component contact = Component.translatable("fireflymc.rules.contact");
+        int contactX = this.width / 2 - this.font.width(contact) / 2;
+        guiGraphics.drawString(this.font, contact.getVisualOrderText(),
+                (float)contactX, (float)footerY, 0xFF666666, false);
 
-        // 非首次加入：显示倒计时
+        // 非首次加入：显示倒计时（手动居中，禁用阴影）
         if (!isFirstJoin) {
             int remainingSeconds = (AUTO_CLOSE_TICKS - tickCount) / 20 + 1;
-            guiGraphics.drawCenteredString(
-                    this.font,
-                    Component.translatable("fireflymc.rules.countdown", remainingSeconds),
-                    this.width / 2,
-                    dialogY + dialogHeight + 20,
-                    0xFFFFFF00
-            );
+            Component countdown = Component.translatable("fireflymc.rules.countdown", remainingSeconds);
+            int countdownX = this.width / 2 - this.font.width(countdown) / 2;
+            guiGraphics.drawString(this.font, countdown.getVisualOrderText(),
+                    (float)countdownX, (float)(dialogY + dialogHeight + 20), 0xFFFFFF00, false);
         }
 
         super.render(guiGraphics, mouseX, mouseY, partialTick);
@@ -386,25 +380,17 @@ public class RulesScreen extends Screen {
 
     /**
      * 绘制自动换行的文本
+     * 使用 font.split() 方法实现标准文本换行，禁用阴影效果避免重影
      */
     private int drawWrappedText(GuiGraphics guiGraphics, Component text, int x, int y, int maxWidth, int lineHeight) {
-        String plainText = text.getString();
-        if (this.font.width(plainText) <= maxWidth) {
-            guiGraphics.drawString(this.font, text, x, y, TEXT_COLOR);
-            return y + lineHeight;
+        // 使用 font.split() 将文本按宽度分割成多行
+        List<FormattedCharSequence> lines = this.font.split(text, maxWidth);
+
+        // 逐行渲染，每行一次 drawString 调用，显式禁用阴影效果
+        for (FormattedCharSequence line : lines) {
+            guiGraphics.drawString(this.font, line, (float)x, (float)y, TEXT_COLOR, false);
+            y += lineHeight;
         }
-        // 简单的换行处理
-        int currentX = x;
-        int currentY = y;
-        for (char c : plainText.toCharArray()) {
-            int charWidth = this.font.width(String.valueOf(c));
-            if (currentX + charWidth > x + maxWidth) {
-                currentX = x;
-                currentY += lineHeight;
-            }
-            guiGraphics.drawString(this.font, Component.literal(String.valueOf(c)), currentX, currentY, TEXT_COLOR);
-            currentX += charWidth;
-        }
-        return currentY + lineHeight;
+        return y;
     }
 }
