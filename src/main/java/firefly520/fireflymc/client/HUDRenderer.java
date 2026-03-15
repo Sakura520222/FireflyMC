@@ -26,6 +26,9 @@ public class HUDRenderer
 
 
   private static final int TEXT_COLOR = 16777215;
+  private static final int BORDER_COLOR = 0x40FFFFFF;  // 白色半透明
+  private static final int BORDER_RADIUS = 4;
+  private static final int BORDER_THICKNESS = 1;
 
 
   public static void render(GuiGraphics guiGraphics) {
@@ -83,8 +86,11 @@ public class HUDRenderer
     guiGraphics.pose().pushPose();
     guiGraphics.pose().scale(scale, scale, 1.0F);
 
+    // 绘制圆角边框
+    drawRoundedBorder(guiGraphics, x, y, baseWidth + 16, totalHeight);
+
     // 服务器名称
-    guiGraphics.drawString(font, SERVER_NAME, x + 5, y, TEXT_COLOR);
+    guiGraphics.drawString(font, SERVER_NAME, x + 8, y + 3, TEXT_COLOR);
     y += lineHeight;
 
 
@@ -92,7 +98,7 @@ public class HUDRenderer
 
     // 在线人数
     MutableComponent mutableComponent = Component.literal("").append(PLAYER_COUNT_PREFIX).append(Component.literal(String.valueOf(playerCount)));
-    guiGraphics.drawString(font, mutableComponent, x + 5, y, TEXT_COLOR);
+    guiGraphics.drawString(font, mutableComponent, x + 8, y, TEXT_COLOR);
     y += lineHeight;
 
 
@@ -102,7 +108,7 @@ public class HUDRenderer
 
     if (urlWidth <= baseWidth) {
       // 文本短，不需要滚动，直接显示
-      guiGraphics.drawString(font, WEBSITE_URL, x + 5, y, TEXT_COLOR);
+      guiGraphics.drawString(font, WEBSITE_URL, x + 8, y, TEXT_COLOR);
     } else {
       // 跑马灯效果：循环滚动显示网址
       long time = System.currentTimeMillis();
@@ -124,7 +130,7 @@ public class HUDRenderer
       }
 
       String visibleText = scrollText.substring(offset, Math.min(offset + maxChars, scrollText.length()));
-      guiGraphics.drawString(font, Component.literal(visibleText), x + 5, y, TEXT_COLOR);
+      guiGraphics.drawString(font, Component.literal(visibleText), x + 8, y, TEXT_COLOR);
     }
 
     y += lineHeight;
@@ -200,7 +206,7 @@ public class HUDRenderer
     int totalPlayers = playerNames.size();
 
     // 分隔线
-    guiGraphics.drawString(font, Component.literal("──在线玩家──"), x + 5, y, TEXT_COLOR);
+    guiGraphics.drawString(font, Component.literal("──在线玩家──"), x + 8, y, TEXT_COLOR);
     y += lineHeight;
 
     // 计算滚动偏移
@@ -220,11 +226,42 @@ public class HUDRenderer
       int playerIndex = scrollOffset + i;
       if (playerIndex < totalPlayers) {
         String playerName = playerNames.get(playerIndex);
-        guiGraphics.drawString(font, Component.literal(playerName), x + 5, y, TEXT_COLOR);
+        guiGraphics.drawString(font, Component.literal(playerName), x + 8, y, TEXT_COLOR);
         y += lineHeight;
       }
     }
 
     return y;
+  }
+
+  private static void drawRoundedBorder(GuiGraphics guiGraphics, int x, int y, int width, int height) {
+    int r = Math.min(BORDER_RADIUS, Math.min(width / 2, height / 2));
+    int t = BORDER_THICKNESS;
+
+    // 1. 绘制四条直边（不包含圆角部分）
+    // 上边
+    guiGraphics.fill(x + r, y, x + width - r, y + t, BORDER_COLOR);
+    // 下边
+    guiGraphics.fill(x + r, y + height - t, x + width - r, y + height, BORDER_COLOR);
+    // 左边
+    guiGraphics.fill(x, y + r, x + t, y + height - r, BORDER_COLOR);
+    // 右边
+    guiGraphics.fill(x + width - t, y + r, x + width, y + height - r, BORDER_COLOR);
+
+    // 2. 绘制四个圆角（使用三角函数计算像素点，更平滑）
+    for (int angle = 0; angle < 90; angle += 2) {
+      double rad = Math.toRadians(angle);
+      int dx = (int) (r * Math.cos(rad));
+      int dy = (int) (r * Math.sin(rad));
+
+      // 左上角
+      guiGraphics.fill(x + r - dx, y + r - dy, x + r - dx + t, y + r - dy + t, BORDER_COLOR);
+      // 右上角
+      guiGraphics.fill(x + width - r + dx - t, y + r - dy, x + width - r + dx, y + r - dy + t, BORDER_COLOR);
+      // 左下角
+      guiGraphics.fill(x + r - dx, y + height - r + dy - t, x + r - dx + t, y + height - r + dy, BORDER_COLOR);
+      // 右下角
+      guiGraphics.fill(x + width - r + dx - t, y + height - r + dy - t, x + width - r + dx, y + height - r + dy, BORDER_COLOR);
+    }
   }
 }
