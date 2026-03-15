@@ -201,6 +201,12 @@ public class RulesScreen extends Screen {
                 Component.translatable("fireflymc.rules.section3_1"),
                 startX, contentY, dialogWidth - 50, lineHeight);
         contentY = drawWrappedText(guiGraphics,
+                Component.translatable("fireflymc.rules.section3_2"),
+                startX, contentY, dialogWidth - 50, lineHeight);
+        contentY = drawWrappedText(guiGraphics,
+                Component.translatable("fireflymc.rules.section3_3"),
+                startX, contentY, dialogWidth - 50, lineHeight);
+        contentY = drawWrappedText(guiGraphics,
                 Component.translatable("fireflymc.rules.section3_4"),
                 startX, contentY, dialogWidth - 50, lineHeight);
         contentY += lineHeight / 2;
@@ -214,6 +220,43 @@ public class RulesScreen extends Screen {
         // 行4-1
         contentY = drawWrappedText(guiGraphics,
                 Component.translatable("fireflymc.rules.section4_1"),
+                startX, contentY, dialogWidth - 50, lineHeight);
+        // 行4-2到4-5
+        contentY = drawWrappedText(guiGraphics,
+                Component.translatable("fireflymc.rules.section4_2"),
+                startX, contentY, dialogWidth - 50, lineHeight);
+        contentY = drawWrappedText(guiGraphics,
+                Component.translatable("fireflymc.rules.section4_3"),
+                startX, contentY, dialogWidth - 50, lineHeight);
+        contentY = drawWrappedText(guiGraphics,
+                Component.translatable("fireflymc.rules.section4_4"),
+                startX, contentY, dialogWidth - 50, lineHeight);
+        contentY = drawWrappedText(guiGraphics,
+                Component.translatable("fireflymc.rules.section4_5"),
+                startX, contentY, dialogWidth - 50, lineHeight);
+        contentY += lineHeight / 2;
+
+        // 补充说明 note1-4
+        contentY = drawWrappedText(guiGraphics,
+                Component.translatable("fireflymc.rules.note1"),
+                startX, contentY, dialogWidth - 50, lineHeight);
+        contentY = drawWrappedText(guiGraphics,
+                Component.translatable("fireflymc.rules.note2"),
+                startX, contentY, dialogWidth - 50, lineHeight);
+        contentY = drawWrappedText(guiGraphics,
+                Component.translatable("fireflymc.rules.note3"),
+                startX, contentY, dialogWidth - 50, lineHeight);
+        contentY = drawWrappedText(guiGraphics,
+                Component.translatable("fireflymc.rules.note4"),
+                startX, contentY, dialogWidth - 50, lineHeight);
+        contentY += lineHeight / 2;
+
+        // 页脚声明
+        contentY = drawWrappedText(guiGraphics,
+                Component.translatable("fireflymc.rules.footer"),
+                startX, contentY, dialogWidth - 50, lineHeight);
+        contentY = drawWrappedText(guiGraphics,
+                Component.translatable("fireflymc.rules.update_date"),
                 startX, contentY, dialogWidth - 50, lineHeight);
 
         // 记录内容总高度
