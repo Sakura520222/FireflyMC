@@ -4,7 +4,7 @@ plugins {
     id 'net.neoforged.moddev' version '2.0.140'
 }
 
-version = "2.0.0"
+version = "2.1.0"
 group = "top.firefly520.fireflymc"
 base.archivesName = "fireflymc"
 

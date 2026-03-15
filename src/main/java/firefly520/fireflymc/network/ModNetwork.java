@@ -27,5 +27,19 @@ public class ModNetwork {
                 ModHandshakeReplyPayload.STREAM_CODEC,
                 ModPayloadHandler::handleHandshakeReply
         );
+
+        // 注册服务端→客户端的显示准则弹窗包（只有客户端处理）
+        registrar.playToClient(
+                ShowRulesPayload.TYPE,
+                ShowRulesPayload.STREAM_CODEC,
+                ModPayloadHandler::handleShowRules
+        );
+
+        // 注册客户端→服务端的确认准则包（只有服务端处理）
+        registrar.playToServer(
+                ConfirmRulesPayload.TYPE,
+                ConfirmRulesPayload.STREAM_CODEC,
+                ModPayloadHandler::handleConfirmRules
+        );
     }
 }

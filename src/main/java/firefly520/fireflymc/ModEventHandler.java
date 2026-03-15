@@ -2,6 +2,7 @@ package firefly520.fireflymc;
 
 import firefly520.fireflymc.network.ModHandshakePayload;
 import firefly520.fireflymc.network.ModPayloadHandler;
+import firefly520.fireflymc.network.ShowRulesPayload;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
 import net.neoforged.neoforge.event.entity.player.PlayerEvent;
@@ -15,9 +16,19 @@ public class ModEventHandler {
     public static void onPlayerLoggedIn(PlayerEvent.PlayerLoggedInEvent event) {
         if (event.getEntity() instanceof ServerPlayer serverPlayer) {
             ModPayloadHandler.VERIFIED_PLAYERS.remove(serverPlayer.getUUID());
+            ModPayloadHandler.CONFIRMED_PLAYERS.remove(serverPlayer.getUUID());
 
             // 发送握手检测包
             PacketDistributor.sendToPlayer(serverPlayer, new ModHandshakePayload());
+
+            // 判断是否首次加入（本次连接）
+            boolean isFirstJoin = !ModPayloadHandler.CONFIRMED_PLAYERS.containsKey(serverPlayer.getUUID());
+
+            // 发送显示准则弹窗包
+            PacketDistributor.sendToPlayer(serverPlayer, new ShowRulesPayload(isFirstJoin));
+
+            // 设置玩家无敌（客户端确认后会取消）
+            serverPlayer.setInvulnerable(true);
 
             // 5秒后检查验证状态
             new Thread(() -> {
@@ -43,6 +54,7 @@ public class ModEventHandler {
     public static void onPlayerLoggedOut(PlayerEvent.PlayerLoggedOutEvent event) {
         if (event.getEntity() instanceof ServerPlayer serverPlayer) {
             ModPayloadHandler.VERIFIED_PLAYERS.remove(serverPlayer.getUUID());
+            ModPayloadHandler.CONFIRMED_PLAYERS.remove(serverPlayer.getUUID());
         }
     }
 }

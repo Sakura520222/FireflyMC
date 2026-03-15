@@ -4,7 +4,7 @@ license="All Rights Reserved"
 
 [[mods]]
 modId="fireflymc"
-version="2.0.0"
+version="2.1.0"
 displayName="FireflyMC"
 description="""
 在游戏左侧显示服务器信息的客户端模组
@@ -29,6 +29,6 @@ authors="Firefly520222"
 [[dependencies.fireflymc]]
     modId="fireflymc"
     type="required"
-    versionRange="[2.0.0,)"
+    versionRange="[2.1.0,)"
     ordering="NONE"
     side="BOTH"
