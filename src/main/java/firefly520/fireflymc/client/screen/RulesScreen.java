@@ -79,7 +79,8 @@ public class RulesScreen extends Screen {
     @Override
     public boolean mouseScrolled(double mouseX, double mouseY, double horizontalAmount, double verticalAmount) {
         // 每次滚动20像素（约一行文字高度）
-        scrollOffset += (int)(verticalAmount * 20);
+        // 注意：verticalAmount 向上滚动为正，向下滚动为负，需要反转
+        scrollOffset -= (int)(verticalAmount * 20);
 
         // 限制滚动范围
         int maxScroll = Math.max(0, contentHeight - visibleHeight);
@@ -138,8 +139,8 @@ public class RulesScreen extends Screen {
         int lineHeight = 16;
         int startX = dialogX + 25;
 
-        // 记录内容起始位置，用于计算总高度
-        int contentStartY = contentY;
+        // 记录内容起始位置，用于计算总高度（在绘制任何内容之前）
+        int contentStartY = contentTopY;
 
         // 行1：行为准则标题
         guiGraphics.drawString(this.font,
@@ -150,13 +151,13 @@ public class RulesScreen extends Screen {
         // 行1-1到1-3
         contentY = drawWrappedText(guiGraphics,
                 Component.translatable("fireflymc.rules.section1_1"),
-                startX, contentY, dialogWidth - 50);
+                startX, contentY, dialogWidth - 50, lineHeight);
         contentY = drawWrappedText(guiGraphics,
                 Component.translatable("fireflymc.rules.section1_2"),
-                startX, contentY, dialogWidth - 50);
+                startX, contentY, dialogWidth - 50, lineHeight);
         contentY = drawWrappedText(guiGraphics,
                 Component.translatable("fireflymc.rules.section1_3"),
-                startX, contentY, dialogWidth - 50);
+                startX, contentY, dialogWidth - 50, lineHeight);
         contentY += lineHeight / 2;
 
         // 行2：领地规范标题
@@ -168,25 +169,25 @@ public class RulesScreen extends Screen {
         // 行2-1到2-7（完整内容）
         contentY = drawWrappedText(guiGraphics,
                 Component.translatable("fireflymc.rules.section2_1"),
-                startX, contentY, dialogWidth - 50);
+                startX, contentY, dialogWidth - 50, lineHeight);
         contentY = drawWrappedText(guiGraphics,
                 Component.translatable("fireflymc.rules.section2_2"),
-                startX, contentY, dialogWidth - 50);
+                startX, contentY, dialogWidth - 50, lineHeight);
         contentY = drawWrappedText(guiGraphics,
                 Component.translatable("fireflymc.rules.section2_3"),
-                startX, contentY, dialogWidth - 50);
+                startX, contentY, dialogWidth - 50, lineHeight);
         contentY = drawWrappedText(guiGraphics,
                 Component.translatable("fireflymc.rules.section2_4"),
-                startX, contentY, dialogWidth - 50);
+                startX, contentY, dialogWidth - 50, lineHeight);
         contentY = drawWrappedText(guiGraphics,
                 Component.translatable("fireflymc.rules.section2_5"),
-                startX, contentY, dialogWidth - 50);
+                startX, contentY, dialogWidth - 50, lineHeight);
         contentY = drawWrappedText(guiGraphics,
                 Component.translatable("fireflymc.rules.section2_6"),
-                startX, contentY, dialogWidth - 50);
+                startX, contentY, dialogWidth - 50, lineHeight);
         contentY = drawWrappedText(guiGraphics,
                 Component.translatable("fireflymc.rules.section2_7"),
-                startX, contentY, dialogWidth - 50);
+                startX, contentY, dialogWidth - 50, lineHeight);
         contentY += lineHeight / 2;
 
         // 行3：游戏守则标题
@@ -198,10 +199,10 @@ public class RulesScreen extends Screen {
         // 行3-1到3-4
         contentY = drawWrappedText(guiGraphics,
                 Component.translatable("fireflymc.rules.section3_1"),
-                startX, contentY, dialogWidth - 50);
+                startX, contentY, dialogWidth - 50, lineHeight);
         contentY = drawWrappedText(guiGraphics,
                 Component.translatable("fireflymc.rules.section3_4"),
-                startX, contentY, dialogWidth - 50);
+                startX, contentY, dialogWidth - 50, lineHeight);
         contentY += lineHeight / 2;
 
         // 行4：违规处置标题
@@ -213,7 +214,7 @@ public class RulesScreen extends Screen {
         // 行4-1
         contentY = drawWrappedText(guiGraphics,
                 Component.translatable("fireflymc.rules.section4_1"),
-                startX, contentY, dialogWidth - 50);
+                startX, contentY, dialogWidth - 50, lineHeight);
 
         // 记录内容总高度
         contentHeight = contentY - contentStartY;
@@ -343,11 +344,11 @@ public class RulesScreen extends Screen {
     /**
      * 绘制自动换行的文本
      */
-    private int drawWrappedText(GuiGraphics guiGraphics, Component text, int x, int y, int maxWidth) {
+    private int drawWrappedText(GuiGraphics guiGraphics, Component text, int x, int y, int maxWidth, int lineHeight) {
         String plainText = text.getString();
         if (this.font.width(plainText) <= maxWidth) {
             guiGraphics.drawString(this.font, text, x, y, TEXT_COLOR);
-            return y + 16;
+            return y + lineHeight;
         }
         // 简单的换行处理
         int currentX = x;
@@ -356,11 +357,11 @@ public class RulesScreen extends Screen {
             int charWidth = this.font.width(String.valueOf(c));
             if (currentX + charWidth > x + maxWidth) {
                 currentX = x;
-                currentY += 14;
+                currentY += lineHeight;
             }
             guiGraphics.drawString(this.font, Component.literal(String.valueOf(c)), currentX, currentY, TEXT_COLOR);
             currentX += charWidth;
         }
-        return currentY + 16;
+        return currentY + lineHeight;
     }
 }
