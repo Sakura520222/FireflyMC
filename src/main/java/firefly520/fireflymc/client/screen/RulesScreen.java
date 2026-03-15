@@ -1,22 +1,25 @@
 package firefly520.fireflymc.client.screen;
 
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
 
-import com.mojang.blaze3d.systems.RenderSystem;
 import firefly520.fireflymc.client.ClientState;
-import net.minecraft.util.Mth;
+import firefly520.fireflymc.client.RulesContent;
+import firefly520.fireflymc.client.RulesLoader;
 import firefly520.fireflymc.network.ConfirmRulesPayload;
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
-import net.minecraft.resources.ResourceLocation;
 import net.minecraft.util.FormattedCharSequence;
+import net.minecraft.util.Mth;
 import net.neoforged.neoforge.network.PacketDistributor;
 
 /**
  * 服务器准则弹窗Screen
  * 樱花主题风格
+ * 支持从网络异步加载规则内容
  */
 public class RulesScreen extends Screen {
     // 樱花主题颜色
@@ -30,6 +33,10 @@ public class RulesScreen extends Screen {
     private static final int AUTO_CLOSE_TICKS = 3 * 20;
 
     private final boolean isFirstJoin;
+    private CompletableFuture<RulesContent> rulesFuture;
+    private RulesContent rules;
+    private boolean rulesLoaded = false;
+    private String loadError = null;
     private int tickCount = 0;
 
     // 滚动状态变量
@@ -40,6 +47,18 @@ public class RulesScreen extends Screen {
     public RulesScreen(boolean isFirstJoin) {
         super(Component.literal("服务器准则"));
         this.isFirstJoin = isFirstJoin;
+        // 异步加载规则，不阻塞主线程
+        this.rulesFuture = CompletableFuture.supplyAsync(RulesLoader::loadRules);
+        this.rulesFuture.whenComplete((r, e) -> {
+            Minecraft.getInstance().execute(() -> {
+                if (e != null || r == null) {
+                    this.loadError = "无法加载服务器规则，请检查网络连接";
+                } else {
+                    this.rules = r;
+                }
+                this.rulesLoaded = true;
+            });
+        });
     }
 
     @Override
@@ -52,7 +71,7 @@ public class RulesScreen extends Screen {
             int buttonHeight = 25;
             this.addRenderableWidget(
                     Button.builder(
-                            Component.translatable("fireflymc.rules.confirm"),
+                            Component.literal("§a我已阅读并同意准则"),
                             button -> onConfirm()
                     ).bounds(
                             this.width / 2 - buttonWidth / 2,
@@ -82,7 +101,6 @@ public class RulesScreen extends Screen {
     @Override
     public boolean mouseScrolled(double mouseX, double mouseY, double horizontalAmount, double verticalAmount) {
         // 每次滚动20像素（约一行文字高度）
-        // 注意：verticalAmount 向上滚动为正，向下滚动为负，需要反转
         scrollOffset -= (int)(verticalAmount * 20);
 
         // 限制滚动范围
@@ -112,8 +130,13 @@ public class RulesScreen extends Screen {
         // 绘制樱花粉色边框
         drawRoundedBorder(guiGraphics, dialogX, dialogY, dialogWidth, dialogHeight, 8, BORDER_COLOR, 2);
 
-        // 绘制标题（手动居中，禁用阴影）
-        Component title = Component.translatable("fireflymc.rules.title");
+        // 绘制标题
+        Component title;
+        if (rulesLoaded && rules != null) {
+            title = Component.literal("§d§lFireflyMC 服务器公约 " + rules.version());
+        } else {
+            title = Component.literal("§d§lFireflyMC 服务器公约");
+        }
         int titleX = this.width / 2 - this.font.width(title) / 2;
         guiGraphics.drawString(this.font, title.getVisualOrderText(),
                 (float)titleX, (float)(dialogY + 20), TITLE_COLOR, false);
@@ -124,8 +147,28 @@ public class RulesScreen extends Screen {
 
         // 计算内容区域边界
         int contentTopY = separatorY + 15;
-        int contentBottomY = dialogY + dialogHeight - 60; // 留出底部信息空间
+        int contentBottomY = dialogY + dialogHeight - 60;
         visibleHeight = contentBottomY - contentTopY;
+
+        // 加载中状态显示
+        if (!rulesLoaded) {
+            Component loadingText = Component.literal("§e正在加载规则...");
+            int loadingX = this.width / 2 - this.font.width(loadingText) / 2;
+            guiGraphics.drawString(this.font, loadingText.getVisualOrderText(),
+                    (float)loadingX, (float)(separatorY + 30), 0xFFFFFF00, false);
+            super.render(guiGraphics, mouseX, mouseY, partialTick);
+            return;
+        }
+
+        // 错误状态显示
+        if (loadError != null) {
+            Component errorText = Component.literal("§c" + loadError);
+            int errorX = this.width / 2 - this.font.width(errorText) / 2;
+            guiGraphics.drawString(this.font, errorText.getVisualOrderText(),
+                    (float)errorX, (float)(separatorY + 30), 0xFFFF0000, false);
+            super.render(guiGraphics, mouseX, mouseY, partialTick);
+            return;
+        }
 
         // 设置裁剪区域
         guiGraphics.enableScissor(dialogX, contentTopY, dialogX + dialogWidth, contentBottomY);
@@ -139,125 +182,39 @@ public class RulesScreen extends Screen {
         int lineHeight = 16;
         int startX = dialogX + 25;
 
-        // 记录内容起始位置，用于计算总高度（在绘制任何内容之前）
+        // 记录内容起始位置，用于计算总高度
         int contentStartY = contentTopY;
 
-        // 行1：行为准则标题
-        Component section1 = Component.translatable("fireflymc.rules.section1");
-        guiGraphics.drawString(this.font, section1.getVisualOrderText(),
+        // 渲染章节内容（只使用网络数据）
+        for (RulesContent.Section section : rules.sections()) {
+            // 绘制章节标题
+            guiGraphics.drawString(this.font,
+                Component.literal(section.title()).getVisualOrderText(),
                 (float)startX, (float)contentY, HIGHLIGHT_COLOR, false);
-        contentY += lineHeight;
+            contentY += lineHeight;
 
-        // 行1-1到1-3
-        contentY = drawWrappedText(guiGraphics,
-                Component.translatable("fireflymc.rules.section1_1"),
-                startX, contentY, dialogWidth - 50, lineHeight);
-        contentY = drawWrappedText(guiGraphics,
-                Component.translatable("fireflymc.rules.section1_2"),
-                startX, contentY, dialogWidth - 50, lineHeight);
-        contentY = drawWrappedText(guiGraphics,
-                Component.translatable("fireflymc.rules.section1_3"),
-                startX, contentY, dialogWidth - 50, lineHeight);
-        contentY += lineHeight / 2;
+            // 绘制章节内容
+            for (String line : section.lines()) {
+                contentY = drawWrappedText(guiGraphics,
+                    Component.literal("●" + line), startX, contentY,
+                    dialogWidth - 50, lineHeight);
+            }
+            contentY += lineHeight / 2;
+        }
 
-        // 行2：领地规范标题
-        Component section2 = Component.translatable("fireflymc.rules.section2");
-        guiGraphics.drawString(this.font, section2.getVisualOrderText(),
-                (float)startX, (float)contentY, HIGHLIGHT_COLOR, false);
-        contentY += lineHeight;
+        // 绘制说明
+        if (!rules.description().isEmpty()) {
+            contentY = drawWrappedText(guiGraphics,
+                Component.literal("▷ " + rules.description()),
+                startX, contentY, dialogWidth - 50, lineHeight);
+        }
 
-        // 行2-1到2-7（完整内容）
-        contentY = drawWrappedText(guiGraphics,
-                Component.translatable("fireflymc.rules.section2_1"),
+        // 绘制联系方式
+        if (!rules.contact().isEmpty()) {
+            contentY = drawWrappedText(guiGraphics,
+                Component.literal(rules.contact()),
                 startX, contentY, dialogWidth - 50, lineHeight);
-        contentY = drawWrappedText(guiGraphics,
-                Component.translatable("fireflymc.rules.section2_2"),
-                startX, contentY, dialogWidth - 50, lineHeight);
-        contentY = drawWrappedText(guiGraphics,
-                Component.translatable("fireflymc.rules.section2_3"),
-                startX, contentY, dialogWidth - 50, lineHeight);
-        contentY = drawWrappedText(guiGraphics,
-                Component.translatable("fireflymc.rules.section2_4"),
-                startX, contentY, dialogWidth - 50, lineHeight);
-        contentY = drawWrappedText(guiGraphics,
-                Component.translatable("fireflymc.rules.section2_5"),
-                startX, contentY, dialogWidth - 50, lineHeight);
-        contentY = drawWrappedText(guiGraphics,
-                Component.translatable("fireflymc.rules.section2_6"),
-                startX, contentY, dialogWidth - 50, lineHeight);
-        contentY = drawWrappedText(guiGraphics,
-                Component.translatable("fireflymc.rules.section2_7"),
-                startX, contentY, dialogWidth - 50, lineHeight);
-        contentY += lineHeight / 2;
-
-        // 行3：游戏守则标题
-        Component section3 = Component.translatable("fireflymc.rules.section3");
-        guiGraphics.drawString(this.font, section3.getVisualOrderText(),
-                (float)startX, (float)contentY, HIGHLIGHT_COLOR, false);
-        contentY += lineHeight;
-
-        // 行3-1到3-4
-        contentY = drawWrappedText(guiGraphics,
-                Component.translatable("fireflymc.rules.section3_1"),
-                startX, contentY, dialogWidth - 50, lineHeight);
-        contentY = drawWrappedText(guiGraphics,
-                Component.translatable("fireflymc.rules.section3_2"),
-                startX, contentY, dialogWidth - 50, lineHeight);
-        contentY = drawWrappedText(guiGraphics,
-                Component.translatable("fireflymc.rules.section3_3"),
-                startX, contentY, dialogWidth - 50, lineHeight);
-        contentY = drawWrappedText(guiGraphics,
-                Component.translatable("fireflymc.rules.section3_4"),
-                startX, contentY, dialogWidth - 50, lineHeight);
-        contentY += lineHeight / 2;
-
-        // 行4：违规处置标题
-        Component section4 = Component.translatable("fireflymc.rules.section4");
-        guiGraphics.drawString(this.font, section4.getVisualOrderText(),
-                (float)startX, (float)contentY, HIGHLIGHT_COLOR, false);
-        contentY += lineHeight;
-
-        // 行4-1
-        contentY = drawWrappedText(guiGraphics,
-                Component.translatable("fireflymc.rules.section4_1"),
-                startX, contentY, dialogWidth - 50, lineHeight);
-        // 行4-2到4-5
-        contentY = drawWrappedText(guiGraphics,
-                Component.translatable("fireflymc.rules.section4_2"),
-                startX, contentY, dialogWidth - 50, lineHeight);
-        contentY = drawWrappedText(guiGraphics,
-                Component.translatable("fireflymc.rules.section4_3"),
-                startX, contentY, dialogWidth - 50, lineHeight);
-        contentY = drawWrappedText(guiGraphics,
-                Component.translatable("fireflymc.rules.section4_4"),
-                startX, contentY, dialogWidth - 50, lineHeight);
-        contentY = drawWrappedText(guiGraphics,
-                Component.translatable("fireflymc.rules.section4_5"),
-                startX, contentY, dialogWidth - 50, lineHeight);
-        contentY += lineHeight / 2;
-
-        // 补充说明 note1-4
-        contentY = drawWrappedText(guiGraphics,
-                Component.translatable("fireflymc.rules.note1"),
-                startX, contentY, dialogWidth - 50, lineHeight);
-        contentY = drawWrappedText(guiGraphics,
-                Component.translatable("fireflymc.rules.note2"),
-                startX, contentY, dialogWidth - 50, lineHeight);
-        contentY = drawWrappedText(guiGraphics,
-                Component.translatable("fireflymc.rules.note3"),
-                startX, contentY, dialogWidth - 50, lineHeight);
-        contentY = drawWrappedText(guiGraphics,
-                Component.translatable("fireflymc.rules.note4"),
-                startX, contentY, dialogWidth - 50, lineHeight);
-        contentY += lineHeight / 2;
-
-        // 页脚声明
-        contentY = drawWrappedText(guiGraphics,
-                Component.translatable("fireflymc.rules.footer"),
-                startX, contentY, dialogWidth - 50, lineHeight);
-        contentY = drawWrappedText(guiGraphics,
-                Component.translatable("fireflymc.rules.update_date"),
-                startX, contentY, dialogWidth - 50, lineHeight);
+        }
 
         // 记录内容总高度
         contentHeight = contentY - contentStartY;
@@ -270,31 +227,12 @@ public class RulesScreen extends Screen {
 
         // 绘制滚动条（当内容超出时）
         if (contentHeight > visibleHeight) {
-            int scrollbarWidth = 4;
-            int scrollbarX = dialogX + dialogWidth - 10;
-            int scrollbarHeight = visibleHeight;
-
-            // 强制转换为float，避免整数除法
-            float scrollRatio = (float) visibleHeight / contentHeight;
-            int thumbHeight = (int)(scrollbarHeight * scrollRatio);
-
-            // 计算滑块位置
-            int thumbY;
-            if (contentHeight > visibleHeight) {
-                thumbY = contentTopY + (int)((float) scrollOffset / (contentHeight - visibleHeight) * (scrollbarHeight - thumbHeight));
-            } else {
-                thumbY = contentTopY;
-            }
-
-            // 绘制滚动条背景
-            guiGraphics.fill(scrollbarX, contentTopY, scrollbarX + scrollbarWidth, contentTopY + scrollbarHeight, 0x40888888);
-            // 绘制滚动滑块（樱花粉色）
-            guiGraphics.fill(scrollbarX, thumbY, scrollbarX + scrollbarWidth, thumbY + thumbHeight, 0x80FFC0CB);
+            drawScrollbar(guiGraphics, dialogX, dialogWidth, contentTopY, visibleHeight, contentHeight);
         }
 
         // 底部信息（手动居中，禁用阴影）
         int footerY = dialogY + dialogHeight - 50;
-        Component contact = Component.translatable("fireflymc.rules.contact");
+        Component contact = Component.literal(rules.contact());
         int contactX = this.width / 2 - this.font.width(contact) / 2;
         guiGraphics.drawString(this.font, contact.getVisualOrderText(),
                 (float)contactX, (float)footerY, 0xFF666666, false);
@@ -302,7 +240,7 @@ public class RulesScreen extends Screen {
         // 非首次加入：显示倒计时（手动居中，禁用阴影）
         if (!isFirstJoin) {
             int remainingSeconds = (AUTO_CLOSE_TICKS - tickCount) / 20 + 1;
-            Component countdown = Component.translatable("fireflymc.rules.countdown", remainingSeconds);
+            Component countdown = Component.literal("§e" + remainingSeconds + " 秒后自动关闭");
             int countdownX = this.width / 2 - this.font.width(countdown) / 2;
             guiGraphics.drawString(this.font, countdown.getVisualOrderText(),
                     (float)countdownX, (float)(dialogY + dialogHeight + 20), 0xFFFFFF00, false);
@@ -376,6 +314,31 @@ public class RulesScreen extends Screen {
                 }
             }
         }
+    }
+
+    /**
+     * 绘制滚动条
+     */
+    private void drawScrollbar(GuiGraphics guiGraphics, int dialogX, int dialogWidth, int contentTopY, int visibleHeight, int contentHeight) {
+        int scrollbarWidth = 4;
+        int scrollbarX = dialogX + dialogWidth - 10;
+        int scrollbarHeight = visibleHeight;
+
+        float scrollRatio = (float) visibleHeight / contentHeight;
+        int thumbHeight = (int)(scrollbarHeight * scrollRatio);
+
+        // 计算滑块位置
+        int thumbY;
+        if (contentHeight > visibleHeight) {
+            thumbY = contentTopY + (int)((float) scrollOffset / (contentHeight - visibleHeight) * (scrollbarHeight - thumbHeight));
+        } else {
+            thumbY = contentTopY;
+        }
+
+        // 绘制滚动条背景
+        guiGraphics.fill(scrollbarX, contentTopY, scrollbarX + scrollbarWidth, contentTopY + scrollbarHeight, 0x40888888);
+        // 绘制滚动滑块（樱花粉色）
+        guiGraphics.fill(scrollbarX, thumbY, scrollbarX + scrollbarWidth, thumbY + thumbHeight, 0x80FFC0CB);
     }
 
     /**
