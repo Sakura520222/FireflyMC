@@ -7,7 +7,7 @@ import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.screens.TitleScreen;
 import net.minecraft.Util;
 import net.minecraft.network.chat.Component;
-import org.jetbrains.annotations.NotNull;
+import javax.annotation.Nonnull;
 import java.net.URI;
 
 /**
@@ -28,7 +28,7 @@ public class ModUpdateScreen extends Screen {
     }
 
     @Override
-    public void render(@NotNull GuiGraphics guiGraphics, int mouseX, int mouseY, float partialTick) {
+    public void render(@Nonnull GuiGraphics guiGraphics, int mouseX, int mouseY, float partialTick) {
         // 1. 全屏不透明黑色背景
         guiGraphics.fill(0, 0, width, height, 0xFF000000);
 
