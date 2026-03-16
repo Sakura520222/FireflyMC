@@ -14,6 +14,8 @@ import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
+import net.minecraft.Util;
+import java.net.URI;
 import net.minecraft.util.FormattedCharSequence;
 import net.minecraft.util.Mth;
 import net.neoforged.neoforge.network.PacketDistributor;
@@ -24,6 +26,9 @@ import net.neoforged.neoforge.network.PacketDistributor;
  * 支持从网络异步加载公告内容
  */
 public class RulesScreen extends Screen {
+    // 官网地址
+    private static final String WEBSITE_URL = "https://mc.firefly520.top";
+
     // 樱花主题颜色
     private static final int BORDER_COLOR = 0xFFFFC0CB;      // 樱花粉边框
     private static final int BACKGROUND_COLOR = 0x40FFFFFF;  // 半透明白色背景
@@ -67,16 +72,34 @@ public class RulesScreen extends Screen {
     protected void init() {
         super.init();
 
-        // 首次加入：显示确认按钮
+        // 首次加入：显示确认按钮和官网按钮
         if (isFirstJoin) {
-            int buttonWidth = 200;
+            int buttonWidth = 120;
             int buttonHeight = 25;
+            int buttonSpacing = 10;
+            int totalWidth = buttonWidth * 2 + buttonSpacing;
+            int startX = this.width / 2 - totalWidth / 2;
+
+            // 访问官网按钮（左侧）
+            this.addRenderableWidget(
+                    Button.builder(
+                            Component.literal("§b访问官网"),
+                            button -> onVisitWebsite()
+                    ).bounds(
+                            startX,
+                            this.height - 80,
+                            buttonWidth,
+                            buttonHeight
+                    ).build()
+            );
+
+            // 同意准则按钮（右侧）
             this.addRenderableWidget(
                     Button.builder(
                             Component.literal("§a我已阅读并同意准则"),
                             button -> onConfirm()
                     ).bounds(
-                            this.width / 2 - buttonWidth / 2,
+                            startX + buttonWidth + buttonSpacing,
                             this.height - 80,
                             buttonWidth,
                             buttonHeight
@@ -298,6 +321,15 @@ public class RulesScreen extends Screen {
         // 发送确认包
         PacketDistributor.sendToServer(new ConfirmRulesPayload());
         onClose();
+    }
+
+    private void onVisitWebsite() {
+        // 打开官网链接
+        try {
+            Util.getPlatform().openUri(URI.create(WEBSITE_URL));
+        } catch (Exception e) {
+            // URL打开失败
+        }
     }
 
     /**
