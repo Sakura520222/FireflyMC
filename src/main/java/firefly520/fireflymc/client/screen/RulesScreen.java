@@ -19,7 +19,7 @@ import net.neoforged.neoforge.network.PacketDistributor;
 /**
  * 服务器准则弹窗Screen
  * 樱花主题风格
- * 支持从网络异步加载规则内容
+ * 支持从网络异步加载公告内容
  */
 public class RulesScreen extends Screen {
     // 樱花主题颜色
@@ -47,12 +47,12 @@ public class RulesScreen extends Screen {
     public RulesScreen(boolean isFirstJoin) {
         super(Component.literal("服务器准则"));
         this.isFirstJoin = isFirstJoin;
-        // 异步加载规则，不阻塞主线程
+        // 异步加载公告，不阻塞主线程
         this.rulesFuture = CompletableFuture.supplyAsync(RulesLoader::loadRules);
         this.rulesFuture.whenComplete((r, e) -> {
             Minecraft.getInstance().execute(() -> {
                 if (e != null || r == null) {
-                    this.loadError = "无法加载服务器规则，请检查网络连接";
+                    this.loadError = "无法加载服务器公告，请检查网络连接";
                 } else {
                     this.rules = r;
                 }
@@ -181,7 +181,7 @@ public class RulesScreen extends Screen {
 
         // 加载中状态显示
         if (!rulesLoaded) {
-            Component loadingText = Component.literal("§e正在加载规则...");
+            Component loadingText = Component.literal("§e正在加载公告...");
             int loadingX = this.width / 2 - this.font.width(loadingText) / 2;
             guiGraphics.drawString(this.font, loadingText.getVisualOrderText(),
                     (float)loadingX, (float)(separatorY + 30), 0xFFFFFF00, false);

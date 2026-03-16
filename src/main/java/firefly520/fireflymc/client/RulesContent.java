@@ -3,8 +3,8 @@ package firefly520.fireflymc.client;
 import java.util.List;
 
 /**
- * 服务器规则内容数据结构
- * 从网络加载的规则内容
+ * 服务器公告内容数据结构
+ * 从网络加载的公告内容
  */
 public record RulesContent(
     String version,        // 版本号，如 "V2.1"
@@ -15,7 +15,7 @@ public record RulesContent(
     String contact         // 联系方式
 ) {
     /**
-     * 规则章节
+     * 公告章节
      */
     public record Section(
         String title,      // 章节标题

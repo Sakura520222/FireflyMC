@@ -8,15 +8,15 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * 客户端规则加载器
- * 从 URL 同步加载规则文本并解析（无缓存）
+ * 客户端公告加载器
+ * 从 URL 同步加载公告文本并解析（无缓存）
  * 网络异常时返回 null，不抛出异常
  */
 public class RulesLoader {
     private static final String RULES_URL = "https://mc.firefly520.top/FireflyMC_Server_Rules.txt";
 
     /**
-     * 同步加载规则（无缓存，每次都重新请求）
+     * 同步加载公告（无缓存，每次都重新请求）
      * 网络异常时返回 null
      */
     public static RulesContent loadRules() {
@@ -53,7 +53,7 @@ public class RulesLoader {
     }
 
     /**
-     * 解析规则文本
+     * 解析公告文本
      * 格式: # 注释, [SECTION_N] 标题, - 内容
      */
     private static RulesContent parseRules(String content) {
