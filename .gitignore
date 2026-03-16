@@ -1,31 +1,43 @@
-# Gradle
-.gradle/
+### Gradle ###
+.gradle
 build/
 !gradle/wrapper/gradle-wrapper.jar
-!gradle/wrapper/gradle-wrapper.properties
+!**/src/**/build/
 
-# Eclipse
-.classpath
-.project
-.settings/
-bin/
-out/
-
-# IntelliJ IDEA
+### IntelliJ IDEA ###
 .idea/
-*.iml
 *.iws
+*.iml
 *.ipr
+out/
+!**/src/**/out/
 
-# VS Code
+.run/
+
+### Eclipse ###
+.apt_generated
+.classpath
+.eclipse/
+.factorypath
+.project
+.settings
+.springBeans
+.sts4-cache
+bin/
+!**/src/**/bin/
+
+### VS Code ###
 .vscode/
 
-# Mac OS
+### Mac OS ###
 .DS_Store
 
-# Minecraft
+### Minecraft Modding ###
 run/
-logs/
+!**/src/**/run/
+**/src/generated/**/.cache/
+repo/
+!**/src/**/repo/
 
-# OS
-Thumbs.db
+# Keep logs directory for debugging
+!logs/
