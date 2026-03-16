@@ -34,13 +34,12 @@ public class HUDRenderer
   public static void render(GuiGraphics guiGraphics) {
     Minecraft mc = Minecraft.getInstance();
 
-
-    if (mc.screen != null) {
+    // 同步F1隐藏GUI功能
+    if (mc.options.hideGui) {
       return;
     }
 
-    // 同步F1隐藏GUI功能
-    if (mc.options.hideGui) {
+    if (mc.screen != null) {
       return;
     }
 

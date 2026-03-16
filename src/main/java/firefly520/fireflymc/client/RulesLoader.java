@@ -14,19 +14,35 @@ import java.util.List;
  */
 public class RulesLoader {
     private static final String RULES_URL = "https://mc.firefly520.top/FireflyMC_Server_Rules.txt";
+    private static final int MAX_RETRIES = 3;
+    private static final int RETRY_DELAY_MS = 1000;
 
     /**
      * 同步加载公告（无缓存，每次都重新请求）
      * 网络异常时返回 null
      */
     public static RulesContent loadRules() {
-        try {
-            String content = fetchFromUrl(RULES_URL);
-            return parseRules(content);
-        } catch (Exception e) {
-            // 不抛出异常，返回 null，由调用方处理错误显示
-            return null;
+        int attempts = 0;
+        while (attempts < MAX_RETRIES) {
+            try {
+                String content = fetchFromUrl(RULES_URL);
+                return parseRules(content);
+            } catch (Exception e) {
+                attempts++;
+                if (attempts < MAX_RETRIES) {
+                    try {
+                        Thread.sleep(RETRY_DELAY_MS);
+                    } catch (InterruptedException ie) {
+                        Thread.currentThread().interrupt();
+                        return null;
+                    }
+                } else {
+                    // 最后一次尝试失败
+                    return null;
+                }
+            }
         }
+        return null;
     }
 
     /**
@@ -37,7 +53,7 @@ public class RulesLoader {
         conn.setConnectTimeout(10000);  // 10秒连接超时
         conn.setReadTimeout(10000);     // 10秒读取超时
         conn.setRequestMethod("GET");
-        conn.setRequestProperty("User-Agent", "FireflyMC-Client/2.1");
+        conn.setRequestProperty("User-Agent", "FireflyMC-Client/2.2");
 
         StringBuilder result = new StringBuilder();
         try (BufferedReader reader = new BufferedReader(
@@ -62,6 +78,7 @@ public class RulesLoader {
         String website = "";
         String description = "";
         String contact = "";
+        String modUpdateUrl = "";
         List<RulesContent.Section> sections = new ArrayList<>();
 
         String[] lines = content.split("\n");
@@ -116,6 +133,14 @@ public class RulesLoader {
                 continue;
             }
 
+            // 解析Mod更新地址: # Mod更新地址: https://mc.firefly520.top/ireflymc-2.2.0.jar
+            if (trimmedLine.startsWith("# Mod更新地址:")) {
+                if (trimmedLine.length() > 10) {
+                    modUpdateUrl = trimmedLine.substring(10).trim();
+                }
+                continue;
+            }
+
             // 解析章节标题: # [SECTION_1] 行为准则 - 文明交流
             if (trimmedLine.startsWith("# [SECTION_")) {
                 // 保存上一个章节
@@ -143,6 +168,6 @@ public class RulesLoader {
             sections.add(new RulesContent.Section(currentTitle, new ArrayList<>(currentLines)));
         }
 
-        return new RulesContent(version, updateDate, website, description, new ArrayList<>(sections), contact);
+        return new RulesContent(version, updateDate, website, description, new ArrayList<>(sections), contact, modUpdateUrl);
     }
 }

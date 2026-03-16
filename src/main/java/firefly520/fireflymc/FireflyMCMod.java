@@ -8,8 +8,11 @@ import net.neoforged.fml.config.ModConfig;
 import net.neoforged.fml.loading.FMLEnvironment;
 import net.neoforged.neoforge.client.gui.ConfigurationScreen;
 import net.neoforged.neoforge.client.gui.IConfigScreenFactory;
+import net.neoforged.neoforge.client.event.ScreenEvent;
 import net.neoforged.neoforge.common.NeoForge;
 import firefly520.fireflymc.client.ClientHandler;
+import firefly520.fireflymc.client.UpdateChecker;
+import firefly520.fireflymc.client.MainMenuUpdateOverlay;
 import firefly520.fireflymc.network.ModNetwork;
 
 @Mod(FireflyMCMod.MODID)
@@ -32,11 +35,19 @@ public class FireflyMCMod {
       );
       // 直接注册渲染事件到 NeoForge 总线
       NeoForge.EVENT_BUS.addListener(ClientHandler::onRenderGui);
+      // 注册主菜单更新通知（使用 ScreenEvent）
+      NeoForge.EVENT_BUS.addListener(MainMenuUpdateOverlay::onRenderScreen);
+      NeoForge.EVENT_BUS.addListener(MainMenuUpdateOverlay::onMouseClickedPre);
+      NeoForge.EVENT_BUS.addListener(MainMenuUpdateOverlay::onMouseReleased);
+      NeoForge.EVENT_BUS.addListener(MainMenuUpdateOverlay::onKeyPressed);
     }
 
     // 4. 注册游戏事件处理（GAME 总线）
     NeoForge.EVENT_BUS.addListener(ModEventHandler::onPlayerLoggedIn);
     NeoForge.EVENT_BUS.addListener(ModEventHandler::onPlayerLoggedOut);
+
+    // 5. 检查Mod更新
+    UpdateChecker.checkForUpdate();
 
     System.out.println("Loading FireflyMC 2.2.0");
   }
