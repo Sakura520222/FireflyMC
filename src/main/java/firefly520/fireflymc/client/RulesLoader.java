@@ -59,6 +59,7 @@ public class RulesLoader {
     private static RulesContent parseRules(String content) {
         String version = "V2.1";
         String updateDate = "";
+        String website = "";
         String description = "";
         String contact = "";
         List<RulesContent.Section> sections = new ArrayList<>();
@@ -87,6 +88,14 @@ public class RulesLoader {
             if (trimmedLine.startsWith("# 更新日期:")) {
                 if (trimmedLine.length() > 7) {  // 检查长度
                     updateDate = trimmedLine.substring(7).trim();
+                }
+                continue;
+            }
+
+            // 解析官网: # 官网: https://mc.firefly520.top/
+            if (trimmedLine.startsWith("# 官网:")) {
+                if (trimmedLine.length() > 5) {
+                    website = trimmedLine.substring(5).trim();
                 }
                 continue;
             }
@@ -134,6 +143,6 @@ public class RulesLoader {
             sections.add(new RulesContent.Section(currentTitle, new ArrayList<>(currentLines)));
         }
 
-        return new RulesContent(version, updateDate, description, new ArrayList<>(sections), contact);
+        return new RulesContent(version, updateDate, website, description, new ArrayList<>(sections), contact);
     }
 }

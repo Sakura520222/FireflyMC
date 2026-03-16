@@ -9,6 +9,7 @@ import java.util.List;
 public record RulesContent(
     String version,        // 版本号，如 "V2.1"
     String updateDate,     // 更新日期
+    String website,        // 官网URL
     String description,    // 说明文字
     List<Section> sections, // 章节列表
     String contact         // 联系方式

@@ -133,13 +133,42 @@ public class RulesScreen extends Screen {
         // 绘制标题
         Component title;
         if (rulesLoaded && rules != null) {
-            title = Component.literal("§d§lFireflyMC 服务器公约 " + rules.version());
+            title = Component.literal("§d§lFireflyMC 服务器公告 " + rules.version());
         } else {
-            title = Component.literal("§d§lFireflyMC 服务器公约");
+            title = Component.literal("§d§lFireflyMC 服务器公告");
         }
         int titleX = this.width / 2 - this.font.width(title) / 2;
         guiGraphics.drawString(this.font, title.getVisualOrderText(),
                 (float)titleX, (float)(dialogY + 20), TITLE_COLOR, false);
+
+        // 绘制更新日期和官网（标题下方，固定位置，居中对齐）
+        if (rulesLoaded && rules != null) {
+            int infoY = dialogY + 34;
+            StringBuilder info = new StringBuilder();
+            if (!rules.updateDate().isEmpty()) {
+                info.append("§f").append(rules.updateDate());
+            }
+            if (!rules.website().isEmpty()) {
+                if (info.length() > 0) info.append(" §7| §b");
+                else info.append("§b");
+                info.append(rules.website());
+            }
+            if (info.length() > 0) {
+                Component infoText = Component.literal(info.toString());
+                // 先计算缩放后的宽度，实现居中对齐
+                float scale = 0.8f;
+                int textWidth = this.font.width(infoText);
+                int scaledWidth = (int)(textWidth * scale);
+                int infoX = (this.width - scaledWidth) / 2;
+                guiGraphics.pose().pushPose();
+                guiGraphics.pose().scale(scale, scale, 1.0f);
+                float scaledX = infoX / scale;
+                float scaledY = infoY / scale;
+                guiGraphics.drawString(this.font, infoText.getVisualOrderText(),
+                        scaledX, scaledY, 0xFFFFFFFF, false);
+                guiGraphics.pose().popPose();
+            }
+        }
 
         // 绘制分隔线
         int separatorY = dialogY + 45;
@@ -204,6 +233,7 @@ public class RulesScreen extends Screen {
 
         // 绘制说明
         if (!rules.description().isEmpty()) {
+            contentY += lineHeight / 2;
             contentY = drawWrappedText(guiGraphics,
                 Component.literal("▷ " + rules.description()),
                 startX, contentY, dialogWidth - 50, lineHeight);
@@ -211,6 +241,7 @@ public class RulesScreen extends Screen {
 
         // 绘制联系方式
         if (!rules.contact().isEmpty()) {
+            contentY += lineHeight / 2;
             contentY = drawWrappedText(guiGraphics,
                 Component.literal(rules.contact()),
                 startX, contentY, dialogWidth - 50, lineHeight);
@@ -229,13 +260,6 @@ public class RulesScreen extends Screen {
         if (contentHeight > visibleHeight) {
             drawScrollbar(guiGraphics, dialogX, dialogWidth, contentTopY, visibleHeight, contentHeight);
         }
-
-        // 底部信息（手动居中，禁用阴影）
-        int footerY = dialogY + dialogHeight - 50;
-        Component contact = Component.literal(rules.contact());
-        int contactX = this.width / 2 - this.font.width(contact) / 2;
-        guiGraphics.drawString(this.font, contact.getVisualOrderText(),
-                (float)contactX, (float)footerY, 0xFF666666, false);
 
         // 非首次加入：显示倒计时（手动居中，禁用阴影）
         if (!isFirstJoin) {
