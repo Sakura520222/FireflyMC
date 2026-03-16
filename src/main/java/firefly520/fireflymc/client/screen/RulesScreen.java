@@ -3,6 +3,8 @@ package firefly520.fireflymc.client.screen;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 
+import javax.annotation.Nonnull;
+
 import firefly520.fireflymc.client.ClientState;
 import firefly520.fireflymc.client.RulesContent;
 import firefly520.fireflymc.client.RulesLoader;
@@ -112,12 +114,12 @@ public class RulesScreen extends Screen {
 
     // 【关键】重写 renderBackground，去掉默认黑色遮罩
     @Override
-    public void renderBackground(GuiGraphics guiGraphics, int mouseX, int mouseY, float partialTick) {
+    public void renderBackground(@Nonnull GuiGraphics guiGraphics, int mouseX, int mouseY, float partialTick) {
         // 不调用 super.renderBackground()，去掉默认的黑色遮罩
     }
 
     @Override
-    public void render(GuiGraphics guiGraphics, int mouseX, int mouseY, float partialTick) {
+    public void render(@Nonnull GuiGraphics guiGraphics, int mouseX, int mouseY, float partialTick) {
         // 计算弹窗尺寸
         int dialogWidth = Math.min(500, this.width - 40);
         int dialogHeight = Math.min(400, this.height - 80);
