@@ -6,10 +6,9 @@ import com.mojang.brigadier.context.CommandContext;
 import com.mojang.brigadier.suggestion.SuggestionProvider;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
-import net.minecraft.network.chat.ChatType;
+import net.minecraft.network.chat.ClickEvent;
 import net.minecraft.network.chat.Component;
-import net.minecraft.network.chat.OutgoingChatMessage;
-import net.minecraft.network.chat.PlayerChatMessage;
+import net.minecraft.network.chat.HoverEvent;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import net.neoforged.api.distmarker.Dist;
@@ -308,31 +307,36 @@ public class AIChatEventHandler {
 
     /**
      * 广播AI回复（玩家样式聊天消息，非系统消息）
+     *
+     * 使用 displayClientMessage() 发送，避免 UUID 验证问题
+     * 手动构建 <名称> 消息 格式，与玩家聊天一致
      */
     private static void broadcastReply(MinecraftServer server, ServerPlayer triggerPlayer, String reply) {
-        // 创建 ChatType.Bound
-        ChatType.Bound boundChatType = ChatType.bind(
-            ChatType.CHAT,
-            triggerPlayer
-        );
+        // 构建AI名称组件（带交互效果）
+        Component aiNameComponent = Component.literal(AIConfig.AI_NAME_PLAIN)
+            .withStyle(style -> style
+                // 悬浮显示AI信息（使用 SHOW_TEXT 代替 SHOW_ENTITY）
+                .withHoverEvent(new HoverEvent(
+                    HoverEvent.Action.SHOW_TEXT,
+                    Component.literal("§d" + AIConfig.AI_NAME_PLAIN + "\n§7类型: FireflyMC-AI助手")
+                ))
+                // 点击名称自动填充私聊命令
+                .withClickEvent(new ClickEvent(ClickEvent.Action.SUGGEST_COMMAND, "/msg " + AIConfig.AI_NAME_PLAIN + " "))
+            );
 
-        // 创建 PlayerChatMessage（未签名）
-        PlayerChatMessage playerChatMessage = PlayerChatMessage.unsigned(
-            AIConfig.AI_UUID,
-            reply
-        ).withUnsignedContent(Component.literal(reply));
+        // 拼接完整聊天消息，匹配原版 <玩家名> 消息 格式
+        Component fullChatMessage = Component.literal("<")
+            .append(aiNameComponent)
+            .append("> ")
+            .append(Component.literal(reply));
 
-        // 创建 OutgoingChatMessage
-        OutgoingChatMessage outgoingMessage = OutgoingChatMessage.create(playerChatMessage);
-
+        // 发送给目标玩家（overlay=false 表示进入聊天窗口，不是动作栏）
         if (AIConfig.BROADCAST_TO_ALL) {
-            // 广播给所有玩家
             for (ServerPlayer player : server.getPlayerList().getPlayers()) {
-                outgoingMessage.sendToPlayer(player, false, boundChatType);
+                player.displayClientMessage(fullChatMessage, false);
             }
         } else {
-            // 仅发送给触发玩家
-            outgoingMessage.sendToPlayer(triggerPlayer, false, boundChatType);
+            triggerPlayer.displayClientMessage(fullChatMessage, false);
         }
     }
 }
