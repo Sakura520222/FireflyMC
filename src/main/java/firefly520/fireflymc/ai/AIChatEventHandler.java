@@ -152,6 +152,9 @@ public class AIChatEventHandler {
                 MessageType.PLAYER
         ));
 
+        // 广播玩家消息到聊天区（与普通聊天格式一致）
+        broadcastPlayerMessage(server, player.getName().getString(), prompt);
+
         // 异步调用AI
         callAIAsync(server, player, historyManager, prompt);
 
@@ -303,6 +306,20 @@ public class AIChatEventHandler {
                 }
             });
         });
+    }
+
+    /**
+     * 广播玩家消息（与普通聊天格式一致）
+     */
+    private static void broadcastPlayerMessage(MinecraftServer server, String playerName, String message) {
+        Component playerMessage = Component.literal("<")
+            .append(Component.literal(playerName))
+            .append("> ")
+            .append(Component.literal(message));
+
+        for (ServerPlayer player : server.getPlayerList().getPlayers()) {
+            player.displayClientMessage(playerMessage, false);
+        }
     }
 
     /**
