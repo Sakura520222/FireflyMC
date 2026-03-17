@@ -6,9 +6,11 @@ import com.mojang.brigadier.context.CommandContext;
 import com.mojang.brigadier.suggestion.SuggestionProvider;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
+import net.minecraft.ChatFormatting;
 import net.minecraft.network.chat.ClickEvent;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.HoverEvent;
+import net.minecraft.network.chat.TextColor;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import net.neoforged.api.distmarker.Dist;
@@ -329,13 +331,20 @@ public class AIChatEventHandler {
      * 手动构建 <名称> 消息 格式，与玩家聊天一致
      */
     private static void broadcastReply(MinecraftServer server, ServerPlayer triggerPlayer, String reply) {
+        // 樱花粉颜色 #FFB7C5
+        final TextColor SAKURA_PINK = TextColor.fromRgb(0xFFB7C5);
+
         // 构建AI名称组件（带交互效果）
         Component aiNameComponent = Component.literal(AIConfig.AI_NAME_PLAIN)
             .withStyle(style -> style
-                // 悬浮显示AI信息（使用 SHOW_TEXT 代替 SHOW_ENTITY）
+                .withColor(SAKURA_PINK)
+                // 悬浮显示AI信息
                 .withHoverEvent(new HoverEvent(
                     HoverEvent.Action.SHOW_TEXT,
-                    Component.literal("§d" + AIConfig.AI_NAME_PLAIN + "\n§7类型: FireflyMC-AI助手")
+                    Component.literal(AIConfig.AI_NAME_PLAIN)
+                        .withStyle(s -> s.withColor(SAKURA_PINK))
+                        .append(Component.literal("\n类型: FireflyMC-AI助手")
+                            .withStyle(ChatFormatting.GRAY))
                 ))
                 // 点击名称自动填充私聊命令
                 .withClickEvent(new ClickEvent(ClickEvent.Action.SUGGEST_COMMAND, "/msg " + AIConfig.AI_NAME_PLAIN + " "))
