@@ -29,6 +29,8 @@ public class ModPayloadHandler {
             if (context.player() instanceof ServerPlayer serverPlayer) {
                 if (payload.modVersion().equals(FireflyMCMod.VERSION)) {
                     VERIFIED_PLAYERS.put(serverPlayer.getUUID(), true);
+                    // 取消验证超时任务
+                    ModEventHandler.cancelVerifyTimeout(serverPlayer.getUUID());
                 } else {
                     serverPlayer.connection.disconnect(Component.literal(
                         "§cFireflyMC模组版本不匹配！\n" +

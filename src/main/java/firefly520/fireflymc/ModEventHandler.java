@@ -37,6 +37,11 @@ public class ModEventHandler {
      */
     private static final Map<UUID, ScheduledFuture<?>> TIMEOUT_TASKS = new ConcurrentHashMap<>();
 
+    /**
+     * 跟踪玩家的验证超时任务（UUID -> ScheduledFuture）
+     */
+    private static final Map<UUID, ScheduledFuture<?>> VERIFY_TASKS = new ConcurrentHashMap<>();
+
     public static void onPlayerLoggedIn(PlayerEvent.PlayerLoggedInEvent event) {
         if (event.getEntity() instanceof ServerPlayer serverPlayer) {
             UUID playerUuid = serverPlayer.getUUID();
@@ -71,7 +76,7 @@ public class ModEventHandler {
             TIMEOUT_TASKS.put(playerUuid, timeoutTask);
 
             // 5秒后检查验证状态
-            TIMEOUT_EXECUTOR.schedule(() -> {
+            ScheduledFuture<?> verifyTask = TIMEOUT_EXECUTOR.schedule(() -> {
                 server.execute(() -> {
                     if (!ModPayloadHandler.VERIFIED_PLAYERS.getOrDefault(playerUuid, false)) {
                         ServerPlayer player = server.getPlayerList().getPlayer(playerUuid);
@@ -83,8 +88,10 @@ public class ModEventHandler {
                             ));
                         }
                     }
+                    VERIFY_TASKS.remove(playerUuid);
                 });
             }, 5, TimeUnit.SECONDS);
+            VERIFY_TASKS.put(playerUuid, verifyTask);
         }
     }
 
@@ -95,6 +102,7 @@ public class ModEventHandler {
             ModPayloadHandler.CONFIRMED_PLAYERS.remove(playerUuid);
             // 清理超时任务
             cancelInvulnerabilityTimeout(playerUuid);
+            cancelVerifyTimeout(playerUuid);
         }
     }
 
@@ -106,6 +114,19 @@ public class ModEventHandler {
      */
     public static void cancelInvulnerabilityTimeout(UUID playerUuid) {
         ScheduledFuture<?> future = TIMEOUT_TASKS.remove(playerUuid);
+        if (future != null && !future.isDone()) {
+            future.cancel(false);
+        }
+    }
+
+    /**
+     * 取消玩家的验证超时任务
+     * 当玩家通过验证或退出游戏时调用
+     *
+     * @param playerUuid 玩家UUID
+     */
+    public static void cancelVerifyTimeout(UUID playerUuid) {
+        ScheduledFuture<?> future = VERIFY_TASKS.remove(playerUuid);
         if (future != null && !future.isDone()) {
             future.cancel(false);
         }
