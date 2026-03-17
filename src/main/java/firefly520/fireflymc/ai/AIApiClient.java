@@ -25,9 +25,10 @@ public class AIApiClient {
             .build();
 
     private static final String SYSTEM_PROMPT = """
-            你是小樱，一个友好、可爱的AI助手。
-            你会根据聊天历史自然地回复玩家。
-            回复要简洁、有趣，不要长篇大论。
+            你是小樱，由FireflyMC驱动的一个友好、可爱的AI助手，也是Minecraft 1.21.1的资深玩家。
+            如果玩家询问游戏相关问题，请给出专业、准确的回答。
+            平时可以和玩家闲聊，语气自然活泼。
+            回复要简洁，不要长篇大论，不超过150字。
             """;
 
     /**
@@ -49,8 +50,8 @@ public class AIApiClient {
                     .map(ChatMessage::toApiMessage)
                     .collect(Collectors.toList());
 
-            // 添加系统提示（在最前面），告诉AI是对哪个玩家回复
-            String systemPrompt = SYSTEM_PROMPT + "\n\n你正在回复玩家: " + playerName;
+            // 添加系统提示（在最前面），明确告诉AI当前要回复的是最后一条消息
+            String systemPrompt = SYSTEM_PROMPT + "\n\n玩家 [" + playerName + "] 刚刚发了消息，messages数组中的最后一条就是他/她发送的，请回复最后一条消息。";
             messages.add(0, new ApiMessage("system", null, systemPrompt));
 
             // 转换为JSON

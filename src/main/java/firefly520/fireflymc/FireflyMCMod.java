@@ -12,12 +12,13 @@ import net.neoforged.neoforge.common.NeoForge;
 import firefly520.fireflymc.client.ClientHandler;
 import firefly520.fireflymc.client.UpdateChecker;
 import firefly520.fireflymc.client.TitleScreenDetector;
+import firefly520.fireflymc.event.websocket.PlayerEventWebSocketClient;
 import firefly520.fireflymc.network.ModNetwork;
 
 @Mod(FireflyMCMod.MODID)
 public class FireflyMCMod {
   public static final String MODID = "fireflymc";
-  public static final String VERSION = "2.2.1";
+  public static final String VERSION = "2.3.0";
 
   public FireflyMCMod(IEventBus modEventBus, ModContainer modContainer) {
     // 1. 注册客户端配置（官方标准写法）
@@ -42,9 +43,14 @@ public class FireflyMCMod {
     NeoForge.EVENT_BUS.addListener(ModEventHandler::onPlayerLoggedIn);
     NeoForge.EVENT_BUS.addListener(ModEventHandler::onPlayerLoggedOut);
 
+    // 4.5. 初始化WebSocket事件广播（仅服务端）
+    if (FMLEnvironment.dist == Dist.DEDICATED_SERVER) {
+      PlayerEventWebSocketClient.init();
+    }
+
     // 5. 检查Mod更新
     UpdateChecker.checkForUpdate();
 
-    System.out.println("Loading FireflyMC 2.2.1");
+    System.out.println("Loading FireflyMC 2.3.0");
   }
 }

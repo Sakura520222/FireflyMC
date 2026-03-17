@@ -62,7 +62,7 @@ public class ModUpdateScreen extends Screen {
 
         // 版本信息
         String versionText = ClientState.updateVersion != null ? ClientState.updateVersion : "最新版本";
-        String currentVer = "§f当前版本: §72.2.1";
+        String currentVer = "§f当前版本: §72.3.0";
         String latestVer = "§a最新版本: §f" + versionText;
         String desc = "§7检测到新版本可用，请更新以继续游玩FireflyMC";
 
