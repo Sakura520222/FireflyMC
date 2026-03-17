@@ -40,7 +40,7 @@ public class UpdateChecker {
 
     /**
      * 从URL中提取版本号
-     * 例如: https://mc.firefly520.top/ireflymc-2.2.0.jar -> 2.2.0
+     * 例如: https://mc.firefly520.top/ireflymc-2.2.1.jar -> 2.2.1
      */
     private static String extractVersionFromUrl(String url) {
         int lastSlash = url.lastIndexOf('/');
