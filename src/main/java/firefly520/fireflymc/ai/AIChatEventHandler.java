@@ -10,6 +10,7 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import net.neoforged.api.distmarker.Dist;
+import net.neoforged.neoforge.event.ServerChatEvent;
 import net.neoforged.neoforge.event.entity.player.PlayerEvent;
 import net.neoforged.neoforge.event.server.ServerStoppingEvent;
 import net.neoforged.bus.api.SubscribeEvent;
@@ -70,6 +71,32 @@ public class AIChatEventHandler {
     }
 
     /**
+     * 监听玩家聊天消息，记录到AI历史上下文
+     */
+    @SubscribeEvent
+    public static void onServerChat(ServerChatEvent event) {
+        if (!AIConfig.ENABLED) {
+            return;
+        }
+
+        var player = event.getPlayer();
+        var server = player.getServer();
+
+        if (!isMultiplayerServer(server)) {
+            return;
+        }
+
+        var historyManager = getHistoryManager(server);
+
+        // 记录玩家聊天消息到AI历史
+        historyManager.addMessage(new ChatMessage(
+                player.getGameProfile().getName(),
+                event.getRawText(),
+                MessageType.PLAYER
+        ));
+    }
+
+    /**
      * 处理AI命令
      */
     private static int handleAiCommand(CommandContext<CommandSourceStack> context) {
@@ -119,7 +146,7 @@ public class AIChatEventHandler {
         // 记录触发时间
         recordTrigger(player);
 
-        // 添加玩家消息到历史
+        // 记录玩家消息到历史
         historyManager.addMessage(new ChatMessage(
                 player.getName().getString(),
                 prompt,
@@ -280,18 +307,18 @@ public class AIChatEventHandler {
     }
 
     /**
-     * 广播AI回复
+     * 广播AI回复（玩家样式聊天消息，非系统消息）
      */
     private static void broadcastReply(MinecraftServer server, ServerPlayer triggerPlayer, String reply) {
         var aiName = AIConfig.AI_NAME;
         var playerName = triggerPlayer.getName().getString();
+
+        // 构建聊天消息组件：显示为 "AI名称 对 玩家名 说: 回复内容"
         var message = Component.literal(aiName + " 对 " + playerName + " 说: " + reply);
 
         if (AIConfig.BROADCAST_TO_ALL) {
             // 广播给全体玩家
-            server.getPlayerList().getPlayers().forEach(p -> {
-                p.sendSystemMessage(message);
-            });
+            server.getPlayerList().broadcastSystemMessage(message, false);
         } else {
             // 仅发送给触发玩家
             triggerPlayer.sendSystemMessage(message);
