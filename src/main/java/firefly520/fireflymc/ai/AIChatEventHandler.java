@@ -15,6 +15,8 @@ import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.neoforge.event.entity.player.PlayerEvent;
+import net.neoforged.neoforge.event.entity.living.LivingDeathEvent;
+import net.neoforged.neoforge.event.entity.player.AdvancementEvent;
 import net.neoforged.neoforge.event.server.ServerStoppingEvent;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
@@ -98,6 +100,11 @@ public class AIChatEventHandler {
                 message,
                 MessageType.PLAYER
         ));
+
+        // 发送WebSocket广播
+        PlayerEventWebSocketClient.sendEvent(
+                PlayerEventMessage.playerChat(player.getGameProfile().getName(), message)
+        );
     }
 
     /**
@@ -159,6 +166,11 @@ public class AIChatEventHandler {
 
         // 广播玩家消息到聊天区（与普通聊天格式一致）
         broadcastPlayerMessage(server, player.getName().getString(), prompt);
+
+        // 发送WebSocket广播（玩家聊天消息）
+        PlayerEventWebSocketClient.sendEvent(
+                PlayerEventMessage.playerChat(player.getName().getString(), prompt)
+        );
 
         // 异步调用AI
         callAIAsync(server, player, historyManager, prompt);
@@ -231,9 +243,7 @@ public class AIChatEventHandler {
             ));
 
             // 发送WebSocket广播
-            PlayerEventWebSocketClient.sendEvent(
-                    new PlayerEventMessage("join", event.getEntity().getName().getString())
-            );
+            PlayerEventWebSocketClient.sendEvent(PlayerEventMessage.join(event.getEntity().getName().getString()));
         }
     }
 
@@ -258,10 +268,63 @@ public class AIChatEventHandler {
             PLAYER_COOLDOWNS.remove(event.getEntity().getUUID());
 
             // 发送WebSocket广播
-            PlayerEventWebSocketClient.sendEvent(
-                    new PlayerEventMessage("leave", event.getEntity().getName().getString())
-            );
+            PlayerEventWebSocketClient.sendEvent(PlayerEventMessage.leave(event.getEntity().getName().getString()));
         }
+    }
+
+    /**
+     * 监听玩家死亡事件
+     */
+    @SubscribeEvent
+    public static void onPlayerDeath(LivingDeathEvent event) {
+        // 只处理玩家死亡
+        if (!(event.getEntity() instanceof ServerPlayer player)) {
+            return;
+        }
+
+        var server = player.getServer();
+        if (!isMultiplayerServer(server)) {
+            return;
+        }
+
+        // 获取死亡消息
+        var source = event.getSource();
+        var deathComponent = source.getLocalizedDeathMessage(event.getEntity());
+        String deathMessage = deathComponent.getString();
+
+        // 发送WebSocket广播
+        PlayerEventWebSocketClient.sendEvent(
+                PlayerEventMessage.death(player.getGameProfile().getName(), deathMessage)
+        );
+    }
+
+    /**
+     * 监听玩家解锁成就事件
+     */
+    @SubscribeEvent
+    public static void onAdvancement(AdvancementEvent.AdvancementEarnEvent event) {
+        if (!(event.getEntity() instanceof ServerPlayer player)) {
+            return;
+        }
+
+        var server = player.getServer();
+        if (!isMultiplayerServer(server)) {
+            return;
+        }
+
+        var advancement = event.getAdvancement();
+        if (advancement == null) {
+            return;
+        }
+
+        // 获取成就ID作为标题（AdvancementHolder不直接提供显示信息）
+        var advancementId = advancement.id();
+        String advancementTitle = advancementId.toString();
+
+        // 发送WebSocket广播
+        PlayerEventWebSocketClient.sendEvent(
+                PlayerEventMessage.advancement(player.getGameProfile().getName(), advancementTitle)
+        );
     }
 
     /**
@@ -380,5 +443,8 @@ public class AIChatEventHandler {
         } else {
             triggerPlayer.displayClientMessage(fullChatMessage, false);
         }
+
+        // 发送WebSocket广播（AI聊天消息）
+        PlayerEventWebSocketClient.sendEvent(PlayerEventMessage.aiChat(reply));
     }
 }
