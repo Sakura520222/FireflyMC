@@ -8,10 +8,17 @@ import net.minecraft.server.level.ServerPlayer;
 import net.neoforged.neoforge.event.entity.player.PlayerEvent;
 import net.neoforged.neoforge.network.PacketDistributor;
 
+import java.util.Map;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
+
 /**
  * 全局事件处理器
  */
 public class ModEventHandler {
+
+    // 跟踪玩家的无敌超时任务（UUID -> 任务）
+    private static final Map<UUID, Thread> INVULNERABILITY_TIMEOUT_THREADS = new ConcurrentHashMap<>();
 
     public static void onPlayerLoggedIn(PlayerEvent.PlayerLoggedInEvent event) {
         if (event.getEntity() instanceof ServerPlayer serverPlayer) {
@@ -29,6 +36,27 @@ public class ModEventHandler {
 
             // 设置玩家无敌（客户端确认后会取消）
             serverPlayer.setInvulnerable(true);
+
+            // 添加超时保护：10秒后强制取消无敌状态
+            // 这是为了防止从单人游戏切换到多人游戏时，网络状态异常导致确认包丢失
+            UUID playerUuid = serverPlayer.getUUID();
+            Thread timeoutThread = new Thread(() -> {
+                try {
+                    Thread.sleep(10000); // 10秒超时
+                    serverPlayer.server.execute(() -> {
+                        ServerPlayer player = serverPlayer.server.getPlayerList().getPlayer(playerUuid);
+                        if (player != null && !ModPayloadHandler.CONFIRMED_PLAYERS.getOrDefault(playerUuid, false)) {
+                            // 玩家仍在游戏且未确认，强制取消无敌
+                            player.setInvulnerable(false);
+                        }
+                        INVULNERABILITY_TIMEOUT_THREADS.remove(playerUuid);
+                    });
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+            });
+            timeoutThread.start();
+            INVULNERABILITY_TIMEOUT_THREADS.put(playerUuid, timeoutThread);
 
             // 5秒后检查验证状态
             new Thread(() -> {
@@ -53,8 +81,22 @@ public class ModEventHandler {
 
     public static void onPlayerLoggedOut(PlayerEvent.PlayerLoggedOutEvent event) {
         if (event.getEntity() instanceof ServerPlayer serverPlayer) {
-            ModPayloadHandler.VERIFIED_PLAYERS.remove(serverPlayer.getUUID());
-            ModPayloadHandler.CONFIRMED_PLAYERS.remove(serverPlayer.getUUID());
+            UUID playerUuid = serverPlayer.getUUID();
+            ModPayloadHandler.VERIFIED_PLAYERS.remove(playerUuid);
+            ModPayloadHandler.CONFIRMED_PLAYERS.remove(playerUuid);
+            // 清理超时任务
+            cancelInvulnerabilityTimeout(playerUuid);
+        }
+    }
+
+    /**
+     * 取消玩家的无敌超时任务
+     * 当玩家确认规则或退出游戏时调用
+     */
+    public static void cancelInvulnerabilityTimeout(UUID playerUuid) {
+        Thread thread = INVULNERABILITY_TIMEOUT_THREADS.remove(playerUuid);
+        if (thread != null && thread.isAlive()) {
+            thread.interrupt();
         }
     }
 }
