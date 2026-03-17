@@ -25,6 +25,9 @@ import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 
+import firefly520.fireflymc.event.websocket.PlayerEventWebSocketClient;
+import firefly520.fireflymc.event.websocket.PlayerEventMessage;
+
 /**
  * AI聊天事件处理器
  *
@@ -226,6 +229,11 @@ public class AIChatEventHandler {
                     event.getEntity().getName().getString() + " 加入了游戏",
                     MessageType.SYSTEM
             ));
+
+            // 发送WebSocket广播
+            PlayerEventWebSocketClient.sendEvent(
+                    new PlayerEventMessage("join", event.getEntity().getName().getString())
+            );
         }
     }
 
@@ -248,6 +256,11 @@ public class AIChatEventHandler {
             ));
             // 清理该玩家的冷却记录
             PLAYER_COOLDOWNS.remove(event.getEntity().getUUID());
+
+            // 发送WebSocket广播
+            PlayerEventWebSocketClient.sendEvent(
+                    new PlayerEventMessage("leave", event.getEntity().getName().getString())
+            );
         }
     }
 
@@ -261,6 +274,9 @@ public class AIChatEventHandler {
         MinecraftServer server = event.getServer();
         HISTORY_MANAGERS.remove(server);
         PLAYER_COOLDOWNS.clear();
+
+        // 关闭WebSocket连接
+        PlayerEventWebSocketClient.shutdown();
     }
 
     /**

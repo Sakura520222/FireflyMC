@@ -12,6 +12,7 @@ import net.neoforged.neoforge.common.NeoForge;
 import firefly520.fireflymc.client.ClientHandler;
 import firefly520.fireflymc.client.UpdateChecker;
 import firefly520.fireflymc.client.TitleScreenDetector;
+import firefly520.fireflymc.event.websocket.PlayerEventWebSocketClient;
 import firefly520.fireflymc.network.ModNetwork;
 
 @Mod(FireflyMCMod.MODID)
@@ -41,6 +42,11 @@ public class FireflyMCMod {
     // 4. 注册游戏事件处理（GAME 总线）
     NeoForge.EVENT_BUS.addListener(ModEventHandler::onPlayerLoggedIn);
     NeoForge.EVENT_BUS.addListener(ModEventHandler::onPlayerLoggedOut);
+
+    // 4.5. 初始化WebSocket事件广播（仅服务端）
+    if (FMLEnvironment.dist == Dist.DEDICATED_SERVER) {
+      PlayerEventWebSocketClient.init();
+    }
 
     // 5. 检查Mod更新
     UpdateChecker.checkForUpdate();
