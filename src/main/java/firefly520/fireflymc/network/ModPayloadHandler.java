@@ -1,6 +1,7 @@
 package firefly520.fireflymc.network;
 
 import firefly520.fireflymc.FireflyMCMod;
+import firefly520.fireflymc.ModEventHandler;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
 import net.neoforged.neoforge.network.handling.IPayloadContext;
@@ -28,6 +29,8 @@ public class ModPayloadHandler {
             if (context.player() instanceof ServerPlayer serverPlayer) {
                 if (payload.modVersion().equals(FireflyMCMod.VERSION)) {
                     VERIFIED_PLAYERS.put(serverPlayer.getUUID(), true);
+                    // 取消验证超时任务
+                    ModEventHandler.cancelVerifyTimeout(serverPlayer.getUUID());
                 } else {
                     serverPlayer.connection.disconnect(Component.literal(
                         "§cFireflyMC模组版本不匹配！\n" +
@@ -49,10 +52,13 @@ public class ModPayloadHandler {
     public static void handleConfirmRules(ConfirmRulesPayload payload, IPayloadContext context) {
         context.enqueueWork(() -> {
             if (context.player() instanceof ServerPlayer serverPlayer) {
+                UUID playerUuid = serverPlayer.getUUID();
+                // 取消超时任务
+                ModEventHandler.cancelInvulnerabilityTimeout(playerUuid);
                 // 取消玩家无敌
                 serverPlayer.setInvulnerable(false);
                 // 标记玩家已确认
-                CONFIRMED_PLAYERS.put(serverPlayer.getUUID(), true);
+                CONFIRMED_PLAYERS.put(playerUuid, true);
             }
         });
     }
