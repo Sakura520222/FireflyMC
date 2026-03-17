@@ -1,5 +1,7 @@
 package firefly520.fireflymc.ai;
 
+import java.util.UUID;
+
 /**
  * AI聊天配置 - 硬编码
  */
@@ -12,6 +14,7 @@ public class AIConfig {
     // 显示配置
     public static final String AI_NAME = "§d小樱§r";
     public static final String AI_NAME_PLAIN = "小樱";
+    public static final UUID AI_UUID = UUID.fromString("00000000-0000-4000-8000-000000000001");
 
     // 行为配置
     public static final int MAX_HISTORY_SIZE = 30;

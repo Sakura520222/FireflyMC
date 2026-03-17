@@ -1,0 +1,13 @@
+{
+  "required": true,
+  "package": "firefly520.fireflymc.mixin",
+  "compatibilityLevel": "JAVA_21",
+  "mixins": [
+    "ServerChatMixin"
+  ],
+  "client": [],
+  "server": ["ServerChatMixin"],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}

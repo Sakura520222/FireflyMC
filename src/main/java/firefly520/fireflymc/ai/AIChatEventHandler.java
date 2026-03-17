@@ -6,11 +6,13 @@ import com.mojang.brigadier.context.CommandContext;
 import com.mojang.brigadier.suggestion.SuggestionProvider;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
+import net.minecraft.network.chat.ChatType;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.OutgoingChatMessage;
+import net.minecraft.network.chat.PlayerChatMessage;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import net.neoforged.api.distmarker.Dist;
-import net.neoforged.neoforge.event.ServerChatEvent;
 import net.neoforged.neoforge.event.entity.player.PlayerEvent;
 import net.neoforged.neoforge.event.server.ServerStoppingEvent;
 import net.neoforged.bus.api.SubscribeEvent;
@@ -71,17 +73,15 @@ public class AIChatEventHandler {
     }
 
     /**
-     * 监听玩家聊天消息，记录到AI历史上下文
+     * 记录玩家聊天消息到AI历史上下文
+     * 此方法由 ServerChatMixin 调用
      */
-    @SubscribeEvent
-    public static void onServerChat(ServerChatEvent event) {
+    public static void recordPlayerChat(ServerPlayer player, String message) {
         if (!AIConfig.ENABLED) {
             return;
         }
 
-        var player = event.getPlayer();
         var server = player.getServer();
-
         if (!isMultiplayerServer(server)) {
             return;
         }
@@ -91,7 +91,7 @@ public class AIChatEventHandler {
         // 记录玩家聊天消息到AI历史
         historyManager.addMessage(new ChatMessage(
                 player.getGameProfile().getName(),
-                event.getRawText(),
+                message,
                 MessageType.PLAYER
         ));
     }
@@ -310,18 +310,29 @@ public class AIChatEventHandler {
      * 广播AI回复（玩家样式聊天消息，非系统消息）
      */
     private static void broadcastReply(MinecraftServer server, ServerPlayer triggerPlayer, String reply) {
-        var aiName = AIConfig.AI_NAME;
-        var playerName = triggerPlayer.getName().getString();
+        // 创建 ChatType.Bound
+        ChatType.Bound boundChatType = ChatType.bind(
+            ChatType.CHAT,
+            triggerPlayer
+        );
 
-        // 构建聊天消息组件：显示为 "AI名称 对 玩家名 说: 回复内容"
-        var message = Component.literal(aiName + " 对 " + playerName + " 说: " + reply);
+        // 创建 PlayerChatMessage（未签名）
+        PlayerChatMessage playerChatMessage = PlayerChatMessage.unsigned(
+            AIConfig.AI_UUID,
+            reply
+        ).withUnsignedContent(Component.literal(reply));
+
+        // 创建 OutgoingChatMessage
+        OutgoingChatMessage outgoingMessage = OutgoingChatMessage.create(playerChatMessage);
 
         if (AIConfig.BROADCAST_TO_ALL) {
-            // 广播给全体玩家
-            server.getPlayerList().broadcastSystemMessage(message, false);
+            // 广播给所有玩家
+            for (ServerPlayer player : server.getPlayerList().getPlayers()) {
+                outgoingMessage.sendToPlayer(player, false, boundChatType);
+            }
         } else {
             // 仅发送给触发玩家
-            triggerPlayer.sendSystemMessage(message);
+            outgoingMessage.sendToPlayer(triggerPlayer, false, boundChatType);
         }
     }
 }
