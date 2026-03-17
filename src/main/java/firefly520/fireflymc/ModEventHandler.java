@@ -4,6 +4,7 @@ import firefly520.fireflymc.network.ModHandshakePayload;
 import firefly520.fireflymc.network.ModPayloadHandler;
 import firefly520.fireflymc.network.ShowRulesPayload;
 import net.minecraft.network.chat.Component;
+import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import net.neoforged.neoforge.event.entity.player.PlayerEvent;
 import net.neoforged.neoforge.network.PacketDistributor;
@@ -11,25 +12,44 @@ import net.neoforged.neoforge.network.PacketDistributor;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.TimeUnit;
 
 /**
  * 全局事件处理器
  */
 public class ModEventHandler {
 
-    // 跟踪玩家的无敌超时任务（UUID -> 任务）
-    private static final Map<UUID, Thread> INVULNERABILITY_TIMEOUT_THREADS = new ConcurrentHashMap<>();
+    /**
+     * 超时任务调度器（单线程守护线程池）
+     * 用于处理玩家无敌状态的超时取消
+     */
+    private static final ScheduledExecutorService TIMEOUT_EXECUTOR = Executors.newSingleThreadScheduledExecutor(r -> {
+        Thread t = new Thread(r, "FireflyMC-Invulnerability-Timeout");
+        t.setDaemon(true);
+        return t;
+    });
+
+    /**
+     * 跟踪玩家的无敌超时任务（UUID -> ScheduledFuture）
+     */
+    private static final Map<UUID, ScheduledFuture<?>> TIMEOUT_TASKS = new ConcurrentHashMap<>();
 
     public static void onPlayerLoggedIn(PlayerEvent.PlayerLoggedInEvent event) {
         if (event.getEntity() instanceof ServerPlayer serverPlayer) {
-            ModPayloadHandler.VERIFIED_PLAYERS.remove(serverPlayer.getUUID());
-            ModPayloadHandler.CONFIRMED_PLAYERS.remove(serverPlayer.getUUID());
+            UUID playerUuid = serverPlayer.getUUID();
+            MinecraftServer server = serverPlayer.server;
+
+            ModPayloadHandler.VERIFIED_PLAYERS.remove(playerUuid);
+            ModPayloadHandler.CONFIRMED_PLAYERS.remove(playerUuid);
 
             // 发送握手检测包
             PacketDistributor.sendToPlayer(serverPlayer, new ModHandshakePayload());
 
             // 判断是否首次加入（本次连接）
-            boolean isFirstJoin = !ModPayloadHandler.CONFIRMED_PLAYERS.containsKey(serverPlayer.getUUID());
+            boolean isFirstJoin = !ModPayloadHandler.CONFIRMED_PLAYERS.containsKey(playerUuid);
 
             // 发送显示准则弹窗包
             PacketDistributor.sendToPlayer(serverPlayer, new ShowRulesPayload(isFirstJoin));
@@ -38,44 +58,33 @@ public class ModEventHandler {
             serverPlayer.setInvulnerable(true);
 
             // 添加超时保护：10秒后强制取消无敌状态
-            // 这是为了防止从单人游戏切换到多人游戏时，网络状态异常导致确认包丢失
-            UUID playerUuid = serverPlayer.getUUID();
-            Thread timeoutThread = new Thread(() -> {
-                try {
-                    Thread.sleep(10000); // 10秒超时
-                    serverPlayer.server.execute(() -> {
-                        ServerPlayer player = serverPlayer.server.getPlayerList().getPlayer(playerUuid);
-                        if (player != null && !ModPayloadHandler.CONFIRMED_PLAYERS.getOrDefault(playerUuid, false)) {
-                            // 玩家仍在游戏且未确认，强制取消无敌
-                            player.setInvulnerable(false);
-                        }
-                        INVULNERABILITY_TIMEOUT_THREADS.remove(playerUuid);
-                    });
-                } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
-                }
-            });
-            timeoutThread.start();
-            INVULNERABILITY_TIMEOUT_THREADS.put(playerUuid, timeoutThread);
+            // 防止从单人游戏切换到多人游戏时，网络状态异常导致确认包丢失
+            ScheduledFuture<?> timeoutTask = TIMEOUT_EXECUTOR.schedule(() -> {
+                server.execute(() -> {
+                    ServerPlayer player = server.getPlayerList().getPlayer(playerUuid);
+                    if (player != null && !ModPayloadHandler.CONFIRMED_PLAYERS.getOrDefault(playerUuid, false)) {
+                        player.setInvulnerable(false);
+                    }
+                    TIMEOUT_TASKS.remove(playerUuid);
+                });
+            }, 10, TimeUnit.SECONDS);
+            TIMEOUT_TASKS.put(playerUuid, timeoutTask);
 
             // 5秒后检查验证状态
-            new Thread(() -> {
-                try {
-                    Thread.sleep(5000);
-                    // 在主线程中执行检查
-                    serverPlayer.server.execute(() -> {
-                        if (!ModPayloadHandler.VERIFIED_PLAYERS.getOrDefault(serverPlayer.getUUID(), false)) {
-                            serverPlayer.connection.disconnect(Component.literal(
+            TIMEOUT_EXECUTOR.schedule(() -> {
+                server.execute(() -> {
+                    if (!ModPayloadHandler.VERIFIED_PLAYERS.getOrDefault(playerUuid, false)) {
+                        ServerPlayer player = server.getPlayerList().getPlayer(playerUuid);
+                        if (player != null) {
+                            player.connection.disconnect(Component.literal(
                                 "§c你未安装FireflyMC模组，无法进入本服务器！\n" +
                                 "请安装FireflyMC " + FireflyMCMod.VERSION + " 版本后重试。\n" +
                                 "§e下载地址: https://mc.firefly520.top"
                             ));
                         }
-                    });
-                } catch (InterruptedException e) {
-                    e.printStackTrace();
-                }
-            }).start();
+                    }
+                });
+            }, 5, TimeUnit.SECONDS);
         }
     }
 
@@ -92,11 +101,13 @@ public class ModEventHandler {
     /**
      * 取消玩家的无敌超时任务
      * 当玩家确认规则或退出游戏时调用
+     *
+     * @param playerUuid 玩家UUID
      */
     public static void cancelInvulnerabilityTimeout(UUID playerUuid) {
-        Thread thread = INVULNERABILITY_TIMEOUT_THREADS.remove(playerUuid);
-        if (thread != null && thread.isAlive()) {
-            thread.interrupt();
+        ScheduledFuture<?> future = TIMEOUT_TASKS.remove(playerUuid);
+        if (future != null && !future.isDone()) {
+            future.cancel(false);
         }
     }
 }
