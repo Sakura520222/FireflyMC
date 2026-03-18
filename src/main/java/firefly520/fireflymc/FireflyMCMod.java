@@ -9,11 +9,14 @@ import net.neoforged.fml.loading.FMLEnvironment;
 import net.neoforged.neoforge.client.gui.ConfigurationScreen;
 import net.neoforged.neoforge.client.gui.IConfigScreenFactory;
 import net.neoforged.neoforge.common.NeoForge;
+import net.neoforged.neoforge.event.server.ServerStartedEvent;
+import net.neoforged.neoforge.event.server.ServerStoppingEvent;
 import firefly520.fireflymc.client.ClientHandler;
 import firefly520.fireflymc.client.UpdateChecker;
 import firefly520.fireflymc.client.TitleScreenDetector;
 import firefly520.fireflymc.event.websocket.PlayerEventWebSocketClient;
 import firefly520.fireflymc.network.ModNetwork;
+import firefly520.fireflymc.util.ServerLanguageLoader;
 
 @Mod(FireflyMCMod.MODID)
 public class FireflyMCMod {
@@ -48,9 +51,23 @@ public class FireflyMCMod {
       PlayerEventWebSocketClient.init();
     }
 
+    // 4.6. 注册服务器生命周期事件（加载中文语言文件）
+    NeoForge.EVENT_BUS.addListener(this::onServerStarted);
+    NeoForge.EVENT_BUS.addListener(this::onServerStopping);
+
     // 5. 检查Mod更新
     UpdateChecker.checkForUpdate();
 
     System.out.println("Loading FireflyMC 2.3.1");
+  }
+
+  // 服务端启动完成后加载中文语言文件
+  private void onServerStarted(ServerStartedEvent event) {
+    ServerLanguageLoader.loadZhCnLanguage();
+  }
+
+  // 服务端关闭时清理资源
+  private void onServerStopping(ServerStoppingEvent event) {
+    ServerLanguageLoader.clear();
   }
 }
