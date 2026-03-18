@@ -52,7 +52,7 @@ public class AIChatEventHandler {
     private static final SuggestionProvider<CommandSourceStack> AI_SUGGESTIONS = (context, builder) -> {
         String[] suggestions = {
             "你好",
-            "今天天气怎么样",
+            "我们在玩什么",
             "讲个笑话",
             "介绍一下你自己",
             "服务器有多少人在线"
