@@ -31,8 +31,6 @@ public class RulesScreen extends Screen {
 
     // 现代化樱花主题配色
     private static final int
-        BG_TOP = 0xFFFFE4E1,         // 浅樱粉（渐变顶部）
-        BG_BOTTOM = 0xFFFFB6C1,      // 樱花粉（渐变底部）
         ACCENT_PRIMARY = 0xFFFF69B4, // 热粉红（主色）
         ACCENT_SECONDARY = 0xFFFF1493, // 深粉红（强调）
         TEXT_PRIMARY = 0xFF2D2D2D,   // 主文字
@@ -359,20 +357,6 @@ public class RulesScreen extends Screen {
         fillCircle(guiGraphics, x + width - radius, y + radius, radius, color);
         fillCircle(guiGraphics, x + radius, y + height - radius, radius, color);
         fillCircle(guiGraphics, x + width - radius, y + height - radius, radius, color);
-    }
-
-    /**
-     * 绘制圆角边框
-     */
-    private void drawRoundedBorder(GuiGraphics guiGraphics, int x, int y, int width, int height, int radius, int color, int thickness) {
-        // 上边
-        guiGraphics.fill(x + radius, y, x + width - radius, y + thickness, color);
-        // 下边
-        guiGraphics.fill(x + radius, y + height - thickness, x + width - radius, y + height, color);
-        // 左边
-        guiGraphics.fill(x, y + radius, x + thickness, y + height - radius, color);
-        // 右边
-        guiGraphics.fill(x + width - thickness, y + radius, x + width, y + height - radius, color);
     }
 
     /**

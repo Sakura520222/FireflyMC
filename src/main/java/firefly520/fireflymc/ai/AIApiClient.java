@@ -43,7 +43,7 @@ public class AIApiClient {
         try {
             // 构建请求体
             JsonObject requestBody = new JsonObject();
-            requestBody.addProperty("model", AIConfig.MODEL);
+            requestBody.addProperty("model", AIConfig.getModel());
 
             // 构建消息数组
             var messages = history.stream()
@@ -60,10 +60,10 @@ public class AIApiClient {
 
             // 创建HTTP请求
             HttpRequest request = HttpRequest.newBuilder()
-                    .uri(URI.create(AIConfig.API_URL + "/chat/completions"))
+                    .uri(URI.create(AIConfig.getApiUrl() + "/chat/completions"))
                     .timeout(Duration.ofSeconds(10))
                     .header("Content-Type", "application/json")
-                    .header("Authorization", "Bearer " + AIConfig.API_KEY)
+                    .header("Authorization", "Bearer " + AIConfig.getApiKey())
                     .POST(HttpRequest.BodyPublishers.ofString(GSON.toJson(requestBody)))
                     .build();
 
@@ -151,7 +151,7 @@ public class AIApiClient {
         message = message.replaceAll(" +", " ").trim();
 
         // 限制最大长度
-        int maxLength = AIConfig.MAX_RESPONSE_LENGTH;
+        int maxLength = AIConfig.getMaxResponseLength();
         if (message.length() > maxLength) {
             message = message.substring(0, maxLength - 3) + "...";
         }
@@ -164,12 +164,12 @@ public class AIApiClient {
      */
     public static Component getErrorComponent(ErrorType errorType) {
         return switch (errorType) {
-            case TIMEOUT -> Component.literal("§c" + AIConfig.AI_NAME_PLAIN + " 响应超时，请稍后再试...");
+            case TIMEOUT -> Component.literal("§c" + AIConfig.getAiNamePlain() + " 响应超时，请稍后再试...");
             case INVALID_KEY -> Component.literal("§cAPI配置错误，请联系管理员");
-            case RATE_LIMIT -> Component.literal("§e" + AIConfig.AI_NAME_PLAIN + " 需要休息一下，请稍后再试~");
-            case CONTENT_FILTER -> Component.literal("§7[" + AIConfig.AI_NAME_PLAIN + "觉得这个话题不太合适...]");
+            case RATE_LIMIT -> Component.literal("§e" + AIConfig.getAiNamePlain() + " 需要休息一下，请稍后再试~");
+            case CONTENT_FILTER -> Component.literal("§7[" + AIConfig.getAiNamePlain() + "觉得这个话题不太合适...]");
             case NETWORK_ERROR, PARSE_ERROR, API_ERROR ->
-                Component.literal("§c" + AIConfig.AI_NAME_PLAIN + " 暂时无法回复，请稍后再试...");
+                Component.literal("§c" + AIConfig.getAiNamePlain() + " 暂时无法回复，请稍后再试...");
             case NONE -> Component.literal("");
         };
     }

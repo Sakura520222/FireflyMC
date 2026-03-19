@@ -24,14 +24,11 @@ public class ModUpdateScreen extends Screen {
 
     // 配色方案 - 渐变樱花粉
     private static final int
-        BG_TOP = 0xFFFFE4E1,      // 浅樱粉（渐变顶部）
-        BG_BOTTOM = 0xFFFFB6C1,   // 樱花粉（渐变底部）
         ACCENT_PRIMARY = 0xFFFF69B4,   // 热粉红（主色）
         ACCENT_SECONDARY = 0xFFFF1493, // 深粉红（强调）
         TEXT_PRIMARY = 0xFF2D2D2D,     // 主文字
         TEXT_SECONDARY = 0xFF666666,   // 次要文字
-        SHADOW_LIGHT = 0x30FFFFFF,     // 高光
-        SHADOW_DARK = 0x40000000;      // 阴影
+        SHADOW_LIGHT = 0x30FFFFFF;     // 高光
 
     public ModUpdateScreen() {
         super(Component.literal("模组更新"));
@@ -133,10 +130,8 @@ public class ModUpdateScreen extends Screen {
         int descY = cardInnerY + cardHeight + 12;
         guiGraphics.drawString(font, desc, centerX - font.width(desc) / 2, descY, TEXT_SECONDARY, false);
 
-        // 安装提示
-        String installTip = "下载后请添加至整合包的mod文件夹，并删除旧版本，然后重启游戏即可";
+        // 安装提示（分成两行显示）
         int installTipY = descY + 20;
-        // 将提示文字分成两行显示
         String tipLine1 = "下载后请添加至整合包的mod文件夹";
         String tipLine2 = "并删除旧版本，然后重启游戏即可";
         guiGraphics.drawString(font, tipLine1, centerX - font.width(tipLine1) / 2, installTipY, TEXT_SECONDARY, false);

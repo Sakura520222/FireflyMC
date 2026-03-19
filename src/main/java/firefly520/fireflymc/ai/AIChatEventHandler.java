@@ -92,7 +92,7 @@ public class AIChatEventHandler {
      * 此方法由 ServerChatMixin 调用
      */
     public static void recordPlayerChat(ServerPlayer player, String message) {
-        if (!AIConfig.ENABLED) {
+        if (!AIConfig.getEnabled()) {
             return;
         }
 
@@ -127,7 +127,7 @@ public class AIChatEventHandler {
      */
     private static int handleAiCommand(CommandContext<CommandSourceStack> context) {
         // 检查配置是否启用
-        if (!AIConfig.ENABLED) {
+        if (!AIConfig.getEnabled()) {
             context.getSource().sendFailure(Component.literal("§cAI聊天功能未启用"));
             return 0;
         }
@@ -161,7 +161,7 @@ public class AIChatEventHandler {
         if (isOnCooldown(player)) {
             long elapsed = (System.currentTimeMillis() -
                     PLAYER_COOLDOWNS.get(player.getUUID())) / 1000;
-            long remaining = AIConfig.COOLDOWN_SECONDS - elapsed;
+            long remaining = AIConfig.getCooldownSeconds() - elapsed;
 
             player.sendSystemMessage(Component.literal(
                     "§c请等待 " + remaining + " 秒后再试~"
@@ -208,7 +208,7 @@ public class AIChatEventHandler {
      */
     private static ChatHistoryManager getHistoryManager(MinecraftServer server) {
         return HISTORY_MANAGERS.computeIfAbsent(server, s -> new ChatHistoryManager(
-                AIConfig.MAX_HISTORY_SIZE
+                AIConfig.getMaxHistorySize()
         ));
     }
 
@@ -216,7 +216,7 @@ public class AIChatEventHandler {
      * 检查玩家是否在冷却中
      */
     private static boolean isOnCooldown(ServerPlayer player) {
-        int cooldownSeconds = AIConfig.COOLDOWN_SECONDS;
+        int cooldownSeconds = AIConfig.getCooldownSeconds();
         if (cooldownSeconds <= 0) {
             return false;
         }
@@ -244,7 +244,7 @@ public class AIChatEventHandler {
      */
     @SubscribeEvent
     public static void onPlayerJoin(PlayerEvent.PlayerLoggedInEvent event) {
-        if (!AIConfig.ENABLED) {
+        if (!AIConfig.getEnabled()) {
             return;
         }
 
@@ -267,7 +267,7 @@ public class AIChatEventHandler {
      */
     @SubscribeEvent
     public static void onPlayerLeave(PlayerEvent.PlayerLoggedOutEvent event) {
-        if (!AIConfig.ENABLED) {
+        if (!AIConfig.getEnabled()) {
             return;
         }
 
@@ -292,7 +292,7 @@ public class AIChatEventHandler {
      */
     @SubscribeEvent
     public static void onPlayerDeath(LivingDeathEvent event) {
-        if (!AIConfig.ENABLED) {
+        if (!AIConfig.getEnabled()) {
             return;
         }
 
@@ -370,7 +370,7 @@ public class AIChatEventHandler {
      */
     @SubscribeEvent
     public static void onAdvancement(AdvancementEvent.AdvancementEarnEvent event) {
-        if (!AIConfig.ENABLED) {
+        if (!AIConfig.getEnabled()) {
             return;
         }
 
@@ -476,7 +476,7 @@ public class AIChatEventHandler {
 
                     // 添加AI回复到历史
                     historyManager.addMessage(new ChatMessage(
-                            AIConfig.AI_NAME_PLAIN,
+                            AIConfig.getAiNamePlain(),
                             response.content(),
                             MessageType.ASSISTANT
                     ));
@@ -513,19 +513,19 @@ public class AIChatEventHandler {
         final TextColor SAKURA_PINK = TextColor.fromRgb(0xFFB7C5);
 
         // 构建AI名称组件（带交互效果）
-        Component aiNameComponent = Component.literal(AIConfig.AI_NAME_PLAIN)
+        Component aiNameComponent = Component.literal(AIConfig.getAiNamePlain())
             .withStyle(style -> style
                 .withColor(SAKURA_PINK)
                 // 悬浮显示AI信息
                 .withHoverEvent(new HoverEvent(
                     HoverEvent.Action.SHOW_TEXT,
-                    Component.literal(AIConfig.AI_NAME_PLAIN)
+                    Component.literal(AIConfig.getAiNamePlain())
                         .withStyle(s -> s.withColor(SAKURA_PINK))
                         .append(Component.literal("\n类型: FireflyMC-AI助手")
                             .withStyle(ChatFormatting.GRAY))
                 ))
                 // 点击名称自动填充私聊命令
-                .withClickEvent(new ClickEvent(ClickEvent.Action.SUGGEST_COMMAND, "/msg " + AIConfig.AI_NAME_PLAIN + " "))
+                .withClickEvent(new ClickEvent(ClickEvent.Action.SUGGEST_COMMAND, "/msg " + AIConfig.getAiNamePlain() + " "))
             );
 
         // 拼接完整聊天消息，匹配原版 <玩家名> 消息 格式
@@ -535,7 +535,7 @@ public class AIChatEventHandler {
             .append(Component.literal(reply));
 
         // 发送给目标玩家（overlay=false 表示进入聊天窗口，不是动作栏）
-        if (AIConfig.BROADCAST_TO_ALL) {
+        if (AIConfig.getBroadcastToAll()) {
             for (ServerPlayer player : server.getPlayerList().getPlayers()) {
                 player.displayClientMessage(fullChatMessage, false);
             }
@@ -556,7 +556,7 @@ public class AIChatEventHandler {
      * @param message WebSocket消息
      */
     public static void recordWebSocketMessage(MinecraftServer server, firefly520.fireflymc.event.websocket.ServerMessage message) {
-        if (!AIConfig.ENABLED) {
+        if (!AIConfig.getEnabled()) {
             return;
         }
 
@@ -579,7 +579,7 @@ public class AIChatEventHandler {
      * @param prompt 提示词
      */
     public static void triggerAIReplyNoPlayer(MinecraftServer server, String prompt) {
-        if (!AIConfig.ENABLED) {
+        if (!AIConfig.getEnabled()) {
             return;
         }
 
@@ -610,7 +610,7 @@ public class AIChatEventHandler {
 
                     // 添加AI回复到历史
                     historyManager.addMessage(new ChatMessage(
-                            AIConfig.AI_NAME_PLAIN,
+                            AIConfig.getAiNamePlain(),
                             response.content(),
                             MessageType.ASSISTANT
                     ));
@@ -630,19 +630,19 @@ public class AIChatEventHandler {
         final TextColor SAKURA_PINK = TextColor.fromRgb(0xFFB7C5);
 
         // 构建AI名称组件（带交互效果）
-        Component aiNameComponent = Component.literal(AIConfig.AI_NAME_PLAIN)
+        Component aiNameComponent = Component.literal(AIConfig.getAiNamePlain())
             .withStyle(style -> style
                 .withColor(SAKURA_PINK)
                 // 悬浮显示AI信息
                 .withHoverEvent(new HoverEvent(
                     HoverEvent.Action.SHOW_TEXT,
-                    Component.literal(AIConfig.AI_NAME_PLAIN)
+                    Component.literal(AIConfig.getAiNamePlain())
                         .withStyle(s -> s.withColor(SAKURA_PINK))
                         .append(Component.literal("\n类型: FireflyMC-AI助手")
                             .withStyle(ChatFormatting.GRAY))
                 ))
                 // 点击名称自动填充私聊命令
-                .withClickEvent(new ClickEvent(ClickEvent.Action.SUGGEST_COMMAND, "/msg " + AIConfig.AI_NAME_PLAIN + " "))
+                .withClickEvent(new ClickEvent(ClickEvent.Action.SUGGEST_COMMAND, "/msg " + AIConfig.getAiNamePlain() + " "))
             );
 
         // 拼接完整聊天消息，匹配原版 <玩家名> 消息 格式

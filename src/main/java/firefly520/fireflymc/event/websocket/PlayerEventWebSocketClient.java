@@ -52,6 +52,7 @@ class ShutdownCommand {
 /**
  * WebSocket响应消息
  */
+@SuppressWarnings("unused")
 class WebSocketResponse {
     private static final Gson GSON = new Gson();
 
