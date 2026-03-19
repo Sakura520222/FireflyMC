@@ -98,7 +98,7 @@ public class ModUpdateScreen extends Screen {
         // 版本信息卡片
         String versionText = ClientState.updateVersion != null ? ClientState.updateVersion : "最新版本";
         String modName = "FireflyMC 模组";
-        String currentVer = "当前版本  2.3.2";
+        String currentVer = "当前版本  2.3.3";
         String latestVer = "最新版本  " + versionText;
         String desc = "检测到新版本可用，请更新以继续游玩FireflyMC";
 
