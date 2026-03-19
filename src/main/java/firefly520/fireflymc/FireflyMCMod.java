@@ -64,10 +64,14 @@ public class FireflyMCMod {
   // 服务端启动完成后加载中文语言文件
   private void onServerStarted(ServerStartedEvent event) {
     ServerLanguageLoader.loadZhCnLanguage();
+    // 设置服务器实例，用于WebSocket接收消息后广播
+    firefly520.fireflymc.event.websocket.PlayerEventWebSocketClient.setServer(event.getServer());
   }
 
   // 服务端关闭时清理资源
   private void onServerStopping(ServerStoppingEvent event) {
     ServerLanguageLoader.clear();
+    // 清理WebSocket服务器实例引用
+    firefly520.fireflymc.event.websocket.PlayerEventWebSocketClient.clearServer();
   }
 }
