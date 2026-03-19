@@ -22,19 +22,24 @@ import net.neoforged.neoforge.network.PacketDistributor;
 
 /**
  * 服务器准则弹窗Screen
- * 樱花主题风格
+ * 现代化樱花主题风格：毛玻璃背景、柔和渐变、优雅动画
  * 支持从网络异步加载公告内容
  */
 public class RulesScreen extends Screen {
     // 官网地址
     private static final String WEBSITE_URL = "https://mc.firefly520.top";
 
-    // 樱花主题颜色
-    private static final int BORDER_COLOR = 0xFFFFC0CB;      // 樱花粉边框
-    private static final int BACKGROUND_COLOR = 0x40FFFFFF;  // 半透明白色背景
-    private static final int TITLE_COLOR = 0xFFFF69B4;       // 樱花粉标题
-    private static final int TEXT_COLOR = 0xFF333333;        // 深灰色文字
-    private static final int HIGHLIGHT_COLOR = 0xFFFF1493;   // 深粉色强调色
+    // 现代化樱花主题配色
+    private static final int
+        ACCENT_PRIMARY = 0xFFFF69B4, // 热粉红（主色）
+        ACCENT_SECONDARY = 0xFFFF1493, // 深粉红（强调）
+        TEXT_PRIMARY = 0xFF2D2D2D,   // 主文字
+        TEXT_SECONDARY = 0xFF666666, // 次要文字
+        HIGHLIGHT_COLOR = 0xFFFF1493, // 深粉色强调色
+        SHADOW_LIGHT = 0x30FFFFFF,   // 高光
+        SHADOW_DARK = 0x40000000,    // 阴影
+        SCROLLBAR_BG = 0x20888888,   // 滚动条背景
+        SCROLLBAR_THUMB = 0x80FFC0CB; // 滚动条滑块
 
     // 自动关闭时间：3秒（60 tick）
     private static final int AUTO_CLOSE_TICKS = 3 * 20;
@@ -144,38 +149,44 @@ public class RulesScreen extends Screen {
     @Override
     public void render(@Nonnull GuiGraphics guiGraphics, int mouseX, int mouseY, float partialTick) {
         // 计算弹窗尺寸
-        int dialogWidth = Math.min(500, this.width - 40);
-        int dialogHeight = Math.min(400, this.height - 80);
+        int dialogWidth = Math.min(520, this.width - 40);
+        int dialogHeight = Math.min(420, this.height - 80);
         int dialogX = (this.width - dialogWidth) / 2;
         int dialogY = (this.height - dialogHeight) / 2;
 
-        // 绘制圆角背景
-        drawRoundedRect(guiGraphics, dialogX, dialogY, dialogWidth, dialogHeight, 8, BACKGROUND_COLOR);
+        // 绘制阴影
+        drawRoundedRect(guiGraphics, dialogX + 6, dialogY + 6, dialogWidth, dialogHeight, 10, SHADOW_DARK);
 
-        // 绘制樱花粉色边框
-        drawRoundedBorder(guiGraphics, dialogX, dialogY, dialogWidth, dialogHeight, 8, BORDER_COLOR, 2);
+        // 绘制毛玻璃效果背景
+        drawFrostedGlassBackground(guiGraphics, dialogX, dialogY, dialogWidth, dialogHeight, 10);
+
+        // 绘制渐变边框
+        drawGradientBorder(guiGraphics, dialogX, dialogY, dialogWidth, dialogHeight, 10);
 
         // 绘制标题
         Component title;
         if (rulesLoaded && rules != null) {
-            title = Component.literal("§d§lFireflyMC 服务器公告 " + rules.version());
+            title = Component.literal("FireflyMC 服务器公告 " + rules.version());
         } else {
-            title = Component.literal("§d§lFireflyMC 服务器公告");
+            title = Component.literal("FireflyMC 服务器公告");
         }
         int titleX = this.width / 2 - this.font.width(title) / 2;
         guiGraphics.drawString(this.font, title.getVisualOrderText(),
-                (float)titleX, (float)(dialogY + 20), TITLE_COLOR, false);
+                (float)titleX, (float)(dialogY + 20), ACCENT_SECONDARY, false);
+
+        // 装饰性星星图标
+        drawStarIcon(guiGraphics, titleX - 18, dialogY + 22, ACCENT_PRIMARY);
+        drawStarIcon(guiGraphics, titleX + this.font.width(title) + 14, dialogY + 22, ACCENT_PRIMARY);
 
         // 绘制更新日期和官网（标题下方，固定位置，居中对齐）
         if (rulesLoaded && rules != null) {
-            int infoY = dialogY + 34;
+            int infoY = dialogY + 36;
             StringBuilder info = new StringBuilder();
             if (!rules.updateDate().isEmpty()) {
-                info.append("§f").append(rules.updateDate());
+                info.append(rules.updateDate());
             }
             if (!rules.website().isEmpty()) {
-                if (info.length() > 0) info.append(" §7| §b");
-                else info.append("§b");
+                if (info.length() > 0) info.append("  |  ");
                 info.append(rules.website());
             }
             if (info.length() > 0) {
@@ -190,14 +201,15 @@ public class RulesScreen extends Screen {
                 float scaledX = infoX / scale;
                 float scaledY = infoY / scale;
                 guiGraphics.drawString(this.font, infoText.getVisualOrderText(),
-                        scaledX, scaledY, 0xFFFFFFFF, false);
+                        scaledX, scaledY, TEXT_SECONDARY, false);
                 guiGraphics.pose().popPose();
             }
         }
 
-        // 绘制分隔线
-        int separatorY = dialogY + 45;
-        guiGraphics.fill(dialogX + 10, separatorY, dialogX + dialogWidth - 10, separatorY + 1, BORDER_COLOR);
+        // 绘制渐变分隔线
+        int separatorY = dialogY + 52;
+        drawGradientLine(guiGraphics, dialogX + 20, separatorY, dialogX + dialogWidth - 20, separatorY,
+                ACCENT_PRIMARY, ACCENT_SECONDARY);
 
         // 计算内容区域边界
         int contentTopY = separatorY + 15;
@@ -348,20 +360,6 @@ public class RulesScreen extends Screen {
     }
 
     /**
-     * 绘制圆角边框
-     */
-    private void drawRoundedBorder(GuiGraphics guiGraphics, int x, int y, int width, int height, int radius, int color, int thickness) {
-        // 上边
-        guiGraphics.fill(x + radius, y, x + width - radius, y + thickness, color);
-        // 下边
-        guiGraphics.fill(x + radius, y + height - thickness, x + width - radius, y + height, color);
-        // 左边
-        guiGraphics.fill(x, y + radius, x + thickness, y + height - radius, color);
-        // 右边
-        guiGraphics.fill(x + width - thickness, y + radius, x + width, y + height - radius, color);
-    }
-
-    /**
      * 填充圆形（简化版，用多个小矩形模拟）
      */
     private void fillCircle(GuiGraphics guiGraphics, int centerX, int centerY, int radius, int color) {
@@ -375,15 +373,15 @@ public class RulesScreen extends Screen {
     }
 
     /**
-     * 绘制滚动条
+     * 绘制滚动条（现代化样式）
      */
     private void drawScrollbar(GuiGraphics guiGraphics, int dialogX, int dialogWidth, int contentTopY, int visibleHeight, int contentHeight) {
-        int scrollbarWidth = 4;
-        int scrollbarX = dialogX + dialogWidth - 10;
+        int scrollbarWidth = 6;
+        int scrollbarX = dialogX + dialogWidth - 12;
         int scrollbarHeight = visibleHeight;
 
         float scrollRatio = (float) visibleHeight / contentHeight;
-        int thumbHeight = (int)(scrollbarHeight * scrollRatio);
+        int thumbHeight = Math.max(20, (int)(scrollbarHeight * scrollRatio));
 
         // 计算滑块位置
         int thumbY;
@@ -393,10 +391,13 @@ public class RulesScreen extends Screen {
             thumbY = contentTopY;
         }
 
-        // 绘制滚动条背景
-        guiGraphics.fill(scrollbarX, contentTopY, scrollbarX + scrollbarWidth, contentTopY + scrollbarHeight, 0x40888888);
-        // 绘制滚动滑块（樱花粉色）
-        guiGraphics.fill(scrollbarX, thumbY, scrollbarX + scrollbarWidth, thumbY + thumbHeight, 0x80FFC0CB);
+        // 绘制滚动条背景（半透明）
+        drawRoundedRect(guiGraphics, scrollbarX, contentTopY, scrollbarWidth, scrollbarHeight, 3, SCROLLBAR_BG);
+
+        // 绘制滚动滑块（樱花粉色渐变）
+        drawRoundedRect(guiGraphics, scrollbarX, thumbY, scrollbarWidth, thumbHeight, 3, SCROLLBAR_THUMB);
+        // 滑块高光
+        drawRoundedRect(guiGraphics, scrollbarX + 1, thumbY + 1, scrollbarWidth - 2, 2, 1, 0x40FFFFFF);
     }
 
     /**
@@ -409,9 +410,99 @@ public class RulesScreen extends Screen {
 
         // 逐行渲染，每行一次 drawString 调用，显式禁用阴影效果
         for (FormattedCharSequence line : lines) {
-            guiGraphics.drawString(this.font, line, (float)x, (float)y, TEXT_COLOR, false);
+            guiGraphics.drawString(this.font, line, (float)x, (float)y, TEXT_PRIMARY, false);
             y += lineHeight;
         }
         return y;
+    }
+
+    // ==================== 新增辅助绘制方法 ====================
+
+    /**
+     * 绘制毛玻璃效果背景
+     */
+    private void drawFrostedGlassBackground(GuiGraphics guiGraphics, int x, int y, int width, int height, int radius) {
+        // 多层半透明叠加创造毛玻璃效果
+        drawRoundedRect(guiGraphics, x, y, width, height, radius, 0xDDFAFAFA);
+        drawRoundedRect(guiGraphics, x + 1, y + 1, width - 2, height - 2, radius - 1, 0x40FFFFFF);
+
+        // 内部高光
+        drawRoundedRect(guiGraphics, x + 2, y + 2, width - 4, height / 2 - 2, radius - 2, SHADOW_LIGHT);
+    }
+
+    /**
+     * 绘制渐变边框
+     */
+    private void drawGradientBorder(GuiGraphics guiGraphics, int x, int y, int width, int height, int radius) {
+        // 顶部渐变
+        for (int i = 0; i < 3; i++) {
+            float ratio = i / 2f;
+            int color = lerpColor(ACCENT_PRIMARY, ACCENT_SECONDARY, ratio);
+            guiGraphics.fill(x + radius, y + i, x + width - radius, y + i + 1, color);
+        }
+        // 底部渐变
+        for (int i = 0; i < 3; i++) {
+            float ratio = i / 2f;
+            int color = lerpColor(ACCENT_SECONDARY, ACCENT_PRIMARY, ratio);
+            guiGraphics.fill(x + radius, y + height - 3 + i, x + width - radius, y + height - 2 + i, color);
+        }
+        // 左边
+        for (int i = 0; i < 3; i++) {
+            guiGraphics.fill(x + i, y + radius, x + i + 1, y + height - radius, ACCENT_PRIMARY);
+        }
+        // 右边
+        for (int i = 0; i < 3; i++) {
+            guiGraphics.fill(x + width - 3 + i, y + radius, x + width - 2 + i, y + height - radius, ACCENT_SECONDARY);
+        }
+    }
+
+    /**
+     * 绘制渐变线条
+     */
+    private void drawGradientLine(GuiGraphics guiGraphics, int x1, int y, int x2, int y2, int color1, int color2) {
+        int length = x2 - x1;
+        for (int i = 0; i < length; i++) {
+            float ratio = i / (float)length;
+            int color = lerpColor(color1, color2, ratio);
+            guiGraphics.fill(x1 + i, y, x1 + i + 1, y + 1, color);
+        }
+    }
+
+    /**
+     * 绘制星星装饰图标
+     */
+    private void drawStarIcon(GuiGraphics guiGraphics, int x, int y, int color) {
+        // 简化的星星图案
+        guiGraphics.fill(x + 4, y, x + 6, y + 1, color);
+        guiGraphics.fill(x + 3, y + 1, x + 7, y + 2, color);
+        guiGraphics.fill(x + 2, y + 2, x + 8, y + 3, color);
+        guiGraphics.fill(x + 1, y + 3, x + 9, y + 4, color);
+        guiGraphics.fill(x + 2, y + 4, x + 8, y + 5, color);
+        guiGraphics.fill(x + 3, y + 5, x + 7, y + 6, color);
+        guiGraphics.fill(x + 4, y + 6, x + 6, y + 7, color);
+        guiGraphics.fill(x + 3, y + 7, x + 4, y + 8, color);
+        guiGraphics.fill(x + 5, y + 7, x + 6, y + 8, color);
+    }
+
+    /**
+     * 颜色插值
+     */
+    private int lerpColor(int color1, int color2, float ratio) {
+        int a1 = (color1 >> 24) & 0xFF;
+        int r1 = (color1 >> 16) & 0xFF;
+        int g1 = (color1 >> 8) & 0xFF;
+        int b1 = color1 & 0xFF;
+
+        int a2 = (color2 >> 24) & 0xFF;
+        int r2 = (color2 >> 16) & 0xFF;
+        int g2 = (color2 >> 8) & 0xFF;
+        int b2 = color2 & 0xFF;
+
+        int a = (int)(a1 + (a2 - a1) * ratio);
+        int r = (int)(r1 + (r2 - r1) * ratio);
+        int g = (int)(g1 + (g2 - g1) * ratio);
+        int b = (int)(b1 + (b2 - b1) * ratio);
+
+        return (a << 24) | (r << 16) | (g << 8) | b;
     }
 }
