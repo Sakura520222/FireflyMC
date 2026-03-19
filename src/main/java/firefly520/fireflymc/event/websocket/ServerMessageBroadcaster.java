@@ -1,5 +1,6 @@
 package firefly520.fireflymc.event.websocket;
 
+import firefly520.fireflymc.ai.AIChatEventHandler;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.TextColor;
 import net.minecraft.server.MinecraftServer;
@@ -54,6 +55,14 @@ public class ServerMessageBroadcaster {
             }
 
             LOGGER.info("[FireflyMC] 广播服务端消息: <{}> {}", sender, message.getMessage());
+
+            // 记录到AI上下文
+            AIChatEventHandler.recordWebSocketMessage(server, message);
+
+            // 检测唤醒词：消息包含"小樱"时触发AI回复
+            if (message.getMessage().contains("小樱")) {
+                AIChatEventHandler.triggerAIReplyNoPlayer(server, message.getMessage());
+            }
         });
     }
 

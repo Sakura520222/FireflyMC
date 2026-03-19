@@ -35,6 +35,8 @@ import net.minecraft.network.chat.contents.TranslatableContents;
 import firefly520.fireflymc.event.websocket.PlayerEventWebSocketClient;
 import firefly520.fireflymc.event.websocket.PlayerEventMessage;
 import firefly520.fireflymc.util.ServerLanguageLoader;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * AI聊天事件处理器
@@ -47,6 +49,7 @@ import firefly520.fireflymc.util.ServerLanguageLoader;
  */
 @EventBusSubscriber(modid = "fireflymc", value = Dist.DEDICATED_SERVER)
 public class AIChatEventHandler {
+    private static final Logger LOGGER = LoggerFactory.getLogger(AIChatEventHandler.class);
 
     // 每个服务器实例一个历史管理器
     private static final ConcurrentHashMap<MinecraftServer, ChatHistoryManager> HISTORY_MANAGERS = new ConcurrentHashMap<>();
@@ -111,6 +114,12 @@ public class AIChatEventHandler {
         PlayerEventWebSocketClient.sendEvent(
                 PlayerEventMessage.playerChat(player.getGameProfile().getName(), message)
         );
+
+        // 检测唤醒词：消息包含"小樱"时自动触发AI回复
+        if (message.contains("小樱") && !isOnCooldown(player)) {
+            recordTrigger(player);
+            callAIAsync(server, player, historyManager, message);
+        }
     }
 
     /**
@@ -532,6 +541,119 @@ public class AIChatEventHandler {
             }
         } else {
             triggerPlayer.displayClientMessage(fullChatMessage, false);
+        }
+
+        // 发送WebSocket广播（AI聊天消息）
+        PlayerEventWebSocketClient.sendEvent(PlayerEventMessage.aiChat(reply));
+    }
+
+    // ========== WebSocket消息处理 ==========
+
+    /**
+     * 记录WebSocket消息到AI上下文
+     *
+     * @param server Minecraft服务器实例
+     * @param message WebSocket消息
+     */
+    public static void recordWebSocketMessage(MinecraftServer server, firefly520.fireflymc.event.websocket.ServerMessage message) {
+        if (!AIConfig.ENABLED) {
+            return;
+        }
+
+        if (!isMultiplayerServer(server)) {
+            return;
+        }
+
+        var historyManager = getHistoryManager(server);
+        historyManager.addMessage(new ChatMessage(
+                message.getSenderOrDefault(),
+                message.getMessage(),
+                MessageType.PLAYER
+        ));
+    }
+
+    /**
+     * 触发AI回复（无触发玩家，用于WebSocket消息）
+     *
+     * @param server Minecraft服务器实例
+     * @param prompt 提示词
+     */
+    public static void triggerAIReplyNoPlayer(MinecraftServer server, String prompt) {
+        if (!AIConfig.ENABLED) {
+            return;
+        }
+
+        if (!isMultiplayerServer(server)) {
+            return;
+        }
+
+        var historyManager = getHistoryManager(server);
+        callAIAsyncNoPlayer(server, historyManager, prompt);
+    }
+
+    /**
+     * 异步调用AI API（无触发玩家版本）
+     */
+    private static void callAIAsyncNoPlayer(MinecraftServer server,
+                                             ChatHistoryManager historyManager,
+                                             String prompt) {
+        CompletableFuture.supplyAsync(() -> {
+            // 异步线程：执行网络请求
+            var history = List.copyOf(historyManager.getHistory());
+            return AIApiClient.callAI(history, prompt, "Server");
+        }).thenAccept(response -> {
+            // 回到主线程：发送游戏消息
+            server.execute(() -> {
+                if (response.isSuccess()) {
+                    // 成功获取回复
+                    broadcastReplyNoPlayer(server, response.content());
+
+                    // 添加AI回复到历史
+                    historyManager.addMessage(new ChatMessage(
+                            AIConfig.AI_NAME_PLAIN,
+                            response.content(),
+                            MessageType.ASSISTANT
+                    ));
+                } else {
+                    // 无触发玩家，无法发送错误提示，仅记录日志
+                    LOGGER.error("[FireflyMC] AI回复失败 (WebSocket触发): {}", response.errorType());
+                }
+            });
+        });
+    }
+
+    /**
+     * 广播AI回复（无触发玩家版本）
+     */
+    private static void broadcastReplyNoPlayer(MinecraftServer server, String reply) {
+        // 樱花粉颜色 #FFB7C5
+        final TextColor SAKURA_PINK = TextColor.fromRgb(0xFFB7C5);
+
+        // 构建AI名称组件（带交互效果）
+        Component aiNameComponent = Component.literal(AIConfig.AI_NAME_PLAIN)
+            .withStyle(style -> style
+                .withColor(SAKURA_PINK)
+                // 悬浮显示AI信息
+                .withHoverEvent(new HoverEvent(
+                    HoverEvent.Action.SHOW_TEXT,
+                    Component.literal(AIConfig.AI_NAME_PLAIN)
+                        .withStyle(s -> s.withColor(SAKURA_PINK))
+                        .append(Component.literal("\n类型: FireflyMC-AI助手")
+                            .withStyle(ChatFormatting.GRAY))
+                ))
+                // 点击名称自动填充私聊命令
+                .withClickEvent(new ClickEvent(ClickEvent.Action.SUGGEST_COMMAND, "/msg " + AIConfig.AI_NAME_PLAIN + " "))
+            );
+
+        // 拼接完整聊天消息，匹配原版 <玩家名> 消息 格式
+        Component fullChatMessage = Component.literal("<")
+            .append(aiNameComponent)
+            .append("> ")
+            .append(Component.literal(reply));
+
+        // 广播给所有在线玩家
+        for (ServerPlayer player : server.getPlayerList().getPlayers()) {
+            player.displayClientMessage(fullChatMessage, false);
         }
 
         // 发送WebSocket广播（AI聊天消息）
