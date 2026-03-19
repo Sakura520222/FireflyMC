@@ -24,11 +24,17 @@ import net.neoforged.neoforge.event.RegisterCommandsEvent;
 
 import java.util.List;
 import java.util.UUID;
+import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 
+import net.minecraft.advancements.Advancement;
+import net.minecraft.advancements.DisplayInfo;
+import net.minecraft.network.chat.contents.TranslatableContents;
+
 import firefly520.fireflymc.event.websocket.PlayerEventWebSocketClient;
 import firefly520.fireflymc.event.websocket.PlayerEventMessage;
+import firefly520.fireflymc.util.ServerLanguageLoader;
 
 /**
  * AI聊天事件处理器
@@ -277,6 +283,10 @@ public class AIChatEventHandler {
      */
     @SubscribeEvent
     public static void onPlayerDeath(LivingDeathEvent event) {
+        if (!AIConfig.ENABLED) {
+            return;
+        }
+
         // 只处理玩家死亡
         if (!(event.getEntity() instanceof ServerPlayer player)) {
             return;
@@ -290,7 +300,28 @@ public class AIChatEventHandler {
         // 获取死亡消息
         var source = event.getSource();
         var deathComponent = source.getLocalizedDeathMessage(event.getEntity());
-        String deathMessage = deathComponent.getString();
+
+        // 尝试获取中文翻译
+        String deathMessage;
+        if (deathComponent.getContents() instanceof TranslatableContents translatableContents) {
+            String translationKey = translatableContents.getKey();
+            // 获取翻译模板并替换参数
+            String template = ServerLanguageLoader.getTranslation(translationKey);
+            Object[] args = translatableContents.getArgs();
+
+            // 简单替换 %s 占位符
+            deathMessage = formatTranslatedMessage(template, args);
+        } else {
+            deathMessage = deathComponent.getString();
+        }
+
+        // 记录到 AI 历史（系统消息）
+        var historyManager = getHistoryManager(server);
+        historyManager.addMessage(new ChatMessage(
+                "Server",
+                player.getGameProfile().getName() + " " + deathMessage,
+                MessageType.SYSTEM
+        ));
 
         // 发送WebSocket广播
         PlayerEventWebSocketClient.sendEvent(
@@ -299,10 +330,41 @@ public class AIChatEventHandler {
     }
 
     /**
+     * 格式化翻译消息（替换 %1$s、%2$s 占位符）
+     */
+    private static String formatTranslatedMessage(String template, Object[] args) {
+        if (args == null || args.length == 0) {
+            return template;
+        }
+
+        String result = template;
+        for (int i = 0; i < args.length; i++) {
+            String argStr;
+            if (args[i] instanceof Component component) {
+                // 参数是 Component，尝试翻译
+                if (component.getContents() instanceof TranslatableContents translatableContents) {
+                    argStr = ServerLanguageLoader.getTranslation(translatableContents.getKey());
+                } else {
+                    argStr = component.getString();
+                }
+            } else {
+                argStr = String.valueOf(args[i]);
+            }
+            // 替换 %1$s、%2$s 等占位符
+            result = result.replace("%" + (i + 1) + "$s", argStr);
+        }
+        return result;
+    }
+
+    /**
      * 监听玩家解锁成就事件
      */
     @SubscribeEvent
     public static void onAdvancement(AdvancementEvent.AdvancementEarnEvent event) {
+        if (!AIConfig.ENABLED) {
+            return;
+        }
+
         if (!(event.getEntity() instanceof ServerPlayer player)) {
             return;
         }
@@ -312,14 +374,42 @@ public class AIChatEventHandler {
             return;
         }
 
-        var advancement = event.getAdvancement();
-        if (advancement == null) {
+        var advancementHolder = event.getAdvancement();
+        if (advancementHolder == null) {
             return;
         }
 
-        // 获取成就ID作为标题（AdvancementHolder不直接提供显示信息）
-        var advancementId = advancement.id();
-        String advancementTitle = advancementId.toString();
+        // 从AdvancementHolder获取Advancement实例（1.20.5+ 必须步骤）
+        Advancement advancement = advancementHolder.value();
+
+        // 获取DisplayInfo，必须做Optional判空
+        Optional<DisplayInfo> displayOptional = advancement.display();
+        if (displayOptional.isEmpty()) {
+            // 无显示信息的成就（如配方解锁、内部隐藏成就），直接跳过
+            return;
+        }
+
+        DisplayInfo display = displayOptional.get();
+        Component titleComponent = display.getTitle();
+
+        // 尝试获取中文翻译
+        String advancementTitle;
+        if (titleComponent.getContents() instanceof TranslatableContents translatableContents) {
+            // 提取翻译键，使用ServerLanguageLoader获取中文文本
+            String translationKey = translatableContents.getKey();
+            advancementTitle = ServerLanguageLoader.getTranslation(translationKey);
+        } else {
+            // 回退使用原始文本（如纯文本成就）
+            advancementTitle = titleComponent.getString();
+        }
+
+        // 记录到 AI 历史（系统消息）
+        var historyManager = getHistoryManager(server);
+        historyManager.addMessage(new ChatMessage(
+                "Server",
+                player.getGameProfile().getName() + " 解锁了成就: " + advancementTitle,
+                MessageType.SYSTEM
+        ));
 
         // 发送WebSocket广播
         PlayerEventWebSocketClient.sendEvent(

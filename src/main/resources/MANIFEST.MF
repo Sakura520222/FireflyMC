@@ -3,7 +3,7 @@ Specification-Title: fireflymc
 Specification-Vendor: FireflyMC
 Specification-Version: 1
 Implementation-Title: Minecraft-Sakura
-Implementation-Version: 2.3.0
+Implementation-Version: 2.3.1
 Implementation-Vendor: FireflyMC
 Implementation-Timestamp: 2026-03-14T00:54:41+0800
 

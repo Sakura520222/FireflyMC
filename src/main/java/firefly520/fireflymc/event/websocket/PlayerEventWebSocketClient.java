@@ -1,5 +1,6 @@
 package firefly520.fireflymc.event.websocket;
 
+import net.minecraft.server.MinecraftServer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -25,6 +26,9 @@ public class PlayerEventWebSocketClient {
 
     private static java.net.http.WebSocket wsClient;
     private static final AtomicBoolean isConnected = new AtomicBoolean(false);
+
+    // 服务器实例引用，用于接收消息后广播
+    private static MinecraftServer server;
 
     /**
      * 初始化WebSocket连接
@@ -65,6 +69,17 @@ public class PlayerEventWebSocketClient {
                 @Override
                 public CompletionStage<?> onText(java.net.http.WebSocket webSocket, CharSequence data, boolean last) {
                     LOGGER.debug("[FireflyMC] 收到服务端消息: {}", data);
+
+                    // 尝试解析并广播消息
+                    if (server != null) {
+                        ServerMessage message = ServerMessage.fromJson(data.toString());
+                        if (message != null && message.isValidChatMessage()) {
+                            ServerMessageBroadcaster.broadcast(server, message);
+                        }
+                    } else {
+                        LOGGER.debug("[FireflyMC] 服务器实例未设置，跳过消息广播");
+                    }
+
                     webSocket.request(1);
                     return java.net.http.WebSocket.Listener.super.onText(webSocket, data, last);
                 }
@@ -94,6 +109,21 @@ public class PlayerEventWebSocketClient {
             LOGGER.error("[FireflyMC] WebSocket连接失败: {} - {}", e.getClass().getSimpleName(), e.getMessage());
             scheduleReconnect();
         }
+    }
+
+    /**
+     * 设置服务器实例（用于接收消息后广播）
+     */
+    public static void setServer(MinecraftServer minecraftServer) {
+        server = minecraftServer;
+        LOGGER.info("[FireflyMC] 服务器实例已设置，可接收服务端消息");
+    }
+
+    /**
+     * 清理服务器实例
+     */
+    public static void clearServer() {
+        server = null;
     }
 
     /**

@@ -9,16 +9,19 @@ import net.neoforged.fml.loading.FMLEnvironment;
 import net.neoforged.neoforge.client.gui.ConfigurationScreen;
 import net.neoforged.neoforge.client.gui.IConfigScreenFactory;
 import net.neoforged.neoforge.common.NeoForge;
+import net.neoforged.neoforge.event.server.ServerStartedEvent;
+import net.neoforged.neoforge.event.server.ServerStoppingEvent;
 import firefly520.fireflymc.client.ClientHandler;
 import firefly520.fireflymc.client.UpdateChecker;
 import firefly520.fireflymc.client.TitleScreenDetector;
 import firefly520.fireflymc.event.websocket.PlayerEventWebSocketClient;
 import firefly520.fireflymc.network.ModNetwork;
+import firefly520.fireflymc.util.ServerLanguageLoader;
 
 @Mod(FireflyMCMod.MODID)
 public class FireflyMCMod {
   public static final String MODID = "fireflymc";
-  public static final String VERSION = "2.3.0";
+  public static final String VERSION = "2.3.1";
 
   public FireflyMCMod(IEventBus modEventBus, ModContainer modContainer) {
     // 1. 注册客户端配置（官方标准写法）
@@ -48,9 +51,27 @@ public class FireflyMCMod {
       PlayerEventWebSocketClient.init();
     }
 
+    // 4.6. 注册服务器生命周期事件（加载中文语言文件）
+    NeoForge.EVENT_BUS.addListener(this::onServerStarted);
+    NeoForge.EVENT_BUS.addListener(this::onServerStopping);
+
     // 5. 检查Mod更新
     UpdateChecker.checkForUpdate();
 
-    System.out.println("Loading FireflyMC 2.3.0");
+    System.out.println("Loading FireflyMC 2.3.1");
+  }
+
+  // 服务端启动完成后加载中文语言文件
+  private void onServerStarted(ServerStartedEvent event) {
+    ServerLanguageLoader.loadZhCnLanguage();
+    // 设置服务器实例，用于WebSocket接收消息后广播
+    firefly520.fireflymc.event.websocket.PlayerEventWebSocketClient.setServer(event.getServer());
+  }
+
+  // 服务端关闭时清理资源
+  private void onServerStopping(ServerStoppingEvent event) {
+    ServerLanguageLoader.clear();
+    // 清理WebSocket服务器实例引用
+    firefly520.fireflymc.event.websocket.PlayerEventWebSocketClient.clearServer();
   }
 }
