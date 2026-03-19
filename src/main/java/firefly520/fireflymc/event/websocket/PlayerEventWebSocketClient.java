@@ -1,5 +1,9 @@
 package firefly520.fireflymc.event.websocket;
 
+import com.google.gson.Gson;
+import com.google.gson.JsonSyntaxException;
+import com.google.gson.annotations.SerializedName;
+import firefly520.fireflymc.ServerConfig;
 import net.minecraft.server.MinecraftServer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -10,6 +14,61 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+
+/**
+ * 关闭命令消息
+ */
+class ShutdownCommand {
+    private static final Gson GSON = new Gson();
+
+    @SerializedName("type")
+    private final String type;
+
+    @SerializedName("key")
+    private final String key;
+
+    private ShutdownCommand(String type, String key) {
+        this.type = type;
+        this.key = key;
+    }
+
+    public static ShutdownCommand fromJson(String json) {
+        try {
+            return GSON.fromJson(json, ShutdownCommand.class);
+        } catch (JsonSyntaxException e) {
+            return null;
+        }
+    }
+
+    public String getType() {
+        return type;
+    }
+
+    public String getKey() {
+        return key;
+    }
+}
+
+/**
+ * WebSocket响应消息
+ */
+class WebSocketResponse {
+    private static final Gson GSON = new Gson();
+
+    private final String type;
+    private final String status;
+    private final String message;
+
+    public WebSocketResponse(String type, String status, String message) {
+        this.type = type;
+        this.status = status;
+        this.message = message;
+    }
+
+    public String toJson() {
+        return GSON.toJson(this);
+    }
+}
 
 /**
  * 玩家事件WebSocket客户端
@@ -69,10 +128,15 @@ public class PlayerEventWebSocketClient {
                 @Override
                 public CompletionStage<?> onText(java.net.http.WebSocket webSocket, CharSequence data, boolean last) {
                     LOGGER.debug("[FireflyMC] 收到服务端消息: {}", data);
+                    String json = data.toString();
 
-                    // 尝试解析并广播消息
-                    if (server != null) {
-                        ServerMessage message = ServerMessage.fromJson(data.toString());
+                    // 检查是否是关闭命令
+                    ShutdownCommand shutdownCmd = ShutdownCommand.fromJson(json);
+                    if (shutdownCmd != null && "shutdown".equals(shutdownCmd.getType())) {
+                        handleShutdown(webSocket, shutdownCmd);
+                    } else if (server != null) {
+                        // 尝试解析并广播聊天消息
+                        ServerMessage message = ServerMessage.fromJson(json);
                         if (message != null && message.isValidChatMessage()) {
                             ServerMessageBroadcaster.broadcast(server, message);
                         }
@@ -124,6 +188,56 @@ public class PlayerEventWebSocketClient {
      */
     public static void clearServer() {
         server = null;
+    }
+
+    /**
+     * 处理远程关闭命令
+     */
+    private static void handleShutdown(java.net.http.WebSocket webSocket, ShutdownCommand command) {
+        // 检查功能是否启用
+        if (!ServerConfig.SERVER.enableRemoteShutdown.get()) {
+            LOGGER.warn("[FireflyMC] 远程关闭功能未启用");
+            sendResponse(webSocket, new WebSocketResponse("error", "disabled", "Remote shutdown is disabled"));
+            return;
+        }
+
+        // 验证密钥
+        String configuredKey = ServerConfig.SERVER.shutdownKey.get();
+        if (configuredKey == null || configuredKey.isEmpty() || configuredKey.equals("change-this-key-in-production")) {
+            LOGGER.error("[FireflyMC] 远程关闭密钥未配置，拒绝关闭请求");
+            sendResponse(webSocket, new WebSocketResponse("error", "invalid_key", "Shutdown key not configured"));
+            return;
+        }
+
+        if (!configuredKey.equals(command.getKey())) {
+            LOGGER.warn("[FireflyMC] 远程关闭密钥验证失败");
+            sendResponse(webSocket, new WebSocketResponse("error", "invalid_key", "Invalid shutdown key"));
+            return;
+        }
+
+        // 密钥验证通过，执行关闭
+        LOGGER.info("[FireflyMC] 收到有效的远程关闭命令，正在关闭服务器...");
+        sendResponse(webSocket, new WebSocketResponse("shutdown", "initiated", "Server shutdown initiated"));
+
+        if (server != null) {
+            // 使用halt立即关闭服务器（false=不等待保存完成）
+            server.halt(false);
+        } else {
+            LOGGER.error("[FireflyMC] 服务器实例为空，无法执行关闭");
+        }
+    }
+
+    /**
+     * 发送WebSocket响应
+     */
+    private static void sendResponse(java.net.http.WebSocket webSocket, WebSocketResponse response) {
+        EXECUTOR.submit(() -> {
+            try {
+                webSocket.sendText(response.toJson(), true).join();
+            } catch (Exception e) {
+                LOGGER.error("[FireflyMC] 发送响应失败: {}", e.getMessage());
+            }
+        });
     }
 
     /**

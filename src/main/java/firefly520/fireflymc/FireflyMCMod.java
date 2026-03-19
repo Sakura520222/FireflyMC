@@ -27,6 +27,9 @@ public class FireflyMCMod {
     // 1. 注册客户端配置（官方标准写法）
     modContainer.registerConfig(ModConfig.Type.CLIENT, Config.CLIENT_SPEC);
 
+    // 1.5. 注册服务端配置
+    modContainer.registerConfig(ModConfig.Type.SERVER, ServerConfig.SERVER_SPEC);
+
     // 2. 注册网络包处理（MOD 总线）
     modEventBus.addListener(ModNetwork::registerPayloads);
 
