@@ -124,7 +124,7 @@ public class ServerConfig {
             aiProactiveInterval = builder
                     .comment("主动回复触发间隔（玩家聊天消息条数）")
                     .translation("fireflymc.config.ai.proactive_interval")
-                    .defineInRange("proactiveInterval", 5, 1, 20);
+                    .defineInRange("proactiveInterval", 50, 1, 100);
 
             aiProactiveTimeout = builder
                     .comment("主动回复判断API超时时间（秒）")
