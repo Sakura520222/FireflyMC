@@ -31,6 +31,21 @@ public class AIApiClient {
             回复要简洁，不要长篇大论，不超过150字。
             """;
 
+    private static final String SHOULD_REPLY_PROMPT = """
+            你是小樱，一个Minecraft AI助手。请分析以下聊天记录，判断你是否应该主动参与对话。
+
+            判断标准：
+            1. 玩家在讨论游戏相关话题（如建筑、红石、生存技巧）
+            2. 玩家在寻求帮助或建议
+            3. 气氛轻松活跃，适合插话
+            4. 没有正在进行严肃的私人对话
+
+            请严格按照JSON格式回复，不要包含其他内容：
+            {"shouldReply": true/false, "reason": "简短理由"}
+
+            聊天记录：
+            """;
+
     /**
      * 调用AI API获取回复
      *
@@ -84,6 +99,47 @@ public class AIApiClient {
     }
 
     /**
+     * 判断AI是否应该主动回复
+     *
+     * @param history 聊天历史
+     * @return 判断结果
+     */
+    public static ShouldReplyResponse shouldReply(List<ChatMessage> history) {
+        try {
+            JsonObject requestBody = new JsonObject();
+            requestBody.addProperty("model", AIConfig.getModel());
+
+            var messages = history.stream()
+                    .map(ChatMessage::toApiMessage)
+                    .collect(Collectors.toList());
+            messages.add(0, new ApiMessage("system", null, SHOULD_REPLY_PROMPT));
+
+            var messagesJson = GSON.toJsonTree(messages).getAsJsonArray();
+            requestBody.add("messages", messagesJson);
+
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create(AIConfig.getApiUrl() + "/chat/completions"))
+                    .timeout(Duration.ofSeconds(AIConfig.getProactiveTimeout()))
+                    .header("Content-Type", "application/json")
+                    .header("Authorization", "Bearer " + AIConfig.getApiKey())
+                    .POST(HttpRequest.BodyPublishers.ofString(GSON.toJson(requestBody)))
+                    .build();
+
+            HttpResponse<String> response = HTTP_CLIENT.send(request,
+                    HttpResponse.BodyHandlers.ofString());
+
+            return handleShouldReplyResponse(response);
+
+        } catch (java.net.SocketTimeoutException e) {
+            LOGGER.debug("[FireflyMC] 主动回复判断超时");
+            return ShouldReplyResponse.noReply();
+        } catch (Exception e) {
+            LOGGER.error("[FireflyMC] 主动回复判断失败: {}", e.getMessage());
+            return ShouldReplyResponse.noReply();
+        }
+    }
+
+    /**
      * 处理API响应
      */
     private static AIResponse handleResponse(HttpResponse<String> response) {
@@ -132,6 +188,38 @@ public class AIApiClient {
         // 其他错误
         LOGGER.error("[FireflyMC] AI API返回错误: {} {}", statusCode, response.body());
         return new AIResponse(null, ErrorType.API_ERROR);
+    }
+
+    /**
+     * 处理判断API响应
+     */
+    private static ShouldReplyResponse handleShouldReplyResponse(HttpResponse<String> response) {
+        int statusCode = response.statusCode();
+
+        if (statusCode == 200) {
+            try {
+                JsonObject responseJson = GSON.fromJson(response.body(), JsonObject.class);
+                String content = responseJson
+                        .getAsJsonArray("choices")
+                        .get(0).getAsJsonObject()
+                        .getAsJsonObject("message")
+                        .get("content").getAsString();
+
+                JsonObject result = GSON.fromJson(content, JsonObject.class);
+                boolean shouldReply = result.has("shouldReply") &&
+                                      result.get("shouldReply").getAsBoolean();
+                String reason = result.has("reason") ?
+                               result.get("reason").getAsString() : "想参与对话";
+
+                return shouldReply ?
+                       ShouldReplyResponse.shouldReply(reason) :
+                       ShouldReplyResponse.noReply();
+            } catch (Exception e) {
+                LOGGER.error("[FireflyMC] 解析主动回复判断失败: {}", e.getMessage());
+                return ShouldReplyResponse.noReply();
+            }
+        }
+        return ShouldReplyResponse.noReply();
     }
 
     /**

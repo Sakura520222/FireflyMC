@@ -27,6 +27,7 @@ import java.util.UUID;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import net.minecraft.advancements.Advancement;
 import net.minecraft.advancements.DisplayInfo;
@@ -56,6 +57,9 @@ public class AIChatEventHandler {
 
     // 玩家冷却时间记录 (UUID -> 上次触发时间的毫秒时间戳)
     private static final ConcurrentHashMap<UUID, Long> PLAYER_COOLDOWNS = new ConcurrentHashMap<>();
+
+    // 消息计数器（每服务器实例）
+    private static final ConcurrentHashMap<MinecraftServer, AtomicInteger> MESSAGE_COUNTERS = new ConcurrentHashMap<>();
 
     // 命令补全建议
     private static final SuggestionProvider<CommandSourceStack> AI_SUGGESTIONS = (context, builder) -> {
@@ -119,7 +123,11 @@ public class AIChatEventHandler {
         if (message.contains("小樱") && !isOnCooldown(player)) {
             recordTrigger(player);
             callAIAsync(server, player, historyManager, message);
+            return; // 唤醒词触发后跳过主动回复判断
         }
+
+        // 主动回复判断（与唤醒词互斥）
+        checkProactiveReply(server, player, historyManager);
     }
 
     /**
@@ -237,6 +245,55 @@ public class AIChatEventHandler {
      */
     private static void recordTrigger(ServerPlayer player) {
         PLAYER_COOLDOWNS.put(player.getUUID(), System.currentTimeMillis());
+    }
+
+    /**
+     * 检查是否需要主动回复
+     */
+    private static void checkProactiveReply(MinecraftServer server,
+                                            ServerPlayer player,
+                                            ChatHistoryManager historyManager) {
+        if (!AIConfig.getProactiveEnabled()) {
+            return;
+        }
+
+        AtomicInteger counter = MESSAGE_COUNTERS.computeIfAbsent(
+            server, s -> new AtomicInteger(0)
+        );
+        int count = counter.incrementAndGet();
+
+        int interval = AIConfig.getProactiveInterval();
+        if (count < interval) {
+            return;
+        }
+
+        counter.set(0);
+
+        if (isOnCooldown(player)) {
+            return;
+        }
+
+        shouldReplyAsync(server, player, historyManager);
+    }
+
+    /**
+     * 异步判断是否应该回复，如果是则调用AI
+     */
+    private static void shouldReplyAsync(MinecraftServer server,
+                                         ServerPlayer player,
+                                         ChatHistoryManager historyManager) {
+        CompletableFuture.supplyAsync(() -> {
+            var history = List.copyOf(historyManager.getHistory());
+            return AIApiClient.shouldReply(history);
+        }).thenAccept(response -> {
+            server.execute(() -> {
+                if (response.shouldReply()) {
+                    recordTrigger(player);
+                    String prompt = "[主动回复] " + response.reason();
+                    callAIAsync(server, player, historyManager, prompt);
+                }
+            });
+        });
     }
 
     /**
@@ -436,6 +493,7 @@ public class AIChatEventHandler {
         MinecraftServer server = event.getServer();
         HISTORY_MANAGERS.remove(server);
         PLAYER_COOLDOWNS.clear();
+        MESSAGE_COUNTERS.remove(server);
 
         // 关闭WebSocket连接
         PlayerEventWebSocketClient.shutdown();
