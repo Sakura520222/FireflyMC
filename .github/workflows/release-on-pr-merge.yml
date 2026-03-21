@@ -490,8 +490,9 @@ jobs:
         run: |
           echo "🔨 正在构建 FireflyMC 模组..."
 
-          # 运行 Gradle 构建
-          .\gradlew.bat build --no-daemon
+          # 运行 Gradle 构建（Linux环境）
+          chmod +x gradlew
+          ./gradlew build --no-daemon
 
           echo "✅ 模组构建完成"
 
