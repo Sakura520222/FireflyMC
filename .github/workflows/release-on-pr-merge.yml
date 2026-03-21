@@ -88,15 +88,28 @@ jobs:
         run: |
           # 读取 gradle.properties 中的当前版本号
           if [ -f gradle.properties ]; then
-            CURRENT_VERSION=$(
-              sed -n "s/^[[:space:]]*mod_version[[:space:]]*=[[:space:]]*['\"]\([^'\"]*\)['\"].*/\1/p" gradle.properties | head -n 1 | tr -d '\r\n'
-            )
+            # 使用多种模式尝试匹配，确保能正确解析版本号
+            CURRENT_VERSION=$(grep "^mod_version.*=" gradle.properties | head -n 1 | cut -d'=' -f2 | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' | tr -d "'\"" | tr -d '\r\n')
+
+            # 如果未能解析出版本号则尝试另一种方法
+            if [ -z "$CURRENT_VERSION" ]; then
+              CURRENT_VERSION=$(grep -i "^mod_version" gradle.properties | head -n 1 | sed -n 's/^[[:space:]]*mod_version[[:space:]]*=[[:space:]]*\(.*\)[[:space:]]*$/\1/p' | tr -d "'\"" | tr -d '\r\n')
+            fi
+
+            # 如果仍然未找到，尝试查找任何版本相关的属性
+            if [ -z "$CURRENT_VERSION" ]; then
+              CURRENT_VERSION=$(grep -i "version.*=" gradle.properties | grep -v "minecraft" | grep -v "neo" | head -n 1 | cut -d'=' -f2 | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' | tr -d '\r\n')
+            fi
 
             # 如果未能解析出版本号则直接失败，避免创建错误 tag（如 v）
             if [ -z "$CURRENT_VERSION" ]; then
               echo "无法从 gradle.properties 解析版本号，请检查 mod_version 定义格式是否正确。" >&2
+              echo "gradle.properties 内容:" >&2
+              cat gradle.properties >&2
               exit 1
             fi
+
+            echo "解析到的版本号: $CURRENT_VERSION"
           else
             CURRENT_VERSION="未知版本"
           fi
