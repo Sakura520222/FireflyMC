@@ -87,6 +87,12 @@ public class PlayerEventWebSocketClient {
     private static java.net.http.WebSocket wsClient;
     private static final AtomicBoolean isConnected = new AtomicBoolean(false);
 
+    // 重连状态管理
+    private static final AtomicBoolean isReconnecting = new AtomicBoolean(false);
+    private static int reconnectAttemptCount = 0;
+    private static final long INITIAL_RECONNECT_DELAY_MS = 5000;  // 初始5秒
+    private static final long MAX_RECONNECT_DELAY_MS = 60000;     // 最大60秒
+
     // 服务器实例引用，用于接收消息后广播
     private static MinecraftServer server;
 
@@ -106,6 +112,9 @@ public class PlayerEventWebSocketClient {
      * 连接到WebSocket服务端
      */
     private static void connect() {
+        // 重置重连标志，允许连接失败后再次调度重连
+        isReconnecting.set(false);
+
         try {
             URI serverUri = URI.create(WebSocketConfig.SERVER_URL);
             LOGGER.info("[FireflyMC] 正在连接到 WebSocket: {}", WebSocketConfig.SERVER_URL);
@@ -122,6 +131,9 @@ public class PlayerEventWebSocketClient {
                 public void onOpen(java.net.http.WebSocket webSocket) {
                     LOGGER.info("[FireflyMC] WebSocket连接成功: {}", WebSocketConfig.SERVER_URL);
                     isConnected.set(true);
+                    // 连接成功，重置重连状态
+                    reconnectAttemptCount = 0;
+                    isReconnecting.set(false);
                     // 请求接收更多数据
                     webSocket.request(1);
                 }
@@ -161,6 +173,7 @@ public class PlayerEventWebSocketClient {
                 public void onError(java.net.http.WebSocket webSocket, Throwable error) {
                     LOGGER.error("[FireflyMC] WebSocket错误: {}", error.getMessage());
                     isConnected.set(false);
+                    scheduleReconnect();
                 }
             }).join();
 
@@ -266,17 +279,36 @@ public class PlayerEventWebSocketClient {
     }
 
     /**
-     * 安排重连（无限重连，间隔5秒）
+     * 计算重连延迟时间（指数退避策略）
+     * 5秒 → 10秒 → 20秒 → 40秒 → 60秒（上限）
+     */
+    private static long calculateReconnectDelay() {
+        // 指数退避：2^n，最多乘以8（即3次翻倍）
+        long delay = INITIAL_RECONNECT_DELAY_MS * (1L << Math.min(reconnectAttemptCount, 3));
+        return Math.min(delay, MAX_RECONNECT_DELAY_MS);
+    }
+
+    /**
+     * 安排重连（指数退避，无限重试）
      */
     private static void scheduleReconnect() {
         if (!WebSocketConfig.AUTO_RECONNECT) {
             return;
         }
 
-        LOGGER.info("[FireflyMC] 5秒后尝试重连...");
+        // 防止重复调度重连任务
+        if (!isReconnecting.compareAndSet(false, true)) {
+            LOGGER.debug("[FireflyMC] 重连任务已在进行中，跳过重复调度");
+            return;
+        }
+
+        reconnectAttemptCount++;
+        long delayMs = calculateReconnectDelay();
+        LOGGER.info("[FireflyMC] 第{}次重连，{}毫秒后尝试重连...", reconnectAttemptCount, delayMs);
+
         EXECUTOR.schedule(() -> {
             connect();
-        }, 5000, TimeUnit.MILLISECONDS);
+        }, delayMs, TimeUnit.MILLISECONDS);
     }
 
     /**

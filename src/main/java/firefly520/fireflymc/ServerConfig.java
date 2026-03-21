@@ -35,6 +35,11 @@ public class ServerConfig {
         public final ModConfigSpec.BooleanValue aiBroadcastToAll;
         public final ModConfigSpec.BooleanValue aiEnabled;
 
+        // AI主动回复配置
+        public final ModConfigSpec.BooleanValue aiProactiveEnabled;
+        public final ModConfigSpec.IntValue aiProactiveInterval;
+        public final ModConfigSpec.IntValue aiProactiveTimeout;
+
         public ServerConfigImpl(ModConfigSpec.Builder builder) {
             builder.push("server")
                     .translation("fireflymc.config.server");
@@ -110,6 +115,21 @@ public class ServerConfig {
                     .comment("是否启用AI聊天功能")
                     .translation("fireflymc.config.ai.enabled")
                     .define("enabled", true);
+
+            aiProactiveEnabled = builder
+                    .comment("是否启用AI主动回复（智能判断是否参与对话）")
+                    .translation("fireflymc.config.ai.proactive_enabled")
+                    .define("proactiveEnabled", true);
+
+            aiProactiveInterval = builder
+                    .comment("主动回复触发间隔（玩家聊天消息条数）")
+                    .translation("fireflymc.config.ai.proactive_interval")
+                    .defineInRange("proactiveInterval", 50, 1, 100);
+
+            aiProactiveTimeout = builder
+                    .comment("主动回复判断API超时时间（秒）")
+                    .translation("fireflymc.config.ai.proactive_timeout")
+                    .defineInRange("proactiveTimeout", 8, 3, 30);
 
             builder.pop();
         }

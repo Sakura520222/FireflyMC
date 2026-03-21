@@ -60,6 +60,19 @@ public class AIConfig {
         return ServerConfig.SERVER.aiEnabled.get();
     }
 
+    // 主动回复配置
+    public static boolean getProactiveEnabled() {
+        return ServerConfig.SERVER.aiProactiveEnabled.get();
+    }
+
+    public static int getProactiveInterval() {
+        return ServerConfig.SERVER.aiProactiveInterval.get();
+    }
+
+    public static int getProactiveTimeout() {
+        return ServerConfig.SERVER.aiProactiveTimeout.get();
+    }
+
     // ========== 兼容性常量（已废弃，请使用getter方法） ==========
 
     /**
