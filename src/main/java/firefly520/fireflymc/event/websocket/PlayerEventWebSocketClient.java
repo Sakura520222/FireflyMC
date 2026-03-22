@@ -147,6 +147,19 @@ public class PlayerEventWebSocketClient {
                     ShutdownCommand shutdownCmd = ShutdownCommand.fromJson(json);
                     if (shutdownCmd != null && "shutdown".equals(shutdownCmd.getType())) {
                         handleShutdown(webSocket, shutdownCmd);
+                    }
+                    // 检查是否是验证响应
+                    else if (WebSocketConfig.ENABLE_MEMBER_VERIFICATION) {
+                        VerificationResponseMessage verifyResp = VerificationResponseMessage.fromJson(json);
+                        if (verifyResp != null && verifyResp.isValid()) {
+                            MemberVerificationManager.getInstance().handleVerificationResponse(verifyResp);
+                        } else if (server != null) {
+                            // 尝试解析并广播聊天消息
+                            ServerMessage message = ServerMessage.fromJson(json);
+                            if (message != null && message.isValidChatMessage()) {
+                                ServerMessageBroadcaster.broadcast(server, message);
+                            }
+                        }
                     } else if (server != null) {
                         // 尝试解析并广播聊天消息
                         ServerMessage message = ServerMessage.fromJson(json);
@@ -274,6 +287,31 @@ public class PlayerEventWebSocketClient {
                 }
             } else {
                 LOGGER.warn("[FireflyMC] WebSocket未连接，跳过事件发送");
+            }
+        });
+    }
+
+    /**
+     * 发送玩家验证请求
+     *
+     * @param playerId 玩家ID（用户名）
+     */
+    public static void sendVerificationRequest(String playerId) {
+        if (!WebSocketConfig.ENABLE_MEMBER_VERIFICATION) {
+            return;
+        }
+
+        EXECUTOR.submit(() -> {
+            if (wsClient != null && isConnected.get()) {
+                try {
+                    VerificationRequestMessage request = new VerificationRequestMessage(playerId);
+                    wsClient.sendText(request.toJson(), true).join();
+                    LOGGER.debug("[FireflyMC] 发送验证请求: {}", playerId);
+                } catch (Exception e) {
+                    LOGGER.error("[FireflyMC] 发送验证请求失败: {}", e.getMessage());
+                }
+            } else {
+                LOGGER.warn("[FireflyMC] WebSocket未连接，无法发送验证请求");
             }
         });
     }

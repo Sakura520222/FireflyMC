@@ -21,6 +21,8 @@ public class ServerConfig {
         // 服务器配置
         public final ModConfigSpec.BooleanValue enableRemoteShutdown;
         public final ModConfigSpec.ConfigValue<String> shutdownKey;
+        public final ModConfigSpec.BooleanValue enableMemberVerification;
+        public final ModConfigSpec.IntValue memberVerificationTimeout;
 
         // AI配置
         public final ModConfigSpec.ConfigValue<String> aiApiUrl;
@@ -53,6 +55,16 @@ public class ServerConfig {
                     .comment("Secret key for remote shutdown verification")
                     .translation("fireflymc.config.server.shutdown_key")
                     .define("shutdownKey", "change-this-key-in-production");
+
+            enableMemberVerification = builder
+                    .comment("Enable WebSocket member verification (kick players not in verified list)")
+                    .translation("fireflymc.config.server.enable_member_verification")
+                    .define("enableMemberVerification", false);
+
+            memberVerificationTimeout = builder
+                    .comment("Member verification timeout in seconds")
+                    .translation("fireflymc.config.server.member_verification_timeout")
+                    .defineInRange("memberVerificationTimeout", 10, 3, 60);
 
             builder.pop();
 
