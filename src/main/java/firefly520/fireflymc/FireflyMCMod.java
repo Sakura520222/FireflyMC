@@ -76,7 +76,5 @@ public class FireflyMCMod {
     ServerLanguageLoader.clear();
     // 清理WebSocket服务器实例引用
     firefly520.fireflymc.event.websocket.PlayerEventWebSocketClient.clearServer();
-    // 关闭成员验证管理器
-    firefly520.fireflymc.event.websocket.MemberVerificationManager.getInstance().shutdown();
   }
 }

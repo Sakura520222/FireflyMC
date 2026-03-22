@@ -29,22 +29,14 @@ public class MemberVerificationManager {
     private static MemberVerificationManager INSTANCE;
 
     /**
-     * 待验证玩家封装类，保证玩家和超时时间的原子性
+     * 待验证玩家队列 (playerId -> ServerPlayer)
      */
-    private static class PendingPlayer {
-        final ServerPlayer player;
-        final long timeoutTime;
-
-        PendingPlayer(ServerPlayer player, long timeoutTime) {
-            this.player = player;
-            this.timeoutTime = timeoutTime;
-        }
-    }
+    private final Map<String, ServerPlayer> pendingPlayers = new ConcurrentHashMap<>();
 
     /**
-     * 待验证玩家队列 (playerId -> PendingPlayer)
+     * 待验证玩家的超时时间戳 (playerId -> 超时时间戳)
      */
-    private final Map<String, PendingPlayer> pendingPlayers = new ConcurrentHashMap<>();
+    private final Map<String, Long> pendingTimeouts = new ConcurrentHashMap<>();
 
     /**
      * 定时执行器，用于超时检查
@@ -78,21 +70,11 @@ public class MemberVerificationManager {
     public void requestVerification(ServerPlayer player) {
         String playerId = player.getGameProfile().getName();
 
-        // 检查WebSocket连接状态
-        if (!PlayerEventWebSocketClient.isConnected()) {
-            player.connection.disconnect(Component.literal(
-                "§c验证服务暂时不可用\n" +
-                "§e请稍后重试或联系服务器管理员"
-            ));
-            LOGGER.warn("[FireflyMC] 玩家 {} 验证失败：WebSocket未连接", playerId);
-            return;
-        }
-
         LOGGER.info("[FireflyMC] 发起玩家验证: {}", playerId);
 
-        // 加入待验证队列（原子操作）
-        long timeoutTime = System.currentTimeMillis() + getTimeoutSeconds() * 1000L;
-        pendingPlayers.put(playerId, new PendingPlayer(player, timeoutTime));
+        // 加入待验证队列
+        pendingPlayers.put(playerId, player);
+        pendingTimeouts.put(playerId, System.currentTimeMillis() + getTimeoutSeconds() * 1000L);
 
         // 发送验证请求到WebSocket服务端
         PlayerEventWebSocketClient.sendVerificationRequest(playerId);
@@ -110,15 +92,13 @@ public class MemberVerificationManager {
         }
 
         String playerId = response.getPlayerId();
-        // 原子移除，避免竞态条件
-        PendingPlayer pending = pendingPlayers.remove(playerId);
+        ServerPlayer player = pendingPlayers.remove(playerId);
+        pendingTimeouts.remove(playerId);
 
-        if (pending == null) {
+        if (player == null) {
             LOGGER.debug("[FireflyMC] 收到验证响应，但玩家不在待验证队列中: {}", playerId);
             return;
         }
-
-        ServerPlayer player = pending.player;
 
         if (response.isVerified()) {
             // 验证通过，玩家可以继续游戏
@@ -141,18 +121,20 @@ public class MemberVerificationManager {
     private void checkTimeouts() {
         long currentTime = System.currentTimeMillis();
 
-        pendingPlayers.entrySet().removeIf(entry -> {
+        pendingTimeouts.entrySet().removeIf(entry -> {
             String playerId = entry.getKey();
-            PendingPlayer pending = entry.getValue();
+            long timeoutTime = entry.getValue();
 
-            if (currentTime >= pending.timeoutTime) {
+            if (currentTime >= timeoutTime) {
                 // 超时，踢出玩家
-                ServerPlayer player = pending.player;
-                player.connection.disconnect(Component.literal(
-                    "§c验证超时，无法连接到验证服务器\n" +
-                    "§e请稍后重试或联系服务器管理员"
-                ));
-                LOGGER.warn("[FireflyMC] 玩家 {} 验证超时，已踢出", playerId);
+                ServerPlayer player = pendingPlayers.remove(playerId);
+                if (player != null) {
+                    player.connection.disconnect(Component.literal(
+                        "§c验证超时，无法连接到验证服务器\n" +
+                        "§e请稍后重试或联系服务器管理员"
+                    ));
+                    LOGGER.warn("[FireflyMC] 玩家 {} 验证超时，已踢出", playerId);
+                }
                 return true;
             }
             return false;
@@ -174,15 +156,10 @@ public class MemberVerificationManager {
      * 清理玩家验证状态（玩家退出时调用）
      *
      * @param playerId 玩家ID
-     * @return true表示玩家正在验证中，false表示玩家不在验证队列中
      */
-    public boolean cleanupPlayer(String playerId) {
-        PendingPlayer removed = pendingPlayers.remove(playerId);
-        if (removed != null) {
-            LOGGER.info("[FireflyMC] 玩家 {} 在验证过程中退出，已取消验证", playerId);
-            return true;
-        }
-        return false;
+    public void cleanupPlayer(String playerId) {
+        pendingPlayers.remove(playerId);
+        pendingTimeouts.remove(playerId);
     }
 
     /**
