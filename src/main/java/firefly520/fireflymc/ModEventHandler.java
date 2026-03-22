@@ -1,5 +1,7 @@
 package firefly520.fireflymc;
 
+import firefly520.fireflymc.event.websocket.MemberVerificationManager;
+import firefly520.fireflymc.event.websocket.WebSocketConfig;
 import firefly520.fireflymc.network.ModHandshakePayload;
 import firefly520.fireflymc.network.ModPayloadHandler;
 import firefly520.fireflymc.network.ShowRulesPayload;
@@ -46,6 +48,14 @@ public class ModEventHandler {
         if (event.getEntity() instanceof ServerPlayer serverPlayer) {
             UUID playerUuid = serverPlayer.getUUID();
             MinecraftServer server = serverPlayer.server;
+
+            // 检查成员验证状态
+            if (WebSocketConfig.ENABLE_MEMBER_VERIFICATION &&
+                ServerConfig.SERVER.enableMemberVerification.get()) {
+                MemberVerificationManager.getInstance().requestVerification(serverPlayer);
+                // 注意：不直接返回，等待WebSocket响应后再决定是否踢出
+                // 玩家暂时进入"待验证"状态
+            }
 
             ModPayloadHandler.VERIFIED_PLAYERS.remove(playerUuid);
             ModPayloadHandler.CONFIRMED_PLAYERS.remove(playerUuid);
@@ -98,11 +108,16 @@ public class ModEventHandler {
     public static void onPlayerLoggedOut(PlayerEvent.PlayerLoggedOutEvent event) {
         if (event.getEntity() instanceof ServerPlayer serverPlayer) {
             UUID playerUuid = serverPlayer.getUUID();
+            String playerId = serverPlayer.getGameProfile().getName();
             ModPayloadHandler.VERIFIED_PLAYERS.remove(playerUuid);
             ModPayloadHandler.CONFIRMED_PLAYERS.remove(playerUuid);
             // 清理超时任务
             cancelInvulnerabilityTimeout(playerUuid);
             cancelVerifyTimeout(playerUuid);
+            // 清理成员验证状态
+            if (WebSocketConfig.ENABLE_MEMBER_VERIFICATION) {
+                MemberVerificationManager.getInstance().cleanupPlayer(playerId);
+            }
         }
     }
 

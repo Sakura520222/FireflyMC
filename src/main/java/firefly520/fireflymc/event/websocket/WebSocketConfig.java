@@ -13,5 +13,8 @@ public class WebSocketConfig {
     // 自动重连配置
     public static final boolean AUTO_RECONNECT = true;
 
+    // 是否启用成员验证功能
+    public static final boolean ENABLE_MEMBER_VERIFICATION = true;
+
     private WebSocketConfig() {}
 }

@@ -143,18 +143,35 @@ public class PlayerEventWebSocketClient {
                     LOGGER.debug("[FireflyMC] 收到服务端消息: {}", data);
                     String json = data.toString();
 
+                    boolean handled = false;
+
                     // 检查是否是关闭命令
                     ShutdownCommand shutdownCmd = ShutdownCommand.fromJson(json);
                     if (shutdownCmd != null && "shutdown".equals(shutdownCmd.getType())) {
                         handleShutdown(webSocket, shutdownCmd);
-                    } else if (server != null) {
-                        // 尝试解析并广播聊天消息
+                        handled = true;
+                    }
+
+                    // 检查是否是验证响应
+                    if (!handled && WebSocketConfig.ENABLE_MEMBER_VERIFICATION) {
+                        VerificationResponseMessage verifyResp = VerificationResponseMessage.fromJson(json);
+                        if (verifyResp != null && verifyResp.isValid()) {
+                            MemberVerificationManager.getInstance().handleVerificationResponse(verifyResp);
+                            handled = true;
+                        }
+                    }
+
+                    // 检查是否是聊天消息
+                    if (!handled && server != null) {
                         ServerMessage message = ServerMessage.fromJson(json);
                         if (message != null && message.isValidChatMessage()) {
                             ServerMessageBroadcaster.broadcast(server, message);
+                            handled = true;
                         }
-                    } else {
-                        LOGGER.debug("[FireflyMC] 服务器实例未设置，跳过消息广播");
+                    }
+
+                    if (!handled) {
+                        LOGGER.debug("[FireflyMC] 未处理的消息类型或服务器实例未设置");
                     }
 
                     webSocket.request(1);
@@ -202,6 +219,15 @@ public class PlayerEventWebSocketClient {
      */
     public static void clearServer() {
         server = null;
+    }
+
+    /**
+     * 检查WebSocket是否已连接
+     *
+     * @return true表示已连接，false表示未连接
+     */
+    public static boolean isConnected() {
+        return isConnected.get();
     }
 
     /**
@@ -274,6 +300,31 @@ public class PlayerEventWebSocketClient {
                 }
             } else {
                 LOGGER.warn("[FireflyMC] WebSocket未连接，跳过事件发送");
+            }
+        });
+    }
+
+    /**
+     * 发送玩家验证请求
+     *
+     * @param playerId 玩家ID（用户名）
+     */
+    public static void sendVerificationRequest(String playerId) {
+        if (!WebSocketConfig.ENABLE_MEMBER_VERIFICATION) {
+            return;
+        }
+
+        EXECUTOR.submit(() -> {
+            if (wsClient != null && isConnected.get()) {
+                try {
+                    VerificationRequestMessage request = new VerificationRequestMessage(playerId);
+                    wsClient.sendText(request.toJson(), true).join();
+                    LOGGER.debug("[FireflyMC] 发送验证请求: {}", playerId);
+                } catch (Exception e) {
+                    LOGGER.error("[FireflyMC] 发送验证请求失败: {}", e.getMessage());
+                }
+            } else {
+                LOGGER.warn("[FireflyMC] WebSocket未连接，无法发送验证请求");
             }
         });
     }
