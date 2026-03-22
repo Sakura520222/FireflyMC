@@ -89,7 +89,7 @@ jobs:
           # 读取 gradle.properties 中的当前版本号
           if [ -f gradle.properties ]; then
             CURRENT_VERSION=$(
-              sed -n "s/^[[:space:]]*mod_version[[:space:]]*=[[:space:]]*['\"]\([^'\"]*\)['\"].*/\1/p" gradle.properties | head -n 1 | tr -d '\r\n'
+              sed -n "s/^[[:space:]]*mod_version[[:space:]]*=[[:space:]]*['\"]\?\([^'\"]*\)['\"]\?.*/\1/p" gradle.properties | head -n 1 | tr -d '\r\n'
             )
 
             # 如果未能解析出版本号则直接失败，避免创建错误 tag（如 v）
