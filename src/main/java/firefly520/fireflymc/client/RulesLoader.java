@@ -133,7 +133,7 @@ public class RulesLoader {
                 continue;
             }
 
-            // 解析Mod更新地址: # Mod更新地址: https://mc.firefly520.top/ireflymc-2.3.3.jar
+            // 解析Mod更新地址: # Mod更新地址: https://mc.firefly520.top/ireflymc-2.3.4.jar
             if (trimmedLine.startsWith("# Mod更新地址:")) {
                 if (trimmedLine.length() > 10) {
                     modUpdateUrl = trimmedLine.substring(10).trim();
