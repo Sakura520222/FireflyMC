@@ -109,7 +109,7 @@ public class MemberVerificationManager {
             String message = response.getMessage() != null ? response.getMessage() : "你不在服务器成员列表中";
             player.connection.disconnect(Component.literal(
                 "§c" + message + "\n" +
-                "§e如需帮助，请联系服务器管理员"
+                "§e如需继续，请加入我们的Q群进行验证：480744186"
             ));
             LOGGER.info("[FireflyMC] 玩家 {} 验证失败: {}", playerId, message);
         }
