@@ -524,11 +524,24 @@ public class AIChatEventHandler {
         CompletableFuture.supplyAsync(() -> {
             // 异步线程：执行网络请求
             var history = List.copyOf(historyManager.getHistory());
-            return AIApiClient.callAI(history, prompt, playerName);
+            // 获取启用的函数工具
+            List<AIFunctionTool> tools = AIConfig.getFunctionsEnabled()
+                    ? new java.util.ArrayList<>(FunctionToolRegistry.getAllTools())
+                    : null;
+            return AIApiClient.callAIWithFunctions(history, prompt, playerName, tools);
         }).thenAccept(response -> {
             // 回到主线程：发送游戏消息
             server.execute(() -> {
-                if (response.isSuccess()) {
+                if (!response.isSuccess()) {
+                    // 发送错误提示
+                    player.sendSystemMessage(AIApiClient.getErrorComponent(response.errorType()));
+                    return;
+                }
+
+                if (response.hasToolCalls()) {
+                    // 处理函数调用
+                    handleToolCalls(server, player, historyManager, response.toolCalls());
+                } else if (response.content() != null && !response.content().isEmpty()) {
                     // 成功获取回复
                     broadcastReply(server, player, response.content());
 
@@ -538,12 +551,59 @@ public class AIChatEventHandler {
                             response.content(),
                             MessageType.ASSISTANT
                     ));
-                } else {
-                    // 发送错误提示
-                    player.sendSystemMessage(AIApiClient.getErrorComponent(response.errorType()));
                 }
             });
         });
+    }
+
+    /**
+     * 处理AI返回的工具调用
+     */
+    private static void handleToolCalls(MinecraftServer server, ServerPlayer player,
+                                        ChatHistoryManager historyManager,
+                                        java.util.List<FunctionCallRequest> toolCalls) {
+        for (var call : toolCalls) {
+            // 验证权限
+            if (!FunctionToolRegistry.hasPermissionForTool(player, call.name())) {
+                // 权限不足，通知AI
+                sendToolCallResultToAI(server, player, historyManager, call.id(),
+                        FunctionCallResult.failure(FunctionCallResult.ErrorType.PERMISSION_DENIED,
+                                "权限不足：需要" + FunctionToolRegistry.getRequiredPermissionLevel(call.name()) + "级OP权限"));
+                continue;
+            }
+
+            // 执行函数
+            FunctionToolRegistry.getTool(call.name()).ifPresent(tool -> {
+                FunctionCallResult result = tool.execute(player, call.arguments());
+                sendToolCallResultToAI(server, player, historyManager, call.id(), result);
+            });
+        }
+
+        // 继续调用AI获取最终回复
+        callAIAsync(server, player, historyManager, "[函数调用已完成，请根据结果回复玩家]");
+    }
+
+    /**
+     * 将工具执行结果发送给AI
+     * 通过添加一条系统消息到历史记录中
+     */
+    private static void sendToolCallResultToAI(MinecraftServer server, ServerPlayer player,
+                                               ChatHistoryManager historyManager,
+                                               String callId, FunctionCallResult result) {
+        // 将工具调用结果添加到历史记录
+        String resultMessage;
+        if (result.isSuccess()) {
+            resultMessage = "工具调用成功：" + result.getMessage();
+        } else {
+            resultMessage = "工具调用失败：" + result.getMessage();
+        }
+
+        // 添加为系统消息（工具结果），避免最后一条是assistant角色
+        historyManager.addMessage(new ChatMessage(
+                "System",
+                resultMessage,
+                MessageType.SYSTEM
+        ));
     }
 
     /**

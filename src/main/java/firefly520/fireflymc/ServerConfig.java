@@ -42,6 +42,10 @@ public class ServerConfig {
         public final ModConfigSpec.IntValue aiProactiveInterval;
         public final ModConfigSpec.IntValue aiProactiveTimeout;
 
+        // AI函数调用配置
+        public final ModConfigSpec.BooleanValue aiFunctionsEnabled;
+        public final ModConfigSpec.IntValue aiFunctionsRequireOpLevel;
+
         public ServerConfigImpl(ModConfigSpec.Builder builder) {
             builder.push("server")
                     .translation("fireflymc.config.server");
@@ -142,6 +146,17 @@ public class ServerConfig {
                     .comment("主动回复判断API超时时间（秒）")
                     .translation("fireflymc.config.ai.proactive_timeout")
                     .defineInRange("proactiveTimeout", 8, 3, 30);
+
+            // AI函数调用配置
+            aiFunctionsEnabled = builder
+                    .comment("是否启用AI函数调用功能")
+                    .translation("fireflymc.config.ai.functions_enabled")
+                    .define("functionsEnabled", true);
+
+            aiFunctionsRequireOpLevel = builder
+                    .comment("AI函数调用所需的最低OP等级（0-4）")
+                    .translation("fireflymc.config.ai.functions_require_op_level")
+                    .defineInRange("functionsRequireOpLevel", 4, 0, 4);
 
             builder.pop();
         }

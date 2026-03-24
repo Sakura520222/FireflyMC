@@ -73,6 +73,15 @@ public class AIConfig {
         return ServerConfig.SERVER.aiProactiveTimeout.get();
     }
 
+    // 函数调用配置
+    public static boolean getFunctionsEnabled() {
+        return ServerConfig.SERVER.aiFunctionsEnabled.get();
+    }
+
+    public static int getFunctionsRequireOpLevel() {
+        return ServerConfig.SERVER.aiFunctionsRequireOpLevel.get();
+    }
+
     // ========== 兼容性常量（已废弃，请使用getter方法） ==========
 
     /**
