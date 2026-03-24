@@ -290,7 +290,8 @@ public class PlayerEventWebSocketClient {
                         request.getRequestId(),
                         server.getPlayerList().getPlayers(),
                         server.getPlayerList().getPlayerCount(),
-                        server.getPlayerList().getMaxPlayers()
+                        server.getPlayerList().getMaxPlayers(),
+                        server
                     );
                     LOGGER.debug("[FireflyMC] 响应玩家列表查询: {} 在线", server.getPlayerList().getPlayerCount());
                 } else {
