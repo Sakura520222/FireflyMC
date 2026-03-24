@@ -161,6 +161,15 @@ public class PlayerEventWebSocketClient {
                         }
                     }
 
+                    // 检查是否是玩家列表查询请求
+                    if (!handled) {
+                        PlayerListQueryRequestMessage queryReq = PlayerListQueryRequestMessage.fromJson(json);
+                        if (queryReq != null && queryReq.isValid()) {
+                            handlePlayerListQuery(webSocket, queryReq);
+                            handled = true;
+                        }
+                    }
+
                     // 检查是否是聊天消息
                     if (!handled && server != null) {
                         ServerMessage message = ServerMessage.fromJson(json);
@@ -265,6 +274,36 @@ public class PlayerEventWebSocketClient {
         } else {
             LOGGER.error("[FireflyMC] 服务器实例为空，无法执行关闭");
         }
+    }
+
+    /**
+     * 处理玩家列表查询请求
+     */
+    private static void handlePlayerListQuery(java.net.http.WebSocket webSocket, PlayerListQueryRequestMessage request) {
+        EXECUTOR.submit(() -> {
+            try {
+                PlayerListQueryResponseMessage response;
+
+                if (server != null) {
+                    // 服务器已启动，获取玩家列表
+                    response = PlayerListQueryResponseMessage.success(
+                        request.getRequestId(),
+                        server.getPlayerList().getPlayers(),
+                        server.getPlayerList().getPlayerCount(),
+                        server.getPlayerList().getMaxPlayers()
+                    );
+                    LOGGER.debug("[FireflyMC] 响应玩家列表查询: {} 在线", server.getPlayerList().getPlayerCount());
+                } else {
+                    // 服务器未启动
+                    response = PlayerListQueryResponseMessage.serverNotReady(request.getRequestId());
+                    LOGGER.warn("[FireflyMC] 收到玩家列表查询，但服务器实例未设置");
+                }
+
+                webSocket.sendText(response.toJson(), true).join();
+            } catch (Exception e) {
+                LOGGER.error("[FireflyMC] 发送玩家列表响应失败: {}", e.getMessage());
+            }
+        });
     }
 
     /**
