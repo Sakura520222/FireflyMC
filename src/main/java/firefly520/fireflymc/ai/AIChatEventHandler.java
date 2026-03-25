@@ -122,7 +122,7 @@ public class AIChatEventHandler {
         // 检测唤醒词：消息包含"小樱"时自动触发AI回复
         if (message.contains("小樱") && !isOnCooldown(player)) {
             recordTrigger(player);
-            callAIAsync(server, player, historyManager, message);
+            callAIAsync(server, player, historyManager, message, false);
             return; // 唤醒词触发后跳过主动回复判断
         }
 
@@ -196,7 +196,7 @@ public class AIChatEventHandler {
         );
 
         // 异步调用AI
-        callAIAsync(server, player, historyManager, prompt);
+        callAIAsync(server, player, historyManager, prompt, false);
 
         return 1;
     }
@@ -290,7 +290,7 @@ public class AIChatEventHandler {
                 if (response.shouldReply()) {
                     recordTrigger(player);
                     String prompt = "[主动回复] " + response.reason();
-                    callAIAsync(server, player, historyManager, prompt);
+                    callAIAsync(server, player, historyManager, prompt, false);
                 }
             });
         });
@@ -516,9 +516,12 @@ public class AIChatEventHandler {
      *
      * ⚠️ 关键：网络请求必须在异步线程执行，否则服务器会卡死
      * 广播消息必须回到主线程执行，否则线程不安全
+     *
+     * @param hasExecutedFunction 当前轮次是否已执行过函数调用
      */
     private static void callAIAsync(MinecraftServer server, ServerPlayer player,
-                                     ChatHistoryManager historyManager, String prompt) {
+                                     ChatHistoryManager historyManager, String prompt,
+                                     boolean hasExecutedFunction) {
         String playerName = player.getName().getString();
 
         CompletableFuture.supplyAsync(() -> {
@@ -539,8 +542,14 @@ public class AIChatEventHandler {
                 }
 
                 if (response.hasToolCalls()) {
-                    // 处理函数调用
-                    handleToolCalls(server, player, historyManager, response.toolCalls());
+                    if (hasExecutedFunction) {
+                        // 已经执行过函数调用，不再执行，要求AI用文字回复
+                        callAIAsync(server, player, historyManager,
+                                   "[请直接用文字回复玩家，不要再调用函数]", true);
+                    } else {
+                        // 首次执行函数调用
+                        handleToolCalls(server, player, historyManager, response.toolCalls());
+                    }
                 } else if (response.content() != null && !response.content().isEmpty()) {
                     // 成功获取回复
                     broadcastReply(server, player, response.content());
@@ -558,20 +567,25 @@ public class AIChatEventHandler {
 
     /**
      * 处理AI返回的工具调用
+     * 每次只执行第一个函数调用
      */
     private static void handleToolCalls(MinecraftServer server, ServerPlayer player,
                                         ChatHistoryManager historyManager,
                                         java.util.List<FunctionCallRequest> toolCalls) {
-        for (var call : toolCalls) {
-            // 验证权限
-            if (!FunctionToolRegistry.hasPermissionForTool(player, call.name())) {
-                // 权限不足，通知AI
-                sendToolCallResultToAI(server, player, historyManager, call.id(),
-                        FunctionCallResult.failure(FunctionCallResult.ErrorType.PERMISSION_DENIED,
-                                "权限不足：需要" + FunctionToolRegistry.getRequiredPermissionLevel(call.name()) + "级OP权限"));
-                continue;
-            }
+        if (toolCalls.isEmpty()) {
+            return;
+        }
 
+        // 只执行第一个函数调用
+        var call = toolCalls.get(0);
+
+        // 验证权限
+        if (!FunctionToolRegistry.hasPermissionForTool(player, call.name())) {
+            // 权限不足，通知AI
+            sendToolCallResultToAI(server, player, historyManager, call.id(),
+                    FunctionCallResult.failure(FunctionCallResult.ErrorType.PERMISSION_DENIED,
+                            "权限不足：需要" + FunctionToolRegistry.getRequiredPermissionLevel(call.name()) + "级OP权限"));
+        } else {
             // 执行函数
             FunctionToolRegistry.getTool(call.name()).ifPresent(tool -> {
                 FunctionCallResult result = tool.execute(player, call.arguments());
@@ -580,7 +594,8 @@ public class AIChatEventHandler {
         }
 
         // 继续调用AI获取最终回复
-        callAIAsync(server, player, historyManager, "[函数调用已完成，请根据结果回复玩家]");
+        callAIAsync(server, player, historyManager,
+                   "[函数调用已完成，请根据结果回复玩家]", true);
     }
 
     /**
