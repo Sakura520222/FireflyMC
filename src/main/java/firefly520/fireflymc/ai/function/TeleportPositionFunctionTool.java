@@ -100,44 +100,28 @@ public class TeleportPositionFunctionTool implements AIFunctionTool {
         }
 
         // 验证坐标参数类型
-        var xElement = arguments.get("x");
-        var yElement = arguments.get("y");
-        var zElement = arguments.get("z");
+        FunctionCallResult validationResult;
+        validationResult = FunctionToolHelper.validateNumberType(arguments.get("x"), "x");
+        if (validationResult != null) return validationResult;
+        validationResult = FunctionToolHelper.validateNumberType(arguments.get("y"), "y");
+        if (validationResult != null) return validationResult;
+        validationResult = FunctionToolHelper.validateNumberType(arguments.get("z"), "z");
+        if (validationResult != null) return validationResult;
 
-        if (!xElement.isJsonPrimitive() || !xElement.getAsJsonPrimitive().isNumber()) {
-            return FunctionCallResult.failure(
-                    FunctionCallResult.ErrorType.INVALID_ARGUMENT,
-                    "x 参数必须是数字"
-            );
-        }
-        if (!yElement.isJsonPrimitive() || !yElement.getAsJsonPrimitive().isNumber()) {
-            return FunctionCallResult.failure(
-                    FunctionCallResult.ErrorType.INVALID_ARGUMENT,
-                    "y 参数必须是数字"
-            );
-        }
-        if (!zElement.isJsonPrimitive() || !zElement.getAsJsonPrimitive().isNumber()) {
-            return FunctionCallResult.failure(
-                    FunctionCallResult.ErrorType.INVALID_ARGUMENT,
-                    "z 参数必须是数字"
-            );
-        }
-
-        double x = xElement.getAsDouble();
-        double y = yElement.getAsDouble();
-        double z = zElement.getAsDouble();
+        double x = arguments.get("x").getAsDouble();
+        double y = arguments.get("y").getAsDouble();
+        double z = arguments.get("z").getAsDouble();
 
         // 确定目标玩家
         ServerPlayer targetPlayer = player;
         if (arguments.has("targetPlayer") && !arguments.get("targetPlayer").isJsonNull()) {
-            var targetPlayerElement = arguments.get("targetPlayer");
-            if (!targetPlayerElement.isJsonPrimitive() || !targetPlayerElement.getAsJsonPrimitive().isString()) {
-                return FunctionCallResult.failure(
-                        FunctionCallResult.ErrorType.INVALID_ARGUMENT,
-                        "targetPlayer 参数必须是字符串"
-                );
+            validationResult = FunctionToolHelper.validateStringType(
+                    arguments.get("targetPlayer"), "targetPlayer"
+            );
+            if (validationResult != null) {
+                return validationResult;
             }
-            String targetName = targetPlayerElement.getAsString();
+            String targetName = arguments.get("targetPlayer").getAsString();
             targetPlayer = server.getPlayerList().getPlayerByName(targetName);
             if (targetPlayer == null) {
                 return FunctionCallResult.failure(
@@ -150,14 +134,13 @@ public class TeleportPositionFunctionTool implements AIFunctionTool {
         // 确定目标维度
         ServerLevel targetLevel = targetPlayer.serverLevel();
         if (arguments.has("dimension") && !arguments.get("dimension").isJsonNull()) {
-            var dimensionElement = arguments.get("dimension");
-            if (!dimensionElement.isJsonPrimitive() || !dimensionElement.getAsJsonPrimitive().isString()) {
-                return FunctionCallResult.failure(
-                        FunctionCallResult.ErrorType.INVALID_ARGUMENT,
-                        "dimension 参数必须是字符串"
-                );
+            validationResult = FunctionToolHelper.validateStringType(
+                    arguments.get("dimension"), "dimension"
+            );
+            if (validationResult != null) {
+                return validationResult;
             }
-            String dimensionStr = dimensionElement.getAsString();
+            String dimensionStr = arguments.get("dimension").getAsString();
             ResourceLocation dimensionId = ResourceLocation.tryParse(dimensionStr);
             if (dimensionId == null) {
                 return FunctionCallResult.failure(

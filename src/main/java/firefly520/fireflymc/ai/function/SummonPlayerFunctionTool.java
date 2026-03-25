@@ -68,15 +68,14 @@ public class SummonPlayerFunctionTool implements AIFunctionTool {
         }
 
         // 验证playerName参数类型
-        var playerNameElement = arguments.get("playerName");
-        if (!playerNameElement.isJsonPrimitive() || !playerNameElement.getAsJsonPrimitive().isString()) {
-            return FunctionCallResult.failure(
-                    FunctionCallResult.ErrorType.INVALID_ARGUMENT,
-                    "playerName 参数必须是字符串"
-            );
+        FunctionCallResult validationResult = FunctionToolHelper.validateStringType(
+                arguments.get("playerName"), "playerName"
+        );
+        if (validationResult != null) {
+            return validationResult;
         }
 
-        String targetName = playerNameElement.getAsString();
+        String targetName = arguments.get("playerName").getAsString();
 
         // 查找目标玩家
         ServerPlayer targetPlayer = server.getPlayerList().getPlayerByName(targetName);

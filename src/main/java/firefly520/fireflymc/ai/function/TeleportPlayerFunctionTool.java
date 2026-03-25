@@ -74,26 +74,24 @@ public class TeleportPlayerFunctionTool implements AIFunctionTool {
         }
 
         // 验证destinationPlayer参数类型
-        var destPlayerElement = arguments.get("destinationPlayer");
-        if (!destPlayerElement.isJsonPrimitive() || !destPlayerElement.getAsJsonPrimitive().isString()) {
-            return FunctionCallResult.failure(
-                    FunctionCallResult.ErrorType.INVALID_ARGUMENT,
-                    "destinationPlayer 参数必须是字符串"
-            );
+        FunctionCallResult validationResult = FunctionToolHelper.validateStringType(
+                arguments.get("destinationPlayer"), "destinationPlayer"
+        );
+        if (validationResult != null) {
+            return validationResult;
         }
-        String destName = destPlayerElement.getAsString();
+        String destName = arguments.get("destinationPlayer").getAsString();
 
         // 确定被传送的玩家
         ServerPlayer targetPlayer = player;
         if (arguments.has("targetPlayer") && !arguments.get("targetPlayer").isJsonNull()) {
-            var targetPlayerElement = arguments.get("targetPlayer");
-            if (!targetPlayerElement.isJsonPrimitive() || !targetPlayerElement.getAsJsonPrimitive().isString()) {
-                return FunctionCallResult.failure(
-                        FunctionCallResult.ErrorType.INVALID_ARGUMENT,
-                        "targetPlayer 参数必须是字符串"
-                );
+            validationResult = FunctionToolHelper.validateStringType(
+                    arguments.get("targetPlayer"), "targetPlayer"
+            );
+            if (validationResult != null) {
+                return validationResult;
             }
-            String targetName = targetPlayerElement.getAsString();
+            String targetName = arguments.get("targetPlayer").getAsString();
             targetPlayer = server.getPlayerList().getPlayerByName(targetName);
             if (targetPlayer == null) {
                 return FunctionCallResult.failure(
