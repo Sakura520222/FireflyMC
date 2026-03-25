@@ -4,7 +4,6 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import firefly520.fireflymc.ai.AIFunctionTool;
 import firefly520.fireflymc.ai.FunctionCallResult;
-import firefly520.fireflymc.ai.FunctionToolRegistry;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerPlayer;
@@ -84,37 +83,24 @@ public class GiveEffectFunctionTool implements AIFunctionTool {
 
     @Override
     public FunctionCallResult execute(ServerPlayer player, JsonObject arguments) {
-        // 权限验证
-        if (!FunctionToolRegistry.hasPermissionForTool(player, getName())) {
-            return FunctionCallResult.failure(
-                    FunctionCallResult.ErrorType.PERMISSION_DENIED,
-                    "权限不足：需要4级OP权限"
-            );
+        // 检查前置条件
+        FunctionCallResult checkResult = FunctionToolHelper.checkPreconditions(player, this);
+        if (checkResult != null) {
+            return checkResult;
         }
 
         var server = player.getServer();
-        if (server == null) {
-            return FunctionCallResult.failure(
-                    FunctionCallResult.ErrorType.EXECUTION_FAILED,
-                    "服务器未就绪"
-            );
-        }
 
         // 解析必需参数
-        if (!arguments.has("effect")) {
-            return FunctionCallResult.failure(
-                    FunctionCallResult.ErrorType.INVALID_ARGUMENT,
-                    "缺少必需参数: effect"
-            );
+        var effectResult = FunctionToolHelper.getRequiredString(arguments, "effect");
+        if (effectResult.hasError()) {
+            return effectResult.error();
         }
+        String effectStr = effectResult.value().toLowerCase();
 
-        String effectStr = arguments.get("effect").getAsString().toLowerCase();
-        int duration = arguments.has("duration")
-                ? arguments.get("duration").getAsInt()
-                : DEFAULT_DURATION;
-        int amplifier = arguments.has("amplifier")
-                ? arguments.get("amplifier").getAsInt()
-                : DEFAULT_AMPLIFIER;
+        // 解析可选参数
+        int duration = FunctionToolHelper.getOptionalInt(arguments, "duration", DEFAULT_DURATION);
+        int amplifier = FunctionToolHelper.getOptionalInt(arguments, "amplifier", DEFAULT_AMPLIFIER);
 
         // 验证范围
         duration = Math.max(MIN_DURATION, Math.min(MAX_DURATION, duration));
@@ -124,28 +110,28 @@ public class GiveEffectFunctionTool implements AIFunctionTool {
         ServerPlayer targetPlayer = player;
         String targetName = player.getGameProfile().getName();
 
-        if (arguments.has("targetPlayer") && !arguments.get("targetPlayer").isJsonNull()) {
-            targetName = arguments.get("targetPlayer").getAsString();
-            targetPlayer = server.getPlayerList().getPlayerByName(targetName);
+        String targetPlayerName = FunctionToolHelper.getOptionalString(arguments, "targetPlayer", null);
+        if (targetPlayerName != null && !targetPlayerName.isBlank()) {
+            targetPlayer = server.getPlayerList().getPlayerByName(targetPlayerName);
             if (targetPlayer == null) {
                 return FunctionCallResult.failure(
                         FunctionCallResult.ErrorType.EXECUTION_FAILED,
-                        "玩家 " + targetName + " 不在线"
+                        "玩家 " + targetPlayerName + " 不在线"
                 );
             }
+            targetName = targetPlayerName;
         }
 
         // 解析效果ID（尝试添加minecraft:前缀）
         ResourceLocation effectId = ResourceLocation.tryParse(effectStr);
         if (effectId == null) {
             effectId = ResourceLocation.tryParse("minecraft:" + effectStr);
-        }
-
-        if (effectId == null) {
-            return FunctionCallResult.failure(
-                    FunctionCallResult.ErrorType.INVALID_ARGUMENT,
-                    "无效的效果ID: " + effectStr
-            );
+            if (effectId == null) {
+                return FunctionCallResult.failure(
+                        FunctionCallResult.ErrorType.INVALID_ARGUMENT,
+                        "无效的效果ID: " + effectStr
+                );
+            }
         }
 
         var effectHolder = BuiltInRegistries.MOB_EFFECT.getHolder(effectId);

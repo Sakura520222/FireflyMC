@@ -4,7 +4,6 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import firefly520.fireflymc.ai.AIFunctionTool;
 import firefly520.fireflymc.ai.FunctionCallResult;
-import firefly520.fireflymc.ai.FunctionToolRegistry;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.item.ItemStack;
 
@@ -61,85 +60,92 @@ public class ClearInventoryFunctionTool implements AIFunctionTool {
 
     @Override
     public FunctionCallResult execute(ServerPlayer player, JsonObject arguments) {
-        // 权限验证
-        if (!FunctionToolRegistry.hasPermissionForTool(player, getName())) {
-            return FunctionCallResult.failure(
-                    FunctionCallResult.ErrorType.PERMISSION_DENIED,
-                    "权限不足：需要4级OP权限"
-            );
+        // 检查前置条件
+        FunctionCallResult checkResult = FunctionToolHelper.checkPreconditions(player, this);
+        if (checkResult != null) {
+            return checkResult;
         }
 
         var server = player.getServer();
-        if (server == null) {
-            return FunctionCallResult.failure(
-                    FunctionCallResult.ErrorType.EXECUTION_FAILED,
-                    "服务器未就绪"
-            );
-        }
 
         // 确定目标玩家
         ServerPlayer targetPlayer = player;
         String targetName = player.getGameProfile().getName();
 
-        if (arguments.has("targetPlayer") && !arguments.get("targetPlayer").isJsonNull()) {
-            targetName = arguments.get("targetPlayer").getAsString();
-            targetPlayer = server.getPlayerList().getPlayerByName(targetName);
+        String targetPlayerName = FunctionToolHelper.getOptionalString(arguments, "targetPlayer", null);
+        if (targetPlayerName != null && !targetPlayerName.isBlank()) {
+            targetPlayer = server.getPlayerList().getPlayerByName(targetPlayerName);
             if (targetPlayer == null) {
                 return FunctionCallResult.failure(
                         FunctionCallResult.ErrorType.EXECUTION_FAILED,
-                        "玩家 " + targetName + " 不在线"
+                        "玩家 " + targetPlayerName + " 不在线"
                 );
             }
+            targetName = targetPlayerName;
         }
 
         // 解析清除范围
-        String slot = arguments.has("slot") ? arguments.get("slot").getAsString() : "all";
+        String slot = FunctionToolHelper.getOptionalString(arguments, "slot", "all");
+
+        // 验证slot参数
+        if (!slot.matches("all|hotbar|inventory|armor")) {
+            return FunctionCallResult.failure(
+                    FunctionCallResult.ErrorType.INVALID_ARGUMENT,
+                    "无效的清除范围: " + slot + "。支持: all, hotbar, inventory, armor"
+            );
+        }
+
         int clearedCount = 0;
 
-        switch (slot) {
+        // 使用switch表达式避免fall-through
+        clearedCount = switch (slot) {
             case "all" -> {
-                // 清空所有物品
-                for (int i = 0; i < targetPlayer.getInventory().getContainerSize(); i++) {
+                // 统计被清除的物品数量，然后清空
+                int containerSize = targetPlayer.getInventory().getContainerSize();
+                int count = 0;
+                for (int i = 0; i < containerSize; i++) {
                     if (!targetPlayer.getInventory().getItem(i).isEmpty()) {
-                        clearedCount++;
+                        count++;
                     }
                 }
                 targetPlayer.getInventory().clearContent();
+                yield count;
             }
             case "hotbar" -> {
                 // 清空快捷栏 (0-8)
+                int count = 0;
                 for (int i = 0; i < 9; i++) {
                     if (!targetPlayer.getInventory().getItem(i).isEmpty()) {
-                        clearedCount++;
+                        count++;
                     }
                     targetPlayer.getInventory().setItem(i, ItemStack.EMPTY);
                 }
+                yield count;
             }
             case "inventory" -> {
                 // 清空背包 (9-35)
+                int count = 0;
                 for (int i = 9; i < 36; i++) {
                     if (!targetPlayer.getInventory().getItem(i).isEmpty()) {
-                        clearedCount++;
+                        count++;
                     }
                     targetPlayer.getInventory().setItem(i, ItemStack.EMPTY);
                 }
+                yield count;
             }
             case "armor" -> {
                 // 清空装备 (36-39)
+                int count = 0;
                 for (int i = 36; i < 40; i++) {
                     if (!targetPlayer.getInventory().getItem(i).isEmpty()) {
-                        clearedCount++;
+                        count++;
                     }
                     targetPlayer.getInventory().setItem(i, ItemStack.EMPTY);
                 }
+                yield count;
             }
-            default -> {
-                return FunctionCallResult.failure(
-                        FunctionCallResult.ErrorType.INVALID_ARGUMENT,
-                        "无效的清除范围: " + slot + "。支持: all, hotbar, inventory, armor"
-                );
-            }
-        }
+            default -> 0; // 不会执行，因为上面已经验证过
+        };
 
         String slotDesc = switch (slot) {
             case "all" -> "全部物品";

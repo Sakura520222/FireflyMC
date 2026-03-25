@@ -4,7 +4,6 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import firefly520.fireflymc.ai.AIFunctionTool;
 import firefly520.fireflymc.ai.FunctionCallResult;
-import firefly520.fireflymc.ai.FunctionToolRegistry;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 
@@ -58,21 +57,13 @@ public class TeleportPlayerFunctionTool implements AIFunctionTool {
 
     @Override
     public FunctionCallResult execute(ServerPlayer player, JsonObject arguments) {
-        // 权限验证
-        if (!FunctionToolRegistry.hasPermissionForTool(player, getName())) {
-            return FunctionCallResult.failure(
-                    FunctionCallResult.ErrorType.PERMISSION_DENIED,
-                    "权限不足：需要3级OP权限"
-            );
+        // 检查前置条件
+        FunctionCallResult checkResult = FunctionToolHelper.checkPreconditions(player, this);
+        if (checkResult != null) {
+            return checkResult;
         }
 
         var server = player.getServer();
-        if (server == null) {
-            return FunctionCallResult.failure(
-                    FunctionCallResult.ErrorType.EXECUTION_FAILED,
-                    "服务器未就绪"
-            );
-        }
 
         // 解析必需参数
         if (!arguments.has("destinationPlayer")) {
@@ -82,11 +73,24 @@ public class TeleportPlayerFunctionTool implements AIFunctionTool {
             );
         }
 
+        // 验证destinationPlayer参数类型
+        FunctionCallResult validationResult = FunctionToolHelper.validateStringType(
+                arguments.get("destinationPlayer"), "destinationPlayer"
+        );
+        if (validationResult != null) {
+            return validationResult;
+        }
         String destName = arguments.get("destinationPlayer").getAsString();
 
         // 确定被传送的玩家
         ServerPlayer targetPlayer = player;
         if (arguments.has("targetPlayer") && !arguments.get("targetPlayer").isJsonNull()) {
+            validationResult = FunctionToolHelper.validateStringType(
+                    arguments.get("targetPlayer"), "targetPlayer"
+            );
+            if (validationResult != null) {
+                return validationResult;
+            }
             String targetName = arguments.get("targetPlayer").getAsString();
             targetPlayer = server.getPlayerList().getPlayerByName(targetName);
             if (targetPlayer == null) {

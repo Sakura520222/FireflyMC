@@ -4,7 +4,6 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import firefly520.fireflymc.ai.AIFunctionTool;
 import firefly520.fireflymc.ai.FunctionCallResult;
-import firefly520.fireflymc.ai.FunctionToolRegistry;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 
@@ -70,21 +69,13 @@ public class SetWeatherFunctionTool implements AIFunctionTool {
 
     @Override
     public FunctionCallResult execute(ServerPlayer player, JsonObject arguments) {
-        // 权限验证
-        if (!FunctionToolRegistry.hasPermissionForTool(player, getName())) {
-            return FunctionCallResult.failure(
-                    FunctionCallResult.ErrorType.PERMISSION_DENIED,
-                    "权限不足：需要3级OP权限"
-            );
+        // 检查前置条件
+        FunctionCallResult checkResult = FunctionToolHelper.checkPreconditions(player, this);
+        if (checkResult != null) {
+            return checkResult;
         }
 
         var server = player.getServer();
-        if (server == null) {
-            return FunctionCallResult.failure(
-                    FunctionCallResult.ErrorType.EXECUTION_FAILED,
-                    "服务器未就绪"
-            );
-        }
 
         // 解析天气类型
         if (!arguments.has("weather")) {
@@ -94,10 +85,29 @@ public class SetWeatherFunctionTool implements AIFunctionTool {
             );
         }
 
-        String weather = arguments.get("weather").getAsString().toLowerCase();
-        int duration = arguments.has("duration")
-                ? arguments.get("duration").getAsInt()
-                : DEFAULT_DURATION;
+        // 验证weather参数类型
+        var weatherElement = arguments.get("weather");
+        if (!weatherElement.isJsonPrimitive() || !weatherElement.getAsJsonPrimitive().isString()) {
+            return FunctionCallResult.failure(
+                    FunctionCallResult.ErrorType.INVALID_ARGUMENT,
+                    "weather 参数必须是字符串"
+            );
+        }
+
+        String weather = weatherElement.getAsString().toLowerCase();
+
+        // 解析duration参数
+        int duration = DEFAULT_DURATION;
+        if (arguments.has("duration")) {
+            var durationElement = arguments.get("duration");
+            if (!durationElement.isJsonPrimitive() || !durationElement.getAsJsonPrimitive().isNumber()) {
+                return FunctionCallResult.failure(
+                        FunctionCallResult.ErrorType.INVALID_ARGUMENT,
+                        "duration 参数必须是数字"
+                );
+            }
+            duration = durationElement.getAsInt();
+        }
 
         // 验证范围
         duration = Math.max(MIN_DURATION, Math.min(MAX_DURATION, duration));
@@ -118,11 +128,12 @@ public class SetWeatherFunctionTool implements AIFunctionTool {
             }
         }
 
+        // weather 已在前面验证过，default分支不会执行（防御性编程）
         String weatherDesc = switch (weather) {
             case "clear" -> "晴天";
             case "rain" -> "雨天";
             case "thunder" -> "雷暴";
-            default -> weather;
+            default -> throw new IllegalStateException("无效的天气类型: " + weather);
         };
 
         String durationDesc = duration == 0 ? "永久" : duration + "秒";

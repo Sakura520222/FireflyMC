@@ -4,7 +4,6 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import firefly520.fireflymc.ai.AIFunctionTool;
 import firefly520.fireflymc.ai.FunctionCallResult;
-import firefly520.fireflymc.ai.FunctionToolRegistry;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
 
@@ -61,34 +60,30 @@ public class KickPlayerFunctionTool implements AIFunctionTool {
 
     @Override
     public FunctionCallResult execute(ServerPlayer player, JsonObject arguments) {
-        // 权限验证
-        if (!FunctionToolRegistry.hasPermissionForTool(player, getName())) {
-            return FunctionCallResult.failure(
-                    FunctionCallResult.ErrorType.PERMISSION_DENIED,
-                    "权限不足：需要4级OP权限"
-            );
+        // 检查前置条件
+        FunctionCallResult checkResult = FunctionToolHelper.checkPreconditions(player, this);
+        if (checkResult != null) {
+            return checkResult;
         }
 
         var server = player.getServer();
-        if (server == null) {
-            return FunctionCallResult.failure(
-                    FunctionCallResult.ErrorType.EXECUTION_FAILED,
-                    "服务器未就绪"
-            );
-        }
 
-        // 解析参数
-        if (!arguments.has("playerName")) {
+        // 解析必需参数
+        var playerNameResult = FunctionToolHelper.getRequiredString(arguments, "playerName");
+        if (playerNameResult.hasError()) {
+            return playerNameResult.error();
+        }
+        String targetName = playerNameResult.value();
+
+        // 检查是否尝试踢出自己
+        if (targetName.equals(player.getGameProfile().getName())) {
             return FunctionCallResult.failure(
                     FunctionCallResult.ErrorType.INVALID_ARGUMENT,
-                    "缺少必需参数: playerName"
+                    "不能踢出自己"
             );
         }
 
-        String targetName = arguments.get("playerName").getAsString();
-        String reason = arguments.has("reason") && !arguments.get("reason").isJsonNull()
-                ? arguments.get("reason").getAsString()
-                : DEFAULT_REASON;
+        String reason = FunctionToolHelper.getOptionalString(arguments, "reason", DEFAULT_REASON);
 
         // 查找目标玩家
         ServerPlayer targetPlayer = server.getPlayerList().getPlayerByName(targetName);

@@ -4,7 +4,6 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import firefly520.fireflymc.ai.AIFunctionTool;
 import firefly520.fireflymc.ai.FunctionCallResult;
-import firefly520.fireflymc.ai.FunctionToolRegistry;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 
@@ -48,7 +47,7 @@ public class SetTimeFunctionTool implements AIFunctionTool {
         // time 参数
         JsonObject timeParam = new JsonObject();
         timeParam.addProperty("type", "string");
-        timeParam.addProperty("description", "时间设置：支持关键字(day/night/noon/midnight/sunrise/sunrise/afternoon)或数字(0-24000)");
+        timeParam.addProperty("description", "时间设置：支持关键字(day/night/noon/midnight/sunrise/sunset/afternoon)或数字(0-24000)");
         JsonArray enumValues = new JsonArray();
         enumValues.add("day");
         enumValues.add("night");
@@ -80,26 +79,26 @@ public class SetTimeFunctionTool implements AIFunctionTool {
 
     @Override
     public FunctionCallResult execute(ServerPlayer player, JsonObject arguments) {
-        // 权限验证
-        if (!FunctionToolRegistry.hasPermissionForTool(player, getName())) {
-            return FunctionCallResult.failure(
-                    FunctionCallResult.ErrorType.PERMISSION_DENIED,
-                    "权限不足：需要3级OP权限"
-            );
+        // 检查前置条件
+        FunctionCallResult checkResult = FunctionToolHelper.checkPreconditions(player, this);
+        if (checkResult != null) {
+            return checkResult;
         }
 
         var server = player.getServer();
-        if (server == null) {
-            return FunctionCallResult.failure(
-                    FunctionCallResult.ErrorType.EXECUTION_FAILED,
-                    "服务器未就绪"
-            );
-        }
 
         long timeValue;
 
         // 解析时间参数
         if (arguments.has("time") && !arguments.get("time").isJsonNull()) {
+            // 验证time参数类型
+            FunctionCallResult validationResult = FunctionToolHelper.validateStringType(
+                    arguments.get("time"), "time"
+            );
+            if (validationResult != null) {
+                return validationResult;
+            }
+
             String timeStr = arguments.get("time").getAsString().toLowerCase().trim();
 
             // 尝试解析关键字
@@ -123,7 +122,15 @@ public class SetTimeFunctionTool implements AIFunctionTool {
                 }
             }
         } else if (arguments.has("timeValue")) {
-            timeValue = arguments.get("timeValue").getAsLong();
+            // 验证timeValue参数类型
+            var timeValueElement = arguments.get("timeValue");
+            if (!timeValueElement.isJsonPrimitive() || !timeValueElement.getAsJsonPrimitive().isNumber()) {
+                return FunctionCallResult.failure(
+                        FunctionCallResult.ErrorType.INVALID_ARGUMENT,
+                        "timeValue 参数必须是数字"
+                );
+            }
+            timeValue = timeValueElement.getAsLong();
             if (timeValue < 0 || timeValue > 24000) {
                 return FunctionCallResult.failure(
                         FunctionCallResult.ErrorType.INVALID_ARGUMENT,
