@@ -1,6 +1,6 @@
 package firefly520.fireflymc.ai;
 
-import firefly520.fireflymc.ai.function.SpawnAllFunctionTool;
+import firefly520.fireflymc.ai.function.*;
 import net.minecraft.server.level.ServerPlayer;
 
 import java.util.Collection;
@@ -20,6 +20,27 @@ public class FunctionToolRegistry {
     static {
         // 注册所有函数工具
         registerTool(new SpawnAllFunctionTool());
+
+        // 信息查询类
+        registerTool(new ListPlayersFunctionTool());
+        registerTool(new GetPlayerInfoFunctionTool());
+        registerTool(new GetServerTpsFunctionTool());
+        registerTool(new GetServerUptimeFunctionTool());
+
+        // 游戏管理类
+        registerTool(new SetTimeFunctionTool());
+        registerTool(new SetWeatherFunctionTool());
+        registerTool(new KickPlayerFunctionTool());
+
+        // 玩家传送类
+        registerTool(new TeleportPositionFunctionTool());
+        registerTool(new TeleportPlayerFunctionTool());
+        registerTool(new SummonPlayerFunctionTool());
+
+        // 物品/效果类
+        registerTool(new ClearInventoryFunctionTool());
+        registerTool(new GiveEffectFunctionTool());
+        registerTool(new GiveItemFunctionTool());
     }
 
     /**
