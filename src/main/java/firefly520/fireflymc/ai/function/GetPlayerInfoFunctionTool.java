@@ -3,7 +3,6 @@ package firefly520.fireflymc.ai.function;
 import com.google.gson.JsonObject;
 import firefly520.fireflymc.ai.AIFunctionTool;
 import firefly520.fireflymc.ai.FunctionCallResult;
-import firefly520.fireflymc.ai.FunctionToolRegistry;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerPlayer;
 
@@ -47,26 +46,24 @@ public class GetPlayerInfoFunctionTool implements AIFunctionTool {
 
     @Override
     public FunctionCallResult execute(ServerPlayer player, JsonObject arguments) {
-        var server = player.getServer();
-        if (server == null) {
-            return FunctionCallResult.failure(
-                    FunctionCallResult.ErrorType.EXECUTION_FAILED,
-                    "服务器未就绪"
-            );
+        // 检查服务器就绪状态
+        FunctionCallResult checkResult = FunctionToolHelper.checkServerReady(player);
+        if (checkResult != null) {
+            return checkResult;
         }
+
+        var server = player.getServer();
 
         // 确定目标玩家
         ServerPlayer targetPlayer = player;
-        if (arguments.has("playerName") && !arguments.get("playerName").isJsonNull()) {
-            String targetName = arguments.get("playerName").getAsString();
-            if (!targetName.isBlank()) {
-                targetPlayer = server.getPlayerList().getPlayerByName(targetName);
-                if (targetPlayer == null) {
-                    return FunctionCallResult.failure(
-                            FunctionCallResult.ErrorType.EXECUTION_FAILED,
-                            "玩家 " + targetName + " 不在线"
-                    );
-                }
+        String targetPlayerName = FunctionToolHelper.getOptionalString(arguments, "playerName", null);
+        if (targetPlayerName != null && !targetPlayerName.isBlank()) {
+            targetPlayer = server.getPlayerList().getPlayerByName(targetPlayerName);
+            if (targetPlayer == null) {
+                return FunctionCallResult.failure(
+                        FunctionCallResult.ErrorType.EXECUTION_FAILED,
+                        "玩家 " + targetPlayerName + " 不在线"
+                );
             }
         }
 

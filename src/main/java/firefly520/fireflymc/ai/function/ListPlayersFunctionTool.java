@@ -4,7 +4,6 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import firefly520.fireflymc.ai.AIFunctionTool;
 import firefly520.fireflymc.ai.FunctionCallResult;
-import firefly520.fireflymc.ai.FunctionToolRegistry;
 import net.minecraft.server.level.ServerPlayer;
 
 /**
@@ -48,18 +47,24 @@ public class ListPlayersFunctionTool implements AIFunctionTool {
 
     @Override
     public FunctionCallResult execute(ServerPlayer player, JsonObject arguments) {
-        var server = player.getServer();
-        if (server == null) {
-            return FunctionCallResult.failure(
-                    FunctionCallResult.ErrorType.EXECUTION_FAILED,
-                    "服务器未就绪"
-            );
+        // 检查服务器就绪状态
+        FunctionCallResult checkResult = FunctionToolHelper.checkServerReady(player);
+        if (checkResult != null) {
+            return checkResult;
         }
 
+        var server = player.getServer();
         var players = server.getPlayerList().getPlayers();
         int maxPlayers = server.getPlayerList().getMaxPlayers();
-        boolean includeDetails = arguments.has("includeDetails")
-                && arguments.get("includeDetails").getAsBoolean();
+
+        // 获取includeDetails参数（默认false）
+        boolean includeDetails = false;
+        if (arguments.has("includeDetails") && !arguments.get("includeDetails").isJsonNull()) {
+            var elem = arguments.get("includeDetails");
+            if (elem.isJsonPrimitive() && elem.getAsJsonPrimitive().isBoolean()) {
+                includeDetails = elem.getAsBoolean();
+            }
+        }
 
         StringBuilder result = new StringBuilder();
         result.append(String.format("当前在线: %d/%d 人", players.size(), maxPlayers));

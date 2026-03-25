@@ -35,13 +35,13 @@ public class GetServerUptimeFunctionTool implements AIFunctionTool {
 
     @Override
     public FunctionCallResult execute(ServerPlayer player, JsonObject arguments) {
-        var server = player.getServer();
-        if (server == null) {
-            return FunctionCallResult.failure(
-                    FunctionCallResult.ErrorType.EXECUTION_FAILED,
-                    "服务器未就绪"
-            );
+        // 检查服务器就绪状态
+        FunctionCallResult checkResult = FunctionToolHelper.checkServerReady(player);
+        if (checkResult != null) {
+            return checkResult;
         }
+
+        var server = player.getServer();
 
         // 基于tick计数计算运行时间（每秒20tick）
         long tickCount = server.getTickCount();
