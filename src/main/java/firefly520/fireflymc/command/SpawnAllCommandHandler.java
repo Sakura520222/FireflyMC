@@ -3,6 +3,9 @@ package firefly520.fireflymc.command;
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.arguments.IntegerArgumentType;
 import com.mojang.brigadier.context.CommandContext;
+import java.util.Collection;
+import java.util.stream.Collectors;
+import net.minecraft.commands.arguments.EntityArgument;
 import com.mojang.brigadier.suggestion.SuggestionProvider;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
@@ -24,9 +27,9 @@ import net.neoforged.neoforge.event.RegisterCommandsEvent;
 /**
  * SpawnAll命令处理器
  * <p>
- * 用法: /spawnall <生物类型> [数量] [半径]
+ * 用法: /spawnall <生物类型> [targets] [数量] [半径]
  * <p>
- * 在所有在线玩家附近生成指定数量的生物
+ * 在指定玩家附近生成指定数量的生物，未指定时默认为除执行者外的所有玩家
  * 支持原版全部生物 + 其他模组生物
  */
 @EventBusSubscriber(modid = "fireflymc", value = Dist.DEDICATED_SERVER)
@@ -72,15 +75,25 @@ public class SpawnAllCommandHandler {
                 .requires(source -> source.hasPermission(4))  // 4级OP权限
                 .then(Commands.argument("entity", ResourceLocationArgument.id())
                         .suggests(ENTITY_TYPE_SUGGESTIONS)
-                        .executes(context -> spawnEntities(context, DEFAULT_COUNT, DEFAULT_RADIUS))
+                        // 不带 targets 参数，默认行为（除执行者外）
+                        .executes(context -> spawnEntities(context, null, DEFAULT_COUNT, DEFAULT_RADIUS))
                         .then(Commands.argument("count", IntegerArgumentType.integer(MIN_COUNT, MAX_COUNT))
-                                .executes(context -> spawnEntities(context,
-                                        IntegerArgumentType.getInteger(context, "count"),
-                                        DEFAULT_RADIUS))
+                                .executes(context -> spawnEntities(context, null,
+                                        IntegerArgumentType.getInteger(context, "count"), DEFAULT_RADIUS))
                                 .then(Commands.argument("radius", IntegerArgumentType.integer(MIN_RADIUS, MAX_RADIUS))
-                                        .executes(context -> spawnEntities(context,
+                                        .executes(context -> spawnEntities(context, null,
                                                 IntegerArgumentType.getInteger(context, "count"),
-                                                IntegerArgumentType.getInteger(context, "radius"))))))
+                                                IntegerArgumentType.getInteger(context, "radius")))))
+                        // 添加 targets 分支（与 count 分支并列）
+                        .then(Commands.argument("targets", EntityArgument.players())
+                                .executes(context -> spawnEntities(context, EntityArgument.getPlayers(context, "targets"), DEFAULT_COUNT, DEFAULT_RADIUS))
+                                .then(Commands.argument("count", IntegerArgumentType.integer(MIN_COUNT, MAX_COUNT))
+                                        .executes(context -> spawnEntities(context, EntityArgument.getPlayers(context, "targets"),
+                                                IntegerArgumentType.getInteger(context, "count"), DEFAULT_RADIUS))
+                                        .then(Commands.argument("radius", IntegerArgumentType.integer(MIN_RADIUS, MAX_RADIUS))
+                                                .executes(context -> spawnEntities(context, EntityArgument.getPlayers(context, "targets"),
+                                                        IntegerArgumentType.getInteger(context, "count"),
+                                                        IntegerArgumentType.getInteger(context, "radius")))))))
                 .executes(SpawnAllCommandHandler::sendHelp));
     }
 
@@ -88,8 +101,14 @@ public class SpawnAllCommandHandler {
      * 生成生物核心逻辑
      */
     private static int spawnEntities(CommandContext<CommandSourceStack> context,
+                                     Collection<ServerPlayer> targetPlayers,
                                      int count, int radius) {
         var source = context.getSource();
+
+        // 获取执行者（用于默认行为）
+        final ServerPlayer executor = source.getEntity() instanceof ServerPlayer
+                ? (ServerPlayer) source.getEntity()
+                : null;
 
         // 获取生物类型参数
         ResourceLocation entityId = ResourceLocationArgument.getId(context, "entity");
@@ -110,9 +129,25 @@ public class SpawnAllCommandHandler {
             return 0;
         }
 
-        var players = server.getPlayerList().getPlayers();
+        // 确定 target 玩家列表
+        Collection<ServerPlayer> players;
+        if (targetPlayers != null) {
+            // 用户指定了 targets
+            players = targetPlayers;
+        } else {
+            // 未指定，使用默认行为（除执行者外）
+            var allPlayers = server.getPlayerList().getPlayers();
+            if (executor != null) {
+                players = allPlayers.stream()
+                        .filter(p -> !p.getUUID().equals(executor.getUUID()))
+                        .collect(Collectors.toList());
+            } else {
+                players = allPlayers;
+            }
+        }
+
         if (players.isEmpty()) {
-            source.sendFailure(Component.literal("§c当前没有在线玩家"));
+            source.sendFailure(Component.literal("§c没有可用的目标玩家"));
             return 0;
         }
 
@@ -186,8 +221,9 @@ public class SpawnAllCommandHandler {
      */
     private static int sendHelp(CommandContext<CommandSourceStack> context) {
         Component helpMessage = Component.literal(
-                "§e用法: /spawnall <生物类型> [数量] [半径]\n" +
+                "§e用法: /spawnall <生物类型> [targets] [数量] [半径]\n" +
                         "§7生物类型: 例如 zombie、skeleton、creeper 等，支持原版全部生物和模组生物\n" +
+                        "§7targets: 目标玩家（使用 @a、@p、玩家名等选择器），默认为除执行者外的所有玩家\n" +
                         "§7数量: 每个玩家附近生成的生物数量 (默认: 1, 范围: 1-50)\n" +
                         "§7半径: 生成距离玩家的最大半径 (默认: 10, 范围: 1-100)\n" +
                         "§7权限: 需要OP权限 (等级4)"

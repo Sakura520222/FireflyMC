@@ -5,6 +5,9 @@ import com.google.gson.JsonObject;
 import firefly520.fireflymc.ai.AIFunctionTool;
 import firefly520.fireflymc.ai.FunctionCallResult;
 import firefly520.fireflymc.ai.FunctionToolRegistry;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.stream.Collectors;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
@@ -36,7 +39,7 @@ public class SpawnAllFunctionTool implements AIFunctionTool {
 
     @Override
     public String getDescription() {
-        return "在所有在线玩家附近生成指定生物。需要4级OP权限。";
+        return "在指定玩家附近生成指定生物。未指定目标时，默认为除了执行者以外的所有在线玩家。需要4级OP权限。";
     }
 
     @Override
@@ -71,6 +74,16 @@ public class SpawnAllFunctionTool implements AIFunctionTool {
         radius.addProperty("maximum", MAX_RADIUS);
         properties.add("radius", radius);
 
+        // targets 参数
+        JsonObject targetsParam = new JsonObject();
+        targetsParam.addProperty("type", "array");
+        targetsParam.addProperty("description", "目标玩家名称列表，如 [\"player1\", \"player2\"]。未提供或为空时，默认为除了执行者以外的所有玩家");
+
+        JsonObject items = new JsonObject();
+        items.addProperty("type", "string");
+        targetsParam.add("items", items);
+        properties.add("targets", targetsParam);
+
         schema.add("properties", properties);
 
         // required
@@ -104,11 +117,55 @@ public class SpawnAllFunctionTool implements AIFunctionTool {
             );
         }
 
-        var players = server.getPlayerList().getPlayers();
-        if (players.isEmpty()) {
+        var allPlayers = server.getPlayerList().getPlayers();
+        if (allPlayers.isEmpty()) {
             return FunctionCallResult.failure(
                     FunctionCallResult.ErrorType.EXECUTION_FAILED,
                     "当前没有在线玩家"
+            );
+        }
+
+        // 确定 target 玩家列表
+        List<ServerPlayer> targetPlayers;
+        if (arguments.has("targets") && arguments.get("targets").isJsonArray()) {
+            // 用户指定了 targets
+            JsonArray targetsArray = arguments.get("targets").getAsJsonArray();
+            if (targetsArray.size() > 0) {
+                targetPlayers = new ArrayList<>();
+                for (var targetElement : targetsArray) {
+                    String targetName = targetElement.getAsString();
+                    ServerPlayer target = allPlayers.stream()
+                            .filter(p -> p.getGameProfile().getName().equalsIgnoreCase(targetName))
+                            .findFirst()
+                            .orElse(null);
+                    if (target != null) {
+                        targetPlayers.add(target);
+                    }
+                }
+                if (targetPlayers.isEmpty()) {
+                    return FunctionCallResult.failure(
+                            FunctionCallResult.ErrorType.INVALID_ARGUMENT,
+                            "未找到任何指定的目标玩家"
+                    );
+                }
+            } else {
+                // 空数组，使用默认行为（除执行者外）
+                targetPlayers = allPlayers.stream()
+                        .filter(p -> !p.getUUID().equals(player.getUUID()))
+                        .collect(Collectors.toList());
+            }
+        } else {
+            // 未提供 targets，使用默认行为（除执行者外）
+            targetPlayers = allPlayers.stream()
+                    .filter(p -> !p.getUUID().equals(player.getUUID()))
+                    .collect(Collectors.toList());
+        }
+
+        // 检查是否有目标玩家
+        if (targetPlayers.isEmpty()) {
+            return FunctionCallResult.failure(
+                    FunctionCallResult.ErrorType.EXECUTION_FAILED,
+                    "没有可用的目标玩家"
             );
         }
 
@@ -153,7 +210,7 @@ public class SpawnAllFunctionTool implements AIFunctionTool {
         int totalSpawned = 0;
         int playersProcessed = 0;
 
-        for (ServerPlayer targetPlayer : players) {
+        for (ServerPlayer targetPlayer : targetPlayers) {
             ServerLevel level = targetPlayer.serverLevel();
             BlockPos playerPos = targetPlayer.blockPosition();
 
