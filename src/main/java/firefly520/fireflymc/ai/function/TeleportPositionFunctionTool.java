@@ -4,14 +4,9 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import firefly520.fireflymc.ai.AIFunctionTool;
 import firefly520.fireflymc.ai.FunctionCallResult;
-import firefly520.fireflymc.ai.FunctionToolRegistry;
-import net.minecraft.core.BlockPos;
-import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
-
-import java.util.UUID;
 
 /**
  * 传送到坐标的函数工具
@@ -88,21 +83,13 @@ public class TeleportPositionFunctionTool implements AIFunctionTool {
 
     @Override
     public FunctionCallResult execute(ServerPlayer player, JsonObject arguments) {
-        // 权限验证
-        if (!FunctionToolRegistry.hasPermissionForTool(player, getName())) {
-            return FunctionCallResult.failure(
-                    FunctionCallResult.ErrorType.PERMISSION_DENIED,
-                    "权限不足：需要3级OP权限"
-            );
+        // 检查前置条件
+        FunctionCallResult checkResult = FunctionToolHelper.checkPreconditions(player, this);
+        if (checkResult != null) {
+            return checkResult;
         }
 
         var server = player.getServer();
-        if (server == null) {
-            return FunctionCallResult.failure(
-                    FunctionCallResult.ErrorType.EXECUTION_FAILED,
-                    "服务器未就绪"
-            );
-        }
 
         // 解析必需参数
         if (!arguments.has("x") || !arguments.has("y") || !arguments.has("z")) {
@@ -112,14 +99,45 @@ public class TeleportPositionFunctionTool implements AIFunctionTool {
             );
         }
 
-        double x = arguments.get("x").getAsDouble();
-        double y = arguments.get("y").getAsDouble();
-        double z = arguments.get("z").getAsDouble();
+        // 验证坐标参数类型
+        var xElement = arguments.get("x");
+        var yElement = arguments.get("y");
+        var zElement = arguments.get("z");
+
+        if (!xElement.isJsonPrimitive() || !xElement.getAsJsonPrimitive().isNumber()) {
+            return FunctionCallResult.failure(
+                    FunctionCallResult.ErrorType.INVALID_ARGUMENT,
+                    "x 参数必须是数字"
+            );
+        }
+        if (!yElement.isJsonPrimitive() || !yElement.getAsJsonPrimitive().isNumber()) {
+            return FunctionCallResult.failure(
+                    FunctionCallResult.ErrorType.INVALID_ARGUMENT,
+                    "y 参数必须是数字"
+            );
+        }
+        if (!zElement.isJsonPrimitive() || !zElement.getAsJsonPrimitive().isNumber()) {
+            return FunctionCallResult.failure(
+                    FunctionCallResult.ErrorType.INVALID_ARGUMENT,
+                    "z 参数必须是数字"
+            );
+        }
+
+        double x = xElement.getAsDouble();
+        double y = yElement.getAsDouble();
+        double z = zElement.getAsDouble();
 
         // 确定目标玩家
         ServerPlayer targetPlayer = player;
         if (arguments.has("targetPlayer") && !arguments.get("targetPlayer").isJsonNull()) {
-            String targetName = arguments.get("targetPlayer").getAsString();
+            var targetPlayerElement = arguments.get("targetPlayer");
+            if (!targetPlayerElement.isJsonPrimitive() || !targetPlayerElement.getAsJsonPrimitive().isString()) {
+                return FunctionCallResult.failure(
+                        FunctionCallResult.ErrorType.INVALID_ARGUMENT,
+                        "targetPlayer 参数必须是字符串"
+                );
+            }
+            String targetName = targetPlayerElement.getAsString();
             targetPlayer = server.getPlayerList().getPlayerByName(targetName);
             if (targetPlayer == null) {
                 return FunctionCallResult.failure(
@@ -132,7 +150,14 @@ public class TeleportPositionFunctionTool implements AIFunctionTool {
         // 确定目标维度
         ServerLevel targetLevel = targetPlayer.serverLevel();
         if (arguments.has("dimension") && !arguments.get("dimension").isJsonNull()) {
-            String dimensionStr = arguments.get("dimension").getAsString();
+            var dimensionElement = arguments.get("dimension");
+            if (!dimensionElement.isJsonPrimitive() || !dimensionElement.getAsJsonPrimitive().isString()) {
+                return FunctionCallResult.failure(
+                        FunctionCallResult.ErrorType.INVALID_ARGUMENT,
+                        "dimension 参数必须是字符串"
+                );
+            }
+            String dimensionStr = dimensionElement.getAsString();
             ResourceLocation dimensionId = ResourceLocation.tryParse(dimensionStr);
             if (dimensionId == null) {
                 return FunctionCallResult.failure(

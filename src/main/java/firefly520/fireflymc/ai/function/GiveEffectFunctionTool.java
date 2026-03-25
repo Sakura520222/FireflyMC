@@ -109,12 +109,23 @@ public class GiveEffectFunctionTool implements AIFunctionTool {
         }
 
         String effectStr = arguments.get("effect").getAsString().toLowerCase();
-        int duration = arguments.has("duration")
-                ? arguments.get("duration").getAsInt()
-                : DEFAULT_DURATION;
-        int amplifier = arguments.has("amplifier")
-                ? arguments.get("amplifier").getAsInt()
-                : DEFAULT_AMPLIFIER;
+        int duration = DEFAULT_DURATION;
+        int amplifier = DEFAULT_AMPLIFIER;
+
+        // 解析可选参数并添加类型验证
+        try {
+            if (arguments.has("duration")) {
+                duration = arguments.get("duration").getAsInt();
+            }
+            if (arguments.has("amplifier")) {
+                amplifier = arguments.get("amplifier").getAsInt();
+            }
+        } catch (IllegalStateException e) {
+            return FunctionCallResult.failure(
+                    FunctionCallResult.ErrorType.INVALID_ARGUMENT,
+                    "duration和amplifier参数必须是整数"
+            );
+        }
 
         // 验证范围
         duration = Math.max(MIN_DURATION, Math.min(MAX_DURATION, duration));
@@ -139,13 +150,12 @@ public class GiveEffectFunctionTool implements AIFunctionTool {
         ResourceLocation effectId = ResourceLocation.tryParse(effectStr);
         if (effectId == null) {
             effectId = ResourceLocation.tryParse("minecraft:" + effectStr);
-        }
-
-        if (effectId == null) {
-            return FunctionCallResult.failure(
-                    FunctionCallResult.ErrorType.INVALID_ARGUMENT,
-                    "无效的效果ID: " + effectStr
-            );
+            if (effectId == null) {
+                return FunctionCallResult.failure(
+                        FunctionCallResult.ErrorType.INVALID_ARGUMENT,
+                        "无效的效果ID: " + effectStr
+                );
+            }
         }
 
         var effectHolder = BuiltInRegistries.MOB_EFFECT.getHolder(effectId);

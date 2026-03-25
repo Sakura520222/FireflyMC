@@ -4,7 +4,6 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import firefly520.fireflymc.ai.AIFunctionTool;
 import firefly520.fireflymc.ai.FunctionCallResult;
-import firefly520.fireflymc.ai.FunctionToolRegistry;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 
@@ -52,21 +51,13 @@ public class SummonPlayerFunctionTool implements AIFunctionTool {
 
     @Override
     public FunctionCallResult execute(ServerPlayer player, JsonObject arguments) {
-        // 权限验证
-        if (!FunctionToolRegistry.hasPermissionForTool(player, getName())) {
-            return FunctionCallResult.failure(
-                    FunctionCallResult.ErrorType.PERMISSION_DENIED,
-                    "权限不足：需要3级OP权限"
-            );
+        // 检查前置条件
+        FunctionCallResult checkResult = FunctionToolHelper.checkPreconditions(player, this);
+        if (checkResult != null) {
+            return checkResult;
         }
 
         var server = player.getServer();
-        if (server == null) {
-            return FunctionCallResult.failure(
-                    FunctionCallResult.ErrorType.EXECUTION_FAILED,
-                    "服务器未就绪"
-            );
-        }
 
         // 解析必需参数
         if (!arguments.has("playerName")) {
@@ -76,7 +67,16 @@ public class SummonPlayerFunctionTool implements AIFunctionTool {
             );
         }
 
-        String targetName = arguments.get("playerName").getAsString();
+        // 验证playerName参数类型
+        var playerNameElement = arguments.get("playerName");
+        if (!playerNameElement.isJsonPrimitive() || !playerNameElement.getAsJsonPrimitive().isString()) {
+            return FunctionCallResult.failure(
+                    FunctionCallResult.ErrorType.INVALID_ARGUMENT,
+                    "playerName 参数必须是字符串"
+            );
+        }
+
+        String targetName = playerNameElement.getAsString();
 
         // 查找目标玩家
         ServerPlayer targetPlayer = server.getPlayerList().getPlayerByName(targetName);

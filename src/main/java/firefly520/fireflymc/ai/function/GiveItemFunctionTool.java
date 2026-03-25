@@ -9,6 +9,7 @@ import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.item.Item;
+import net.minecraft.world.item.Items;
 import net.minecraft.world.item.ItemStack;
 
 /**
@@ -99,9 +100,19 @@ public class GiveItemFunctionTool implements AIFunctionTool {
         }
 
         String itemStr = arguments.get("item").getAsString();
-        int count = arguments.has("count")
-                ? arguments.get("count").getAsInt()
-                : DEFAULT_COUNT;
+
+        // 解析count参数并添加类型验证
+        int count = DEFAULT_COUNT;
+        if (arguments.has("count")) {
+            try {
+                count = arguments.get("count").getAsInt();
+            } catch (IllegalStateException e) {
+                return FunctionCallResult.failure(
+                        FunctionCallResult.ErrorType.INVALID_ARGUMENT,
+                        "count参数必须是整数"
+                );
+            }
+        }
 
         // 验证范围
         count = Math.max(MIN_COUNT, Math.min(MAX_COUNT, count));
@@ -131,7 +142,7 @@ public class GiveItemFunctionTool implements AIFunctionTool {
         }
 
         Item item = BuiltInRegistries.ITEM.get(itemId);
-        if (item == null || item == Item.byId(0)) {  // Item.byId(0) 是空气
+        if (item == null || item == Items.AIR) {
             return FunctionCallResult.failure(
                     FunctionCallResult.ErrorType.INVALID_ARGUMENT,
                     "未知的物品: " + itemStr

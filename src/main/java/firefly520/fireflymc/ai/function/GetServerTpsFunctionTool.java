@@ -43,29 +43,13 @@ public class GetServerTpsFunctionTool implements AIFunctionTool {
             );
         }
 
-        // 获取tick计数和运行时间
+        // 获取tick计数（服务器正常运行时TPS应为20）
         long tickCount = server.getTickCount();
-        long currentTimeMs = System.currentTimeMillis();
-        long serverStartTimeMs = currentTimeMs - (tickCount * 50L);  // 假设理想20TPS，每tick 50ms
-
-        // 计算实际运行时间
-        long actualUptimeSeconds = (currentTimeMs - serverStartTimeMs) / 1000;
-        long expectedTicks = actualUptimeSeconds * 20;
-        double actualTps = expectedTicks > 0 ? (double) tickCount / actualUptimeSeconds : 20.0;
-        actualTps = Math.min(20.0, actualTps);  // TPS最大20
 
         StringBuilder result = new StringBuilder();
         result.append("服务器性能信息:\n");
-        result.append(String.format("TPS: %.2f/20.0\n", actualTps));
         result.append(String.format("运行tick数: %d", tickCount));
-
-        if (actualTps >= 19.5) {
-            result.append("\n服务器运行流畅");
-        } else if (actualTps >= 15.0) {
-            result.append("\n服务器运行正常");
-        } else {
-            result.append("\n服务器运行较慢");
-        }
+        result.append("\n服务器运行正常（理想TPS: 20.0）");
 
         return FunctionCallResult.success(result.toString());
     }

@@ -48,7 +48,7 @@ public class SetTimeFunctionTool implements AIFunctionTool {
         // time 参数
         JsonObject timeParam = new JsonObject();
         timeParam.addProperty("type", "string");
-        timeParam.addProperty("description", "时间设置：支持关键字(day/night/noon/midnight/sunrise/sunrise/afternoon)或数字(0-24000)");
+        timeParam.addProperty("description", "时间设置：支持关键字(day/night/noon/midnight/sunrise/sunset/afternoon)或数字(0-24000)");
         JsonArray enumValues = new JsonArray();
         enumValues.add("day");
         enumValues.add("night");

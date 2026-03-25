@@ -86,6 +86,15 @@ public class KickPlayerFunctionTool implements AIFunctionTool {
         }
 
         String targetName = arguments.get("playerName").getAsString();
+
+        // 检查是否尝试踢出自己
+        if (targetName.equals(player.getGameProfile().getName())) {
+            return FunctionCallResult.failure(
+                    FunctionCallResult.ErrorType.INVALID_ARGUMENT,
+                    "不能踢出自己"
+            );
+        }
+
         String reason = arguments.has("reason") && !arguments.get("reason").isJsonNull()
                 ? arguments.get("reason").getAsString()
                 : DEFAULT_REASON;

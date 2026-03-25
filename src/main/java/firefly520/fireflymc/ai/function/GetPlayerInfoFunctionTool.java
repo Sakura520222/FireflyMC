@@ -57,14 +57,16 @@ public class GetPlayerInfoFunctionTool implements AIFunctionTool {
 
         // 确定目标玩家
         ServerPlayer targetPlayer = player;
-        if (arguments.has("playerName") && !arguments.get("playerName").getAsString().isBlank()) {
+        if (arguments.has("playerName") && !arguments.get("playerName").isJsonNull()) {
             String targetName = arguments.get("playerName").getAsString();
-            targetPlayer = server.getPlayerList().getPlayerByName(targetName);
-            if (targetPlayer == null) {
-                return FunctionCallResult.failure(
-                        FunctionCallResult.ErrorType.EXECUTION_FAILED,
-                        "玩家 " + targetName + " 不在线"
-                );
+            if (!targetName.isBlank()) {
+                targetPlayer = server.getPlayerList().getPlayerByName(targetName);
+                if (targetPlayer == null) {
+                    return FunctionCallResult.failure(
+                            FunctionCallResult.ErrorType.EXECUTION_FAILED,
+                            "玩家 " + targetName + " 不在线"
+                    );
+                }
             }
         }
 

@@ -98,8 +98,9 @@ public class ClearInventoryFunctionTool implements AIFunctionTool {
 
         switch (slot) {
             case "all" -> {
-                // 清空所有物品
-                for (int i = 0; i < targetPlayer.getInventory().getContainerSize(); i++) {
+                // 清空所有物品 - 先统计非空槽位数量
+                int containerSize = targetPlayer.getInventory().getContainerSize();
+                for (int i = 0; i < containerSize; i++) {
                     if (!targetPlayer.getInventory().getItem(i).isEmpty()) {
                         clearedCount++;
                     }
