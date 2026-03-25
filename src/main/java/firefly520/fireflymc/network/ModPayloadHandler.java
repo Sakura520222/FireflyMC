@@ -2,6 +2,7 @@ package firefly520.fireflymc.network;
 
 import firefly520.fireflymc.FireflyMCMod;
 import firefly520.fireflymc.ModEventHandler;
+import firefly520.fireflymc.kit.StarterKitManager;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
 import net.neoforged.neoforge.network.handling.IPayloadContext;
@@ -59,6 +60,8 @@ public class ModPayloadHandler {
                 serverPlayer.setInvulnerable(false);
                 // 标记玩家已确认
                 CONFIRMED_PLAYERS.put(playerUuid, true);
+                // 给予新手福利包
+                StarterKitManager.giveStarterKit(serverPlayer);
             }
         });
     }

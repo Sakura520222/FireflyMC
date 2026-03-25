@@ -179,6 +179,24 @@ public class PlayerEventWebSocketClient {
                         }
                     }
 
+                    // 检查是否是福利包检查响应
+                    if (!handled) {
+                        StarterKitCheckResponse checkResp = StarterKitCheckResponse.fromJson(json);
+                        if (checkResp != null && checkResp.isValid()) {
+                            StarterKitWebSocketManager.getInstance().handleCheckResponse(checkResp);
+                            handled = true;
+                        }
+                    }
+
+                    // 检查是否是福利包标记响应
+                    if (!handled) {
+                        StarterKitClaimResponse claimResp = StarterKitClaimResponse.fromJson(json);
+                        if (claimResp != null && claimResp.isValid()) {
+                            StarterKitWebSocketManager.getInstance().handleClaimResponse(claimResp);
+                            handled = true;
+                        }
+                    }
+
                     if (!handled) {
                         LOGGER.debug("[FireflyMC] 未处理的消息类型或服务器实例未设置");
                     }
@@ -365,6 +383,54 @@ public class PlayerEventWebSocketClient {
                 }
             } else {
                 LOGGER.warn("[FireflyMC] WebSocket未连接，无法发送验证请求");
+            }
+        });
+    }
+
+    /**
+     * 发送福利包检查请求
+     *
+     * @param request 检查请求
+     */
+    public static void sendStarterKitCheck(StarterKitCheckRequest request) {
+        if (!WebSocketConfig.ENABLED) {
+            return;
+        }
+
+        EXECUTOR.submit(() -> {
+            if (wsClient != null && isConnected.get()) {
+                try {
+                    wsClient.sendText(request.toJson(), true).join();
+                    LOGGER.debug("[FireflyMC] 发送福利包检查请求: {}", request.getRequestId());
+                } catch (Exception e) {
+                    LOGGER.error("[FireflyMC] 发送福利包检查请求失败: {}", e.getMessage());
+                }
+            } else {
+                LOGGER.warn("[FireflyMC] WebSocket未连接，无法发送福利包检查请求");
+            }
+        });
+    }
+
+    /**
+     * 发送福利包标记请求
+     *
+     * @param request 标记请求
+     */
+    public static void sendStarterKitClaim(StarterKitClaimRequest request) {
+        if (!WebSocketConfig.ENABLED) {
+            return;
+        }
+
+        EXECUTOR.submit(() -> {
+            if (wsClient != null && isConnected.get()) {
+                try {
+                    wsClient.sendText(request.toJson(), true).join();
+                    LOGGER.debug("[FireflyMC] 发送福利包标记请求: {}", request.getPlayerUuid());
+                } catch (Exception e) {
+                    LOGGER.error("[FireflyMC] 发送福利包标记请求失败: {}", e.getMessage());
+                }
+            } else {
+                LOGGER.warn("[FireflyMC] WebSocket未连接，无法发送福利包标记请求");
             }
         });
     }
