@@ -161,11 +161,38 @@ public class PlayerEventWebSocketClient {
                         }
                     }
 
+                    // 检查是否是玩家列表查询请求
+                    if (!handled) {
+                        PlayerListQueryRequestMessage queryReq = PlayerListQueryRequestMessage.fromJson(json);
+                        if (queryReq != null && queryReq.isValid()) {
+                            handlePlayerListQuery(webSocket, queryReq);
+                            handled = true;
+                        }
+                    }
+
                     // 检查是否是聊天消息
                     if (!handled && server != null) {
                         ServerMessage message = ServerMessage.fromJson(json);
                         if (message != null && message.isValidChatMessage()) {
                             ServerMessageBroadcaster.broadcast(server, message);
+                            handled = true;
+                        }
+                    }
+
+                    // 检查是否是福利包检查响应
+                    if (!handled) {
+                        StarterKitCheckResponse checkResp = StarterKitCheckResponse.fromJson(json);
+                        if (checkResp != null && checkResp.isValid()) {
+                            StarterKitWebSocketManager.getInstance().handleCheckResponse(checkResp);
+                            handled = true;
+                        }
+                    }
+
+                    // 检查是否是福利包标记响应
+                    if (!handled) {
+                        StarterKitClaimResponse claimResp = StarterKitClaimResponse.fromJson(json);
+                        if (claimResp != null && claimResp.isValid()) {
+                            StarterKitWebSocketManager.getInstance().handleClaimResponse(claimResp);
                             handled = true;
                         }
                     }
@@ -268,6 +295,37 @@ public class PlayerEventWebSocketClient {
     }
 
     /**
+     * 处理玩家列表查询请求
+     */
+    private static void handlePlayerListQuery(java.net.http.WebSocket webSocket, PlayerListQueryRequestMessage request) {
+        EXECUTOR.submit(() -> {
+            try {
+                PlayerListQueryResponseMessage response;
+
+                if (server != null) {
+                    // 服务器已启动，获取玩家列表
+                    response = PlayerListQueryResponseMessage.success(
+                        request.getRequestId(),
+                        server.getPlayerList().getPlayers(),
+                        server.getPlayerList().getPlayerCount(),
+                        server.getPlayerList().getMaxPlayers(),
+                        server
+                    );
+                    LOGGER.debug("[FireflyMC] 响应玩家列表查询: {} 在线", server.getPlayerList().getPlayerCount());
+                } else {
+                    // 服务器未启动
+                    response = PlayerListQueryResponseMessage.serverNotReady(request.getRequestId());
+                    LOGGER.warn("[FireflyMC] 收到玩家列表查询，但服务器实例未设置");
+                }
+
+                webSocket.sendText(response.toJson(), true).join();
+            } catch (Exception e) {
+                LOGGER.error("[FireflyMC] 发送玩家列表响应失败: {}", e.getMessage());
+            }
+        });
+    }
+
+    /**
      * 发送WebSocket响应
      */
     private static void sendResponse(java.net.http.WebSocket webSocket, WebSocketResponse response) {
@@ -325,6 +383,54 @@ public class PlayerEventWebSocketClient {
                 }
             } else {
                 LOGGER.warn("[FireflyMC] WebSocket未连接，无法发送验证请求");
+            }
+        });
+    }
+
+    /**
+     * 发送福利包检查请求
+     *
+     * @param request 检查请求
+     */
+    public static void sendStarterKitCheck(StarterKitCheckRequest request) {
+        if (!WebSocketConfig.ENABLED) {
+            return;
+        }
+
+        EXECUTOR.submit(() -> {
+            if (wsClient != null && isConnected.get()) {
+                try {
+                    wsClient.sendText(request.toJson(), true).join();
+                    LOGGER.debug("[FireflyMC] 发送福利包检查请求: {}", request.getRequestId());
+                } catch (Exception e) {
+                    LOGGER.error("[FireflyMC] 发送福利包检查请求失败: {}", e.getMessage());
+                }
+            } else {
+                LOGGER.warn("[FireflyMC] WebSocket未连接，无法发送福利包检查请求");
+            }
+        });
+    }
+
+    /**
+     * 发送福利包标记请求
+     *
+     * @param request 标记请求
+     */
+    public static void sendStarterKitClaim(StarterKitClaimRequest request) {
+        if (!WebSocketConfig.ENABLED) {
+            return;
+        }
+
+        EXECUTOR.submit(() -> {
+            if (wsClient != null && isConnected.get()) {
+                try {
+                    wsClient.sendText(request.toJson(), true).join();
+                    LOGGER.debug("[FireflyMC] 发送福利包标记请求: {}", request.getPlayerUuid());
+                } catch (Exception e) {
+                    LOGGER.error("[FireflyMC] 发送福利包标记请求失败: {}", e.getMessage());
+                }
+            } else {
+                LOGGER.warn("[FireflyMC] WebSocket未连接，无法发送福利包标记请求");
             }
         });
     }

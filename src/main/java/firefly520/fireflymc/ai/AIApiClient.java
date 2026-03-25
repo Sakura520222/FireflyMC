@@ -1,6 +1,8 @@
 package firefly520.fireflymc.ai;
 
 import com.google.gson.Gson;
+import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import net.minecraft.network.chat.Component;
 import org.slf4j.Logger;
@@ -283,5 +285,193 @@ public class AIApiClient {
         NETWORK_ERROR,  // 网络错误
         PARSE_ERROR,    // 解析错误
         API_ERROR       // API错误
+    }
+
+    // ========== 函数调用支持 ==========
+
+    /**
+     * 带函数工具的AI响应
+     */
+    public record AIWithToolsResponse(
+            String content,
+            ErrorType errorType,
+            java.util.List<FunctionCallRequest> toolCalls
+    ) {
+        public boolean isSuccess() {
+            return errorType == ErrorType.NONE;
+        }
+
+        public boolean hasToolCalls() {
+            return toolCalls != null && !toolCalls.isEmpty();
+        }
+
+        public static AIWithToolsResponse textOnly(String content) {
+            return new AIWithToolsResponse(content, ErrorType.NONE, java.util.Collections.emptyList());
+        }
+
+        public static AIWithToolsResponse error(ErrorType errorType) {
+            return new AIWithToolsResponse(null, errorType, java.util.Collections.emptyList());
+        }
+
+        public static AIWithToolsResponse withToolCalls(java.util.List<FunctionCallRequest> toolCalls) {
+            return new AIWithToolsResponse(null, ErrorType.NONE, toolCalls);
+        }
+    }
+
+    /**
+     * 带函数工具的AI调用
+     *
+     * @param history    聊天历史
+     * @param userMessage 用户消息
+     * @param playerName  玩家名称
+     * @param tools      可用的函数工具列表
+     * @return AI响应（可能包含工具调用）
+     */
+    public static AIWithToolsResponse callAIWithFunctions(
+            List<ChatMessage> history,
+            String userMessage,
+            String playerName,
+            List<AIFunctionTool> tools) {
+        try {
+            // 构建请求体
+            JsonObject requestBody = new JsonObject();
+            requestBody.addProperty("model", AIConfig.getModel());
+
+            // 构建消息数组
+            var messages = history.stream()
+                    .map(ChatMessage::toApiMessage)
+                    .collect(Collectors.toList());
+
+            // 添加系统提示
+            String systemPrompt = SYSTEM_PROMPT + "\n\n玩家 [" + playerName + "] 刚刚发了消息，messages数组中的最后一条就是他/她发送的，请回复最后一条消息。";
+            if (tools != null && !tools.isEmpty()) {
+                systemPrompt += "\n\n你可以使用以下工具来帮助玩家：";
+                for (var tool : tools) {
+                    systemPrompt += "\n- " + tool.getName() + ": " + tool.getDescription();
+                }
+            }
+            messages.add(0, new ApiMessage("system", null, systemPrompt));
+
+            // 转换为JSON
+            var messagesJson = GSON.toJsonTree(messages).getAsJsonArray();
+            requestBody.add("messages", messagesJson);
+
+            // 添加函数工具定义
+            if (tools != null && !tools.isEmpty()) {
+                JsonArray toolsArray = new JsonArray();
+                for (var tool : tools) {
+                    JsonObject toolObject = new JsonObject();
+                    toolObject.addProperty("type", "function");
+                    JsonObject function = new JsonObject();
+                    function.addProperty("name", tool.getName());
+                    function.addProperty("description", tool.getDescription());
+                    function.add("parameters", tool.getParametersSchema());
+                    toolObject.add("function", function);
+                    toolsArray.add(toolObject);
+                }
+                requestBody.add("tools", toolsArray);
+                // 启用并行函数调用
+                requestBody.addProperty("parallel_tool_calls", true);
+            }
+
+            // 创建HTTP请求
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create(AIConfig.getApiUrl() + "/chat/completions"))
+                    .timeout(Duration.ofSeconds(15))
+                    .header("Content-Type", "application/json")
+                    .header("Authorization", "Bearer " + AIConfig.getApiKey())
+                    .POST(HttpRequest.BodyPublishers.ofString(GSON.toJson(requestBody)))
+                    .build();
+
+            // 发送请求
+            HttpResponse<String> response = HTTP_CLIENT.send(request,
+                    HttpResponse.BodyHandlers.ofString());
+
+            // 处理响应
+            return handleResponseWithTools(response);
+
+        } catch (java.net.SocketTimeoutException e) {
+            LOGGER.error("[FireflyMC] AI API请求超时: {}", e.getMessage());
+            return AIWithToolsResponse.error(ErrorType.TIMEOUT);
+        } catch (Exception e) {
+            LOGGER.error("[FireflyMC] AI API调用失败: {}", e.getMessage(), e);
+            return AIWithToolsResponse.error(ErrorType.NETWORK_ERROR);
+        }
+    }
+
+    /**
+     * 处理带函数工具的API响应
+     */
+    private static AIWithToolsResponse handleResponseWithTools(HttpResponse<String> response) {
+        int statusCode = response.statusCode();
+
+        // 成功响应
+        if (statusCode == 200) {
+            try {
+                JsonObject responseJson = GSON.fromJson(response.body(), JsonObject.class);
+                JsonObject message = responseJson
+                        .getAsJsonArray("choices")
+                        .get(0).getAsJsonObject()
+                        .getAsJsonObject("message");
+
+                // 检查是否有工具调用
+                if (message.has("tool_calls") && message.get("tool_calls").isJsonArray()) {
+                    JsonArray toolCallsArray = message.getAsJsonArray("tool_calls");
+                    java.util.List<FunctionCallRequest> toolCalls = new java.util.ArrayList<>();
+
+                    for (JsonElement element : toolCallsArray) {
+                        JsonObject toolCall = element.getAsJsonObject();
+                        String id = toolCall.get("id").getAsString();
+                        JsonObject function = toolCall.getAsJsonObject("function");
+                        String name = function.get("name").getAsString();
+                        String argumentsStr = function.get("arguments").getAsString();
+
+                        // 解析参数字符串为JsonObject
+                        JsonObject arguments = GSON.fromJson(argumentsStr, JsonObject.class);
+                        toolCalls.add(new FunctionCallRequest(id, name, arguments));
+                    }
+
+                    return AIWithToolsResponse.withToolCalls(toolCalls);
+                }
+
+                // 普通文本响应
+                if (message.has("content")) {
+                    String content = message.get("content").getAsString();
+                    content = sanitizeMessage(content);
+                    return AIWithToolsResponse.textOnly(content);
+                }
+
+                // 空响应（可能是拒绝回答）
+                return AIWithToolsResponse.textOnly("");
+
+            } catch (Exception e) {
+                LOGGER.error("[FireflyMC] 解析AI响应失败: {}", e.getMessage());
+                return AIWithToolsResponse.error(ErrorType.PARSE_ERROR);
+            }
+        }
+
+        // 401 未授权 - API密钥错误
+        if (statusCode == 401) {
+            LOGGER.error("[FireflyMC] AI API密钥无效！请检查配置文件中的apiKey");
+            return AIWithToolsResponse.error(ErrorType.INVALID_KEY);
+        }
+
+        // 429 请求过多
+        if (statusCode == 429) {
+            LOGGER.warn("[FireflyMC] AI API请求频率过高");
+            return AIWithToolsResponse.error(ErrorType.RATE_LIMIT);
+        }
+
+        // 内容安全过滤
+        if (statusCode == 400 && response.body() != null) {
+            if (response.body().toLowerCase().contains("content_filter") ||
+                response.body().toLowerCase().contains("safety")) {
+                return AIWithToolsResponse.error(ErrorType.CONTENT_FILTER);
+            }
+        }
+
+        // 其他错误
+        LOGGER.error("[FireflyMC] AI API返回错误: {} {}", statusCode, response.body());
+        return AIWithToolsResponse.error(ErrorType.API_ERROR);
     }
 }
