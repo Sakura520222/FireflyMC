@@ -4,8 +4,10 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import firefly520.fireflymc.ai.AIFunctionTool;
 import firefly520.fireflymc.ai.FunctionCallResult;
+import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.level.levelgen.Heightmap;
 
 /**
  * 召唤玩家的函数工具
@@ -101,5 +103,34 @@ public class SummonPlayerFunctionTool implements AIFunctionTool {
                 String.format("已将 %s 召唤到你的位置 %s (%.1f, %.1f, %.1f)",
                         targetName, dimensionName, x, y, z)
         );
+    }
+
+    @Override
+    public FunctionCallResult execute(MinecraftServer server, JsonObject arguments) {
+        if (!arguments.has("playerName")) {
+            return FunctionCallResult.failure(FunctionCallResult.ErrorType.INVALID_ARGUMENT, "缺少必需参数: playerName");
+        }
+        FunctionCallResult validationResult = FunctionToolHelper.validateStringType(
+                arguments.get("playerName"), "playerName");
+        if (validationResult != null) return validationResult;
+
+        String targetName = arguments.get("playerName").getAsString();
+        ServerPlayer targetPlayer = server.getPlayerList().getPlayerByName(targetName);
+        if (targetPlayer == null) {
+            return FunctionCallResult.failure(FunctionCallResult.ErrorType.EXECUTION_FAILED,
+                    "玩家 " + targetName + " 不在线");
+        }
+
+        // 从控制台执行时，使用主世界出生点作为目标位置
+        ServerLevel overworld = server.overworld();
+        var spawnPos = overworld.getSharedSpawnPos();
+        double x = spawnPos.getX() + 0.5;
+        double y = overworld.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, spawnPos.getX(), spawnPos.getZ());
+        double z = spawnPos.getZ() + 0.5;
+
+        targetPlayer.teleportTo(overworld, x, y, z, 0, 0);
+
+        return FunctionCallResult.success(
+                String.format("已将 %s 召唤到主世界出生点 (%.1f, %.1f, %.1f)", targetName, x, y, z));
     }
 }

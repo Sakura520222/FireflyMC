@@ -4,6 +4,7 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import firefly520.fireflymc.ai.AIFunctionTool;
 import firefly520.fireflymc.ai.FunctionCallResult;
+import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 
 /**
@@ -58,6 +59,42 @@ public class ListPlayersFunctionTool implements AIFunctionTool {
         int maxPlayers = server.getPlayerList().getMaxPlayers();
 
         // 获取includeDetails参数（默认false）
+        boolean includeDetails = false;
+        if (arguments.has("includeDetails") && !arguments.get("includeDetails").isJsonNull()) {
+            var elem = arguments.get("includeDetails");
+            if (elem.isJsonPrimitive() && elem.getAsJsonPrimitive().isBoolean()) {
+                includeDetails = elem.getAsBoolean();
+            }
+        }
+
+        StringBuilder result = new StringBuilder();
+        result.append(String.format("当前在线: %d/%d 人", players.size(), maxPlayers));
+
+        if (players.isEmpty()) {
+            return FunctionCallResult.success(result.toString());
+        }
+
+        result.append("\n玩家列表:");
+        for (ServerPlayer p : players) {
+            String gameMode = p.gameMode.getGameModeForPlayer().getName();
+            if (includeDetails) {
+                String dimension = p.serverLevel().dimension().location().toString();
+                result.append(String.format("\n- %s (%s, %s)",
+                        p.getGameProfile().getName(), gameMode, dimension));
+            } else {
+                result.append(String.format("\n- %s (%s)",
+                        p.getGameProfile().getName(), gameMode));
+            }
+        }
+
+        return FunctionCallResult.success(result.toString());
+    }
+
+    @Override
+    public FunctionCallResult execute(MinecraftServer server, JsonObject arguments) {
+        var players = server.getPlayerList().getPlayers();
+        int maxPlayers = server.getPlayerList().getMaxPlayers();
+
         boolean includeDetails = false;
         if (arguments.has("includeDetails") && !arguments.get("includeDetails").isJsonNull()) {
             var elem = arguments.get("includeDetails");

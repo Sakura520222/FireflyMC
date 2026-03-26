@@ -5,6 +5,7 @@ import com.google.gson.JsonObject;
 import firefly520.fireflymc.ai.AIFunctionTool;
 import firefly520.fireflymc.ai.FunctionCallResult;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 
 /**
@@ -126,5 +127,46 @@ public class TeleportPlayerFunctionTool implements AIFunctionTool {
                 String.format("已将 %s 传送到 %s 的位置 %s",
                         targetName, destName, dimensionName)
         );
+    }
+
+    @Override
+    public FunctionCallResult execute(MinecraftServer server, JsonObject arguments) {
+        if (!arguments.has("targetPlayer")) {
+            return FunctionCallResult.failure(FunctionCallResult.ErrorType.INVALID_ARGUMENT, "从控制台执行必须指定 targetPlayer");
+        }
+
+        if (!arguments.has("destinationPlayer")) {
+            return FunctionCallResult.failure(FunctionCallResult.ErrorType.INVALID_ARGUMENT, "缺少必需参数: destinationPlayer");
+        }
+
+        FunctionCallResult validationResult = FunctionToolHelper.validateStringType(
+                arguments.get("destinationPlayer"), "destinationPlayer");
+        if (validationResult != null) return validationResult;
+        String destName = arguments.get("destinationPlayer").getAsString();
+
+        var targetResult = FunctionToolHelper.getRequiredTargetPlayer(server, arguments, "targetPlayer");
+        if (targetResult.hasError()) return targetResult.error();
+
+        ServerPlayer targetPlayer = targetResult.player();
+
+        ServerPlayer destPlayer = server.getPlayerList().getPlayerByName(destName);
+        if (destPlayer == null) {
+            return FunctionCallResult.failure(FunctionCallResult.ErrorType.EXECUTION_FAILED,
+                    "玩家 " + destName + " 不在线");
+        }
+
+        ServerLevel destLevel = destPlayer.serverLevel();
+        double x = destPlayer.getX();
+        double y = destPlayer.getY();
+        double z = destPlayer.getZ();
+        float yaw = destPlayer.getYRot();
+        float pitch = destPlayer.getXRot();
+
+        targetPlayer.teleportTo(destLevel, x, y, z, yaw, pitch);
+
+        String targetName = targetPlayer.getGameProfile().getName();
+        String dimensionName = destLevel.dimension().location().toString();
+        return FunctionCallResult.success(
+                String.format("已将 %s 传送到 %s 的位置 %s", targetName, destName, dimensionName));
     }
 }

@@ -86,6 +86,39 @@ public class FunctionToolHelper {
     }
 
     /**
+     * 从服务器获取必需的目标玩家（控制台版本，无默认玩家）
+     *
+     * @param server    Minecraft服务器实例
+     * @param arguments 参数对象
+     * @param paramName 目标玩家参数名（如 "targetPlayer"）
+     * @return 包含目标玩家的结果
+     */
+    public static PlayerResult getRequiredTargetPlayer(MinecraftServer server, JsonObject arguments, String paramName) {
+        var nameResult = getRequiredString(arguments, paramName);
+        if (nameResult.hasError()) {
+            return new PlayerResult(null, nameResult.error());
+        }
+        String targetName = nameResult.value();
+        ServerPlayer targetPlayer = server.getPlayerList().getPlayerByName(targetName);
+        if (targetPlayer == null) {
+            return new PlayerResult(null, FunctionCallResult.failure(
+                    FunctionCallResult.ErrorType.EXECUTION_FAILED,
+                    "玩家 " + targetName + " 不在线"
+            ));
+        }
+        return new PlayerResult(targetPlayer, null);
+    }
+
+    /**
+     * 玩家结果包装类
+     */
+    public record PlayerResult(ServerPlayer player, FunctionCallResult error) {
+        public boolean hasError() {
+            return error != null;
+        }
+    }
+
+    /**
      * 验证字符串参数类型
      *
      * @param element   Json元素

@@ -7,6 +7,7 @@ import firefly520.fireflymc.ai.FunctionCallResult;
 import firefly520.fireflymc.ai.FunctionToolRegistry;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.Items;
@@ -168,5 +169,52 @@ public class GiveItemFunctionTool implements AIFunctionTool {
                 String.format("已给予 %s %dx %s",
                         targetName, count, itemId.toString())
         );
+    }
+
+    @Override
+    public FunctionCallResult execute(MinecraftServer server, JsonObject arguments) {
+        if (!arguments.has("item")) {
+            return FunctionCallResult.failure(FunctionCallResult.ErrorType.INVALID_ARGUMENT, "缺少必需参数: item");
+        }
+        if (!arguments.has("targetPlayer")) {
+            return FunctionCallResult.failure(FunctionCallResult.ErrorType.INVALID_ARGUMENT, "从控制台执行必须指定 targetPlayer");
+        }
+
+        String itemStr = arguments.get("item").getAsString();
+
+        int count = DEFAULT_COUNT;
+        if (arguments.has("count")) {
+            try { count = arguments.get("count").getAsInt(); }
+            catch (IllegalStateException e) {
+                return FunctionCallResult.failure(FunctionCallResult.ErrorType.INVALID_ARGUMENT, "count参数必须是整数");
+            }
+        }
+        count = Math.max(MIN_COUNT, Math.min(MAX_COUNT, count));
+
+        var targetResult = FunctionToolHelper.getRequiredTargetPlayer(server, arguments, "targetPlayer");
+        if (targetResult.hasError()) return targetResult.error();
+
+        String targetName = arguments.get("targetPlayer").getAsString();
+        ServerPlayer targetPlayer = targetResult.player();
+
+        ResourceLocation itemId = ResourceLocation.tryParse(itemStr);
+        if (itemId == null) {
+            return FunctionCallResult.failure(FunctionCallResult.ErrorType.INVALID_ARGUMENT, "无效的物品ID: " + itemStr);
+        }
+        Item item = BuiltInRegistries.ITEM.get(itemId);
+        if (item == null || item == Items.AIR) {
+            return FunctionCallResult.failure(FunctionCallResult.ErrorType.INVALID_ARGUMENT, "未知的物品: " + itemStr);
+        }
+
+        ItemStack itemStack = new ItemStack(item, count);
+        boolean added = targetPlayer.getInventory().add(itemStack);
+
+        if (!added) {
+            targetPlayer.drop(itemStack, false);
+            return FunctionCallResult.success(
+                    String.format("已给予 %s %dx %s（背包已满，物品掉落在地上）", targetName, count, itemId.toString()));
+        }
+        return FunctionCallResult.success(
+                String.format("已给予 %s %dx %s", targetName, count, itemId.toString()));
     }
 }

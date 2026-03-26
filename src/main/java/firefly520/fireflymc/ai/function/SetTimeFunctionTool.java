@@ -4,6 +4,7 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import firefly520.fireflymc.ai.AIFunctionTool;
 import firefly520.fireflymc.ai.FunctionCallResult;
+import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 
@@ -150,6 +151,49 @@ public class SetTimeFunctionTool implements AIFunctionTool {
         }
 
         // 返回友好的时间描述
+        String timeDesc = getTimeDescription(timeValue);
+        return FunctionCallResult.success("已将时间设置为 " + timeDesc);
+    }
+
+    @Override
+    public FunctionCallResult execute(MinecraftServer server, JsonObject arguments) {
+        long timeValue;
+
+        if (arguments.has("time") && !arguments.get("time").isJsonNull()) {
+            FunctionCallResult validationResult = FunctionToolHelper.validateStringType(arguments.get("time"), "time");
+            if (validationResult != null) return validationResult;
+
+            String timeStr = arguments.get("time").getAsString().toLowerCase().trim();
+            if (TIME_KEYWORDS.containsKey(timeStr)) {
+                timeValue = TIME_KEYWORDS.get(timeStr);
+            } else {
+                try {
+                    timeValue = Long.parseLong(timeStr);
+                    if (timeValue < 0 || timeValue > 24000) {
+                        return FunctionCallResult.failure(FunctionCallResult.ErrorType.INVALID_ARGUMENT, "时间值必须在0-24000之间");
+                    }
+                } catch (NumberFormatException e) {
+                    return FunctionCallResult.failure(FunctionCallResult.ErrorType.INVALID_ARGUMENT,
+                            "无效的时间参数: " + timeStr + "。支持: day, night, noon, midnight, sunrise, sunset 或 0-24000的数字");
+                }
+            }
+        } else if (arguments.has("timeValue")) {
+            var timeValueElement = arguments.get("timeValue");
+            if (!timeValueElement.isJsonPrimitive() || !timeValueElement.getAsJsonPrimitive().isNumber()) {
+                return FunctionCallResult.failure(FunctionCallResult.ErrorType.INVALID_ARGUMENT, "timeValue 参数必须是数字");
+            }
+            timeValue = timeValueElement.getAsLong();
+            if (timeValue < 0 || timeValue > 24000) {
+                return FunctionCallResult.failure(FunctionCallResult.ErrorType.INVALID_ARGUMENT, "时间值必须在0-24000之间");
+            }
+        } else {
+            return FunctionCallResult.failure(FunctionCallResult.ErrorType.INVALID_ARGUMENT, "缺少时间参数");
+        }
+
+        for (ServerLevel level : server.getAllLevels()) {
+            level.setDayTime(timeValue);
+        }
+
         String timeDesc = getTimeDescription(timeValue);
         return FunctionCallResult.success("已将时间设置为 " + timeDesc);
     }

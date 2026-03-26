@@ -5,6 +5,7 @@ import com.google.gson.JsonObject;
 import firefly520.fireflymc.ai.AIFunctionTool;
 import firefly520.fireflymc.ai.FunctionCallResult;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 
@@ -179,5 +180,64 @@ public class TeleportPositionFunctionTool implements AIFunctionTool {
                 String.format("已将 %s 传送到 (%.1f, %.1f, %.1f) %s",
                         playerName, x, y, z, dimensionName)
         );
+    }
+
+    @Override
+    public FunctionCallResult execute(MinecraftServer server, JsonObject arguments) {
+        if (!arguments.has("targetPlayer")) {
+            return FunctionCallResult.failure(FunctionCallResult.ErrorType.INVALID_ARGUMENT, "从控制台执行必须指定 targetPlayer");
+        }
+
+        if (!arguments.has("x") || !arguments.has("y") || !arguments.has("z")) {
+            return FunctionCallResult.failure(FunctionCallResult.ErrorType.INVALID_ARGUMENT, "缺少必需参数: x, y, z");
+        }
+
+        FunctionCallResult validationResult;
+        validationResult = FunctionToolHelper.validateNumberType(arguments.get("x"), "x");
+        if (validationResult != null) return validationResult;
+        validationResult = FunctionToolHelper.validateNumberType(arguments.get("y"), "y");
+        if (validationResult != null) return validationResult;
+        validationResult = FunctionToolHelper.validateNumberType(arguments.get("z"), "z");
+        if (validationResult != null) return validationResult;
+
+        double x = arguments.get("x").getAsDouble();
+        double y = arguments.get("y").getAsDouble();
+        double z = arguments.get("z").getAsDouble();
+
+        var targetResult = FunctionToolHelper.getRequiredTargetPlayer(server, arguments, "targetPlayer");
+        if (targetResult.hasError()) return targetResult.error();
+
+        ServerPlayer targetPlayer = targetResult.player();
+
+        ServerLevel targetLevel = targetPlayer.serverLevel();
+        if (arguments.has("dimension") && !arguments.get("dimension").isJsonNull()) {
+            validationResult = FunctionToolHelper.validateStringType(arguments.get("dimension"), "dimension");
+            if (validationResult != null) return validationResult;
+            String dimensionStr = arguments.get("dimension").getAsString();
+            ResourceLocation dimensionId = ResourceLocation.tryParse(dimensionStr);
+            if (dimensionId == null) {
+                return FunctionCallResult.failure(FunctionCallResult.ErrorType.INVALID_ARGUMENT, "无效的维度ID: " + dimensionStr);
+            }
+            ServerLevel foundLevel = null;
+            for (ServerLevel level : server.getAllLevels()) {
+                if (level.dimension().location().equals(dimensionId)) {
+                    foundLevel = level;
+                    break;
+                }
+            }
+            if (foundLevel == null) {
+                return FunctionCallResult.failure(FunctionCallResult.ErrorType.EXECUTION_FAILED, "维度不存在: " + dimensionStr);
+            }
+            targetLevel = foundLevel;
+        }
+
+        String playerName = targetPlayer.getGameProfile().getName();
+        float yaw = targetPlayer.getYRot();
+        float pitch = targetPlayer.getXRot();
+        targetPlayer.teleportTo(targetLevel, x, y, z, yaw, pitch);
+
+        String dimensionName = targetLevel.dimension().location().toString();
+        return FunctionCallResult.success(
+                String.format("已将 %s 传送到 (%.1f, %.1f, %.1f) %s", playerName, x, y, z, dimensionName));
     }
 }
