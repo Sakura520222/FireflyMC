@@ -30,10 +30,14 @@ public class PlayerListQueryRequestMessage {
     @SerializedName("timestamp")
     private final long timestamp;
 
-    private PlayerListQueryRequestMessage(String requestId) {
+    @SerializedName("key")
+    private final String key;
+
+    private PlayerListQueryRequestMessage(String requestId, String key) {
         this.type = "player_list_query";
         this.requestId = requestId;
         this.timestamp = System.currentTimeMillis();
+        this.key = key;
     }
 
     /**
@@ -71,5 +75,9 @@ public class PlayerListQueryRequestMessage {
 
     public long getTimestamp() {
         return timestamp;
+    }
+
+    public String getKey() {
+        return key;
     }
 }

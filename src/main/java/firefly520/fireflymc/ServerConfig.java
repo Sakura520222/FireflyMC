@@ -20,7 +20,7 @@ public class ServerConfig {
     public static class ServerConfigImpl {
         // 服务器配置
         public final ModConfigSpec.BooleanValue enableRemoteShutdown;
-        public final ModConfigSpec.ConfigValue<String> shutdownKey;
+        public final ModConfigSpec.ConfigValue<String> wsAuthKey;
         public final ModConfigSpec.BooleanValue enableMemberVerification;
         public final ModConfigSpec.IntValue memberVerificationTimeout;
         public final ModConfigSpec.BooleanValue enableItemCleanup;
@@ -60,10 +60,10 @@ public class ServerConfig {
                     .translation("fireflymc.config.server.enable_remote_shutdown")
                     .define("enableRemoteShutdown", true);
 
-            shutdownKey = builder
-                    .comment("Secret key for remote shutdown verification")
-                    .translation("fireflymc.config.server.shutdown_key")
-                    .define("shutdownKey", "change-this-key-in-production");
+            wsAuthKey = builder
+                    .comment("Secret key for WebSocket authentication")
+                    .translation("fireflymc.config.server.ws_auth_key")
+                    .define("wsAuthKey", "change-this-key-in-production");
 
             enableMemberVerification = builder
                     .comment("Enable WebSocket member verification (kick players not in verified list)")

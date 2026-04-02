@@ -25,6 +25,9 @@ public class StarterKitCheckResponse {
     @SerializedName("claimed")
     private boolean claimed;
 
+    @SerializedName("key")
+    private String key;
+
     /**
      * 从JSON解析响应消息
      * @param json JSON字符串
@@ -59,5 +62,9 @@ public class StarterKitCheckResponse {
 
     public boolean isClaimed() {
         return claimed;
+    }
+
+    public String getKey() {
+        return key;
     }
 }

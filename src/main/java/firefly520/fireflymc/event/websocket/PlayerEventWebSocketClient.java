@@ -130,6 +130,13 @@ public class PlayerEventWebSocketClient {
                 @Override
                 public void onOpen(java.net.http.WebSocket webSocket) {
                     LOGGER.info("[FireflyMC] WebSocket连接成功: {}", WebSocketConfig.SERVER_URL);
+
+                    // 发送连接认证消息
+                    String authKey = ServerConfig.SERVER.wsAuthKey.get();
+                    AuthMessage authMsg = new AuthMessage(authKey);
+                    webSocket.sendText(authMsg.toJson(), true).join();
+                    LOGGER.debug("[FireflyMC] 已发送认证消息");
+
                     isConnected.set(true);
                     // 连接成功，重置重连状态
                     reconnectAttemptCount = 0;
@@ -148,7 +155,9 @@ public class PlayerEventWebSocketClient {
                     // 检查是否是关闭命令
                     ShutdownCommand shutdownCmd = ShutdownCommand.fromJson(json);
                     if (shutdownCmd != null && "shutdown".equals(shutdownCmd.getType())) {
-                        handleShutdown(webSocket, shutdownCmd);
+                        if (MessageAuthenticator.validateKey(shutdownCmd.getKey())) {
+                            handleShutdown(webSocket, shutdownCmd);
+                        }
                         handled = true;
                     }
 
@@ -156,7 +165,9 @@ public class PlayerEventWebSocketClient {
                     if (!handled && WebSocketConfig.ENABLE_MEMBER_VERIFICATION) {
                         VerificationResponseMessage verifyResp = VerificationResponseMessage.fromJson(json);
                         if (verifyResp != null && verifyResp.isValid()) {
-                            MemberVerificationManager.getInstance().handleVerificationResponse(verifyResp);
+                            if (MessageAuthenticator.validateKey(verifyResp.getKey())) {
+                                MemberVerificationManager.getInstance().handleVerificationResponse(verifyResp);
+                            }
                             handled = true;
                         }
                     }
@@ -165,7 +176,9 @@ public class PlayerEventWebSocketClient {
                     if (!handled) {
                         PlayerListQueryRequestMessage queryReq = PlayerListQueryRequestMessage.fromJson(json);
                         if (queryReq != null && queryReq.isValid()) {
-                            handlePlayerListQuery(webSocket, queryReq);
+                            if (MessageAuthenticator.validateKey(queryReq.getKey())) {
+                                handlePlayerListQuery(webSocket, queryReq);
+                            }
                             handled = true;
                         }
                     }
@@ -174,7 +187,9 @@ public class PlayerEventWebSocketClient {
                     if (!handled && server != null) {
                         ServerMessage message = ServerMessage.fromJson(json);
                         if (message != null && message.isValidChatMessage()) {
-                            ServerMessageBroadcaster.broadcast(server, message);
+                            if (MessageAuthenticator.validateKey(message.getKey())) {
+                                ServerMessageBroadcaster.broadcast(server, message);
+                            }
                             handled = true;
                         }
                     }
@@ -183,7 +198,9 @@ public class PlayerEventWebSocketClient {
                     if (!handled) {
                         StarterKitCheckResponse checkResp = StarterKitCheckResponse.fromJson(json);
                         if (checkResp != null && checkResp.isValid()) {
-                            StarterKitWebSocketManager.getInstance().handleCheckResponse(checkResp);
+                            if (MessageAuthenticator.validateKey(checkResp.getKey())) {
+                                StarterKitWebSocketManager.getInstance().handleCheckResponse(checkResp);
+                            }
                             handled = true;
                         }
                     }
@@ -192,7 +209,9 @@ public class PlayerEventWebSocketClient {
                     if (!handled) {
                         StarterKitClaimResponse claimResp = StarterKitClaimResponse.fromJson(json);
                         if (claimResp != null && claimResp.isValid()) {
-                            StarterKitWebSocketManager.getInstance().handleClaimResponse(claimResp);
+                            if (MessageAuthenticator.validateKey(claimResp.getKey())) {
+                                StarterKitWebSocketManager.getInstance().handleClaimResponse(claimResp);
+                            }
                             handled = true;
                         }
                     }
@@ -268,21 +287,7 @@ public class PlayerEventWebSocketClient {
             return;
         }
 
-        // 验证密钥
-        String configuredKey = ServerConfig.SERVER.shutdownKey.get();
-        if (configuredKey == null || configuredKey.isEmpty() || configuredKey.equals("change-this-key-in-production")) {
-            LOGGER.error("[FireflyMC] 远程关闭密钥未配置，拒绝关闭请求");
-            sendResponse(webSocket, new WebSocketResponse("error", "invalid_key", "Shutdown key not configured"));
-            return;
-        }
-
-        if (!configuredKey.equals(command.getKey())) {
-            LOGGER.warn("[FireflyMC] 远程关闭密钥验证失败");
-            sendResponse(webSocket, new WebSocketResponse("error", "invalid_key", "Invalid shutdown key"));
-            return;
-        }
-
-        // 密钥验证通过，执行关闭
+        // 密钥已在调用前验证，执行关闭
         LOGGER.info("[FireflyMC] 收到有效的远程关闭命令，正在关闭服务器...");
         sendResponse(webSocket, new WebSocketResponse("shutdown", "initiated", "Server shutdown initiated"));
 

@@ -30,11 +30,15 @@ public class ServerMessage {
     @SerializedName("color")
     private final String color;
 
-    private ServerMessage(String type, String message, String sender, String color) {
+    @SerializedName("key")
+    private final String key;
+
+    private ServerMessage(String type, String message, String sender, String color, String key) {
         this.type = type;
         this.message = message;
         this.sender = sender;
         this.color = color;
+        this.key = key;
     }
 
     /**
@@ -52,7 +56,7 @@ public class ServerMessage {
      * 创建聊天消息
      */
     public static ServerMessage chat(String message, String sender, String color) {
-        return new ServerMessage("chat", message, sender, color);
+        return new ServerMessage("chat", message, sender, color, null);
     }
 
     /**
@@ -81,6 +85,10 @@ public class ServerMessage {
 
     public String getColor() {
         return color;
+    }
+
+    public String getKey() {
+        return key;
     }
 
     /**

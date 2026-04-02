@@ -3,6 +3,8 @@ package firefly520.fireflymc.event.websocket;
 import com.google.gson.Gson;
 import com.google.gson.annotations.SerializedName;
 
+import firefly520.fireflymc.ServerConfig;
+
 /**
  * 福利包检查请求消息
  * 向服务端查询玩家是否已领取福利包
@@ -25,6 +27,9 @@ public class StarterKitCheckRequest {
     @SerializedName("timestamp")
     private final long timestamp;
 
+    @SerializedName("key")
+    private final String key;
+
     /**
      * 创建福利包检查请求
      * @param playerUuid 玩家UUID
@@ -36,6 +41,7 @@ public class StarterKitCheckRequest {
         this.playerName = playerName;
         this.requestId = requestId;
         this.timestamp = System.currentTimeMillis();
+        this.key = ServerConfig.SERVER.wsAuthKey.get();
     }
 
     /**

@@ -34,11 +34,15 @@ public class VerificationResponseMessage {
     @SerializedName("message")
     private final String message;
 
-    private VerificationResponseMessage(String type, String playerId, boolean verified, String message) {
+    @SerializedName("key")
+    private final String key;
+
+    private VerificationResponseMessage(String type, String playerId, boolean verified, String message, String key) {
         this.type = type;
         this.playerId = playerId;
         this.verified = verified;
         this.message = message;
+        this.key = key;
     }
 
     /**
@@ -83,5 +87,9 @@ public class VerificationResponseMessage {
 
     public String getMessage() {
         return message;
+    }
+
+    public String getKey() {
+        return key;
     }
 }
