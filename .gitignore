@@ -42,3 +42,6 @@ repo/
 # Keep logs directory for debugging
 !logs/
 .claude/
+
+# Backup files
+*.bak
