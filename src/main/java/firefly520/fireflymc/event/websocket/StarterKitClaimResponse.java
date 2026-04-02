@@ -22,6 +22,9 @@ public class StarterKitClaimResponse {
     @SerializedName("success")
     private boolean success;
 
+    @SerializedName("key")
+    private String key;
+
     /**
      * 从JSON解析响应消息
      * @param json JSON字符串
@@ -51,5 +54,9 @@ public class StarterKitClaimResponse {
 
     public boolean isSuccess() {
         return success;
+    }
+
+    public String getKey() {
+        return key;
     }
 }

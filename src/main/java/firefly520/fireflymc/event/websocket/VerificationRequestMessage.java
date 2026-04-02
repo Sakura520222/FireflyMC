@@ -3,6 +3,8 @@ package firefly520.fireflymc.event.websocket;
 import com.google.gson.Gson;
 import com.google.gson.annotations.SerializedName;
 
+import firefly520.fireflymc.ServerConfig;
+
 /**
  * 玩家验证请求消息
  * <p>
@@ -29,6 +31,9 @@ public class VerificationRequestMessage {
     @SerializedName("timestamp")
     private final long timestamp;
 
+    @SerializedName("key")
+    private final String key;
+
     /**
      * 创建验证请求消息
      *
@@ -38,6 +43,7 @@ public class VerificationRequestMessage {
         this.type = "verify_member";
         this.playerId = playerId;
         this.timestamp = System.currentTimeMillis();
+        this.key = ServerConfig.SERVER.wsAuthKey.get();
     }
 
     /**

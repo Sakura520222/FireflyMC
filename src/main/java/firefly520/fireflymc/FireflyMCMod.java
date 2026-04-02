@@ -21,7 +21,7 @@ import firefly520.fireflymc.util.ServerLanguageLoader;
 @Mod(FireflyMCMod.MODID)
 public class FireflyMCMod {
   public static final String MODID = "fireflymc";
-  public static final String VERSION = "2.4.0";
+  public static final String VERSION = "2.4.1";
 
   public FireflyMCMod(IEventBus modEventBus, ModContainer modContainer) {
     // 1. 注册客户端配置（官方标准写法）
@@ -61,7 +61,7 @@ public class FireflyMCMod {
     // 5. 检查Mod更新
     UpdateChecker.checkForUpdate();
 
-    System.out.println("Loading FireflyMC 2.4.0");
+    System.out.println("Loading FireflyMC 2.4.1");
   }
 
   // 服务端启动完成后加载中文语言文件
@@ -69,6 +69,8 @@ public class FireflyMCMod {
     ServerLanguageLoader.loadZhCnLanguage();
     // 设置服务器实例，用于WebSocket接收消息后广播
     firefly520.fireflymc.event.websocket.PlayerEventWebSocketClient.setServer(event.getServer());
+    // 启动掉落物自动清理
+    ItemCleanupManager.getInstance().start(event.getServer());
   }
 
   // 服务端关闭时清理资源
@@ -78,5 +80,7 @@ public class FireflyMCMod {
     firefly520.fireflymc.event.websocket.PlayerEventWebSocketClient.clearServer();
     // 关闭成员验证管理器
     firefly520.fireflymc.event.websocket.MemberVerificationManager.getInstance().shutdown();
+    // 停止掉落物自动清理
+    ItemCleanupManager.getInstance().stop();
   }
 }

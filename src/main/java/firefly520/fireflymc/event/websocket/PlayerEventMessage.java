@@ -2,6 +2,7 @@ package firefly520.fireflymc.event.websocket;
 
 import com.google.gson.Gson;
 
+import firefly520.fireflymc.ServerConfig;
 /**
  * 玩家事件消息
  *
@@ -23,9 +24,10 @@ public class PlayerEventMessage {
     private final String deathMessage;   // 死亡消息
     private final String advancement;    // 成就标题
     private final String senderType;     // 发送者类型: "player" 或 "ai"
+    private final String key;
 
     private PlayerEventMessage(String eventType, String playerName, String message,
-                               String deathMessage, String advancement, String senderType) {
+                               String deathMessage, String advancement, String senderType, String key) {
         this.eventType = eventType;
         this.playerName = playerName;
         this.timestamp = System.currentTimeMillis();
@@ -33,24 +35,25 @@ public class PlayerEventMessage {
         this.deathMessage = deathMessage;
         this.advancement = advancement;
         this.senderType = senderType;
+        this.key = key;
     }
 
     /**
      * 创建玩家加入/离开事件
      */
     public static PlayerEventMessage join(String playerName) {
-        return new PlayerEventMessage("join", playerName, null, null, null, null);
+        return new PlayerEventMessage("join", playerName, null, null, null, null, ServerConfig.SERVER.wsAuthKey.get());
     }
 
     public static PlayerEventMessage leave(String playerName) {
-        return new PlayerEventMessage("leave", playerName, null, null, null, null);
+        return new PlayerEventMessage("leave", playerName, null, null, null, null, ServerConfig.SERVER.wsAuthKey.get());
     }
 
     /**
      * 创建聊天消息事件
      */
     public static PlayerEventMessage chat(String playerName, String message, String senderType) {
-        return new PlayerEventMessage("chat", playerName, message, null, null, senderType);
+        return new PlayerEventMessage("chat", playerName, message, null, null, senderType, ServerConfig.SERVER.wsAuthKey.get());
     }
 
     public static PlayerEventMessage playerChat(String playerName, String message) {
@@ -65,14 +68,14 @@ public class PlayerEventMessage {
      * 创建玩家死亡事件
      */
     public static PlayerEventMessage death(String playerName, String deathMessage) {
-        return new PlayerEventMessage("death", playerName, null, deathMessage, null, null);
+        return new PlayerEventMessage("death", playerName, null, deathMessage, null, null, ServerConfig.SERVER.wsAuthKey.get());
     }
 
     /**
      * 创建成就解锁事件
      */
     public static PlayerEventMessage advancement(String playerName, String advancementTitle) {
-        return new PlayerEventMessage("advancement", playerName, null, null, advancementTitle, null);
+        return new PlayerEventMessage("advancement", playerName, null, null, advancementTitle, null, ServerConfig.SERVER.wsAuthKey.get());
     }
 
     public String toJson() {

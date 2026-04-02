@@ -20,9 +20,11 @@ public class ServerConfig {
     public static class ServerConfigImpl {
         // 服务器配置
         public final ModConfigSpec.BooleanValue enableRemoteShutdown;
-        public final ModConfigSpec.ConfigValue<String> shutdownKey;
+        public final ModConfigSpec.ConfigValue<String> wsAuthKey;
         public final ModConfigSpec.BooleanValue enableMemberVerification;
         public final ModConfigSpec.IntValue memberVerificationTimeout;
+        public final ModConfigSpec.BooleanValue enableItemCleanup;
+        public final ModConfigSpec.IntValue itemCleanupIntervalMinutes;
 
         // AI配置
         public final ModConfigSpec.ConfigValue<String> aiApiUrl;
@@ -58,10 +60,10 @@ public class ServerConfig {
                     .translation("fireflymc.config.server.enable_remote_shutdown")
                     .define("enableRemoteShutdown", true);
 
-            shutdownKey = builder
-                    .comment("Secret key for remote shutdown verification")
-                    .translation("fireflymc.config.server.shutdown_key")
-                    .define("shutdownKey", "change-this-key-in-production");
+            wsAuthKey = builder
+                    .comment("Secret key for WebSocket authentication")
+                    .translation("fireflymc.config.server.ws_auth_key")
+                    .define("wsAuthKey", "change-this-key-in-production");
 
             enableMemberVerification = builder
                     .comment("Enable WebSocket member verification (kick players not in verified list)")
@@ -72,6 +74,16 @@ public class ServerConfig {
                     .comment("Member verification timeout in seconds")
                     .translation("fireflymc.config.server.member_verification_timeout")
                     .defineInRange("memberVerificationTimeout", 10, 3, 60);
+
+            enableItemCleanup = builder
+                    .comment("Enable automatic item cleanup (remove dropped items periodically)")
+                    .translation("fireflymc.config.server.enable_item_cleanup")
+                    .define("enableItemCleanup", true);
+
+            itemCleanupIntervalMinutes = builder
+                    .comment("Item cleanup interval in minutes")
+                    .translation("fireflymc.config.server.item_cleanup_interval_minutes")
+                    .defineInRange("itemCleanupIntervalMinutes", 5, 1, 60);
 
             builder.pop();
 
