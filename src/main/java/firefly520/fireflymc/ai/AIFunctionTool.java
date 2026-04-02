@@ -1,6 +1,7 @@
 package firefly520.fireflymc.ai;
 
 import com.google.gson.JsonObject;
+import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 
 /**
@@ -47,13 +48,28 @@ public interface AIFunctionTool {
     int getRequiredPermissionLevel();
 
     /**
-     * 执行函数
-     * <p>
-     * 当AI决定调用此函数时，此方法将被调用
+     * 执行函数（玩家触发）
      *
      * @param player    触发此函数调用的玩家（用于权限验证）
      * @param arguments AI传递的函数参数
      * @return 执行结果
      */
     FunctionCallResult execute(ServerPlayer player, JsonObject arguments);
+
+    /**
+     * 执行函数（服务器控制台触发）
+     * <p>
+     * 从控制台触发时具有最高权限（4级OP），无需玩家上下文。
+     * 默认实现返回不支持提示，需要各工具自行覆写以支持控制台调用。
+     *
+     * @param server    Minecraft服务器实例
+     * @param arguments AI传递的函数参数
+     * @return 执行结果
+     */
+    default FunctionCallResult execute(MinecraftServer server, JsonObject arguments) {
+        return FunctionCallResult.failure(
+                FunctionCallResult.ErrorType.EXECUTION_FAILED,
+                "此工具不支持从服务器控制台调用"
+        );
+    }
 }

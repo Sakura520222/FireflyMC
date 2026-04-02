@@ -3,6 +3,7 @@ package firefly520.fireflymc.ai.function;
 import com.google.gson.JsonObject;
 import firefly520.fireflymc.ai.AIFunctionTool;
 import firefly520.fireflymc.ai.FunctionCallResult;
+import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 
 /**
@@ -63,6 +64,23 @@ public class GetServerUptimeFunctionTool implements AIFunctionTool {
         result.append(minutes).append("分钟 ");
         result.append(seconds).append("秒");
 
+        return FunctionCallResult.success(result.toString());
+    }
+
+    @Override
+    public FunctionCallResult execute(MinecraftServer server, JsonObject arguments) {
+        long tickCount = server.getTickCount();
+        long totalSeconds = tickCount / 20;
+        long days = totalSeconds / 86400;
+        long hours = (totalSeconds % 86400) / 3600;
+        long minutes = (totalSeconds % 3600) / 60;
+        long seconds = totalSeconds % 60;
+        StringBuilder result = new StringBuilder();
+        result.append("服务器已运行 ");
+        if (days > 0) result.append(days).append("天 ");
+        if (hours > 0 || days > 0) result.append(hours).append("小时 ");
+        result.append(minutes).append("分钟 ");
+        result.append(seconds).append("秒");
         return FunctionCallResult.success(result.toString());
     }
 }

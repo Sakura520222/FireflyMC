@@ -4,8 +4,10 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import firefly520.fireflymc.ai.AIFunctionTool;
 import firefly520.fireflymc.ai.FunctionCallResult;
+import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.level.levelgen.Heightmap;
 
 /**
  * 召唤玩家的函数工具
@@ -101,5 +103,26 @@ public class SummonPlayerFunctionTool implements AIFunctionTool {
                 String.format("已将 %s 召唤到你的位置 %s (%.1f, %.1f, %.1f)",
                         targetName, dimensionName, x, y, z)
         );
+    }
+
+    @Override
+    public FunctionCallResult execute(MinecraftServer server, JsonObject arguments) {
+        var targetResult = FunctionToolHelper.getRequiredTargetPlayer(server, arguments, "playerName");
+        if (targetResult.hasError()) return targetResult.error();
+
+        ServerPlayer targetPlayer = targetResult.player();
+        String targetName = targetPlayer.getGameProfile().getName();
+
+        // 从控制台执行时，使用主世界出生点作为目标位置
+        ServerLevel overworld = server.overworld();
+        var spawnPos = overworld.getSharedSpawnPos();
+        double x = spawnPos.getX() + 0.5;
+        double y = overworld.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, spawnPos.getX(), spawnPos.getZ());
+        double z = spawnPos.getZ() + 0.5;
+
+        targetPlayer.teleportTo(overworld, x, y, z, 0, 0);
+
+        return FunctionCallResult.success(
+                String.format("已将 %s 召唤到主世界出生点 (%.1f, %.1f, %.1f)", targetName, x, y, z));
     }
 }

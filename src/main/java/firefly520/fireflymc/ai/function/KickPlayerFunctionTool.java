@@ -5,6 +5,7 @@ import com.google.gson.JsonObject;
 import firefly520.fireflymc.ai.AIFunctionTool;
 import firefly520.fireflymc.ai.FunctionCallResult;
 import net.minecraft.network.chat.Component;
+import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 
 /**
@@ -97,6 +98,18 @@ public class KickPlayerFunctionTool implements AIFunctionTool {
         // 踢出玩家
         targetPlayer.connection.disconnect(Component.literal(reason));
 
+        return FunctionCallResult.success("已踢出玩家 " + targetName + "，原因: " + reason);
+    }
+
+    @Override
+    public FunctionCallResult execute(MinecraftServer server, JsonObject arguments) {
+        var targetResult = FunctionToolHelper.getRequiredTargetPlayer(server, arguments, "playerName");
+        if (targetResult.hasError()) return targetResult.error();
+
+        String targetName = targetResult.player().getGameProfile().getName();
+        String reason = FunctionToolHelper.getOptionalString(arguments, "reason", DEFAULT_REASON);
+
+        targetResult.player().connection.disconnect(Component.literal(reason));
         return FunctionCallResult.success("已踢出玩家 " + targetName + "，原因: " + reason);
     }
 }

@@ -5,6 +5,8 @@ import com.google.gson.JsonObject;
 import firefly520.fireflymc.ai.AIFunctionTool;
 import firefly520.fireflymc.ai.FunctionCallResult;
 import firefly520.fireflymc.ai.FunctionToolRegistry;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.MinecraftServer;
 
@@ -80,6 +82,39 @@ public class FunctionToolHelper {
      * 服务器结果包装类
      */
     public record ServerResult(MinecraftServer server, FunctionCallResult error) {
+        public boolean hasError() {
+            return error != null;
+        }
+    }
+
+    /**
+     * 从服务器获取必需的目标玩家（控制台版本，无默认玩家）
+     *
+     * @param server    Minecraft服务器实例
+     * @param arguments 参数对象
+     * @param paramName 目标玩家参数名（如 "targetPlayer"）
+     * @return 包含目标玩家的结果
+     */
+    public static PlayerResult getRequiredTargetPlayer(MinecraftServer server, JsonObject arguments, String paramName) {
+        var nameResult = getRequiredString(arguments, paramName);
+        if (nameResult.hasError()) {
+            return new PlayerResult(null, nameResult.error());
+        }
+        String targetName = nameResult.value();
+        ServerPlayer targetPlayer = server.getPlayerList().getPlayerByName(targetName);
+        if (targetPlayer == null) {
+            return new PlayerResult(null, FunctionCallResult.failure(
+                    FunctionCallResult.ErrorType.EXECUTION_FAILED,
+                    "玩家 " + targetName + " 不在线"
+            ));
+        }
+        return new PlayerResult(targetPlayer, null);
+    }
+
+    /**
+     * 玩家结果包装类
+     */
+    public record PlayerResult(ServerPlayer player, FunctionCallResult error) {
         public boolean hasError() {
             return error != null;
         }
@@ -201,5 +236,111 @@ public class FunctionToolHelper {
         public boolean hasError() {
             return error != null;
         }
+    }
+
+    /**
+     * 维度结果包装类
+     */
+    public record LevelResult(ServerLevel level, FunctionCallResult error) {
+        public boolean hasError() {
+            return error != null;
+        }
+    }
+
+    /**
+     * 获取可选的目标玩家（玩家版本，默认为执行者自己）
+     *
+     * @param server        Minecraft服务器实例
+     * @param arguments     参数对象
+     * @param paramName     目标玩家参数名
+     * @param defaultPlayer 默认玩家（通常为执行者）
+     * @return 包含目标玩家的结果
+     */
+    public static PlayerResult getOptionalTargetPlayer(MinecraftServer server, JsonObject arguments, String paramName, ServerPlayer defaultPlayer) {
+        String targetName = getOptionalString(arguments, paramName, null);
+        if (targetName == null || targetName.isBlank()) {
+            return new PlayerResult(defaultPlayer, null);
+        }
+        ServerPlayer targetPlayer = server.getPlayerList().getPlayerByName(targetName);
+        if (targetPlayer == null) {
+            return new PlayerResult(null, FunctionCallResult.failure(
+                    FunctionCallResult.ErrorType.EXECUTION_FAILED,
+                    "玩家 " + targetName + " 不在线"
+            ));
+        }
+        return new PlayerResult(targetPlayer, null);
+    }
+
+    /**
+     * 获取必需的double参数
+     *
+     * @param arguments 参数对象
+     * @param paramName 参数名称
+     * @return 包含Double值的ParameterResult，如果出错则包含错误
+     */
+    public static ParameterResult<Double> getRequiredDouble(JsonObject arguments, String paramName) {
+        if (!arguments.has(paramName)) {
+            return new ParameterResult<>(null, FunctionCallResult.failure(
+                    FunctionCallResult.ErrorType.INVALID_ARGUMENT,
+                    "缺少必需参数: " + paramName
+            ));
+        }
+        JsonElement element = arguments.get(paramName);
+        if (element.isJsonNull()) {
+            return new ParameterResult<>(null, FunctionCallResult.failure(
+                    FunctionCallResult.ErrorType.INVALID_ARGUMENT,
+                    paramName + " 参数不能为空"
+            ));
+        }
+        FunctionCallResult validationResult = validateNumberType(element, paramName);
+        if (validationResult != null) {
+            return new ParameterResult<>(null, validationResult);
+        }
+        return new ParameterResult<>(element.getAsDouble(), null);
+    }
+
+    /**
+     * 获取可选的布尔参数
+     *
+     * @param arguments    参数对象
+     * @param paramName    参数名称
+     * @param defaultValue 默认值
+     * @return 布尔值，如果参数不存在或类型错误则返回默认值
+     */
+    public static boolean getOptionalBoolean(JsonObject arguments, String paramName, boolean defaultValue) {
+        if (!arguments.has(paramName) || arguments.get(paramName).isJsonNull()) {
+            return defaultValue;
+        }
+        JsonElement element = arguments.get(paramName);
+        if (element.isJsonPrimitive() && element.getAsJsonPrimitive().isBoolean()) {
+            return element.getAsBoolean();
+        }
+        return defaultValue;
+    }
+
+    /**
+     * 查找维度（ServerLevel）
+     *
+     * @param server       Minecraft服务器实例
+     * @param dimensionStr 维度ID字符串
+     * @return 包含ServerLevel的结果
+     */
+    public static LevelResult resolveDimension(MinecraftServer server, String dimensionStr) {
+        ResourceLocation dimensionId = ResourceLocation.tryParse(dimensionStr);
+        if (dimensionId == null) {
+            return new LevelResult(null, FunctionCallResult.failure(
+                    FunctionCallResult.ErrorType.INVALID_ARGUMENT,
+                    "无效的维度ID: " + dimensionStr
+            ));
+        }
+        for (ServerLevel level : server.getAllLevels()) {
+            if (level.dimension().location().equals(dimensionId)) {
+                return new LevelResult(level, null);
+            }
+        }
+        return new LevelResult(null, FunctionCallResult.failure(
+                FunctionCallResult.ErrorType.EXECUTION_FAILED,
+                "维度不存在: " + dimensionStr
+        ));
     }
 }

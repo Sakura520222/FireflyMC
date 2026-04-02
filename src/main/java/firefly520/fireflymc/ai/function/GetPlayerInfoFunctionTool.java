@@ -4,6 +4,7 @@ import com.google.gson.JsonObject;
 import firefly520.fireflymc.ai.AIFunctionTool;
 import firefly520.fireflymc.ai.FunctionCallResult;
 import net.minecraft.core.BlockPos;
+import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 
 /**
@@ -90,6 +91,36 @@ public class GetPlayerInfoFunctionTool implements AIFunctionTool {
         result.append(String.format("状态: %s\n", isFlying ? "飞行中" : "行走"));
         result.append(String.format("延迟: %dms", ping));
 
+        return FunctionCallResult.success(result.toString());
+    }
+
+    @Override
+    public FunctionCallResult execute(MinecraftServer server, JsonObject arguments) {
+        var playerResult = FunctionToolHelper.getRequiredTargetPlayer(server, arguments, "playerName");
+        if (playerResult.hasError()) return playerResult.error();
+
+        ServerPlayer targetPlayer = playerResult.player();
+        String name = targetPlayer.getGameProfile().getName();
+        BlockPos pos = targetPlayer.blockPosition();
+        String dimension = targetPlayer.serverLevel().dimension().location().toString();
+        float health = targetPlayer.getHealth();
+        float maxHealth = targetPlayer.getMaxHealth();
+        int foodLevel = targetPlayer.getFoodData().getFoodLevel();
+        int xpLevel = targetPlayer.experienceLevel;
+        float xpProgress = targetPlayer.experienceProgress;
+        String gameMode = targetPlayer.gameMode.getGameModeForPlayer().getName();
+        boolean isFlying = targetPlayer.getAbilities().flying;
+        int ping = targetPlayer.connection.latency();
+
+        StringBuilder result = new StringBuilder();
+        result.append(String.format("玩家 %s 的信息:\n", name));
+        result.append(String.format("位置: (%d, %d, %d) %s\n", pos.getX(), pos.getY(), pos.getZ(), dimension));
+        result.append(String.format("血量: %.1f/%.1f\n", health, maxHealth));
+        result.append(String.format("饥饿值: %d/20\n", foodLevel));
+        result.append(String.format("经验: 等级%d (%.1f%%)\n", xpLevel, xpProgress * 100));
+        result.append(String.format("游戏模式: %s\n", gameMode));
+        result.append(String.format("状态: %s\n", isFlying ? "飞行中" : "行走"));
+        result.append(String.format("延迟: %dms", ping));
         return FunctionCallResult.success(result.toString());
     }
 }

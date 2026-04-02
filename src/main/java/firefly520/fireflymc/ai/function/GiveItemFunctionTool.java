@@ -4,9 +4,9 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import firefly520.fireflymc.ai.AIFunctionTool;
 import firefly520.fireflymc.ai.FunctionCallResult;
-import firefly520.fireflymc.ai.FunctionToolRegistry;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.Items;
@@ -75,98 +75,71 @@ public class GiveItemFunctionTool implements AIFunctionTool {
 
     @Override
     public FunctionCallResult execute(ServerPlayer player, JsonObject arguments) {
-        // 权限验证
-        if (!FunctionToolRegistry.hasPermissionForTool(player, getName())) {
-            return FunctionCallResult.failure(
-                    FunctionCallResult.ErrorType.PERMISSION_DENIED,
-                    "权限不足：需要4级OP权限"
-            );
-        }
+        FunctionCallResult checkResult = FunctionToolHelper.checkPreconditions(player, this);
+        if (checkResult != null) return checkResult;
 
         var server = player.getServer();
-        if (server == null) {
-            return FunctionCallResult.failure(
-                    FunctionCallResult.ErrorType.EXECUTION_FAILED,
-                    "服务器未就绪"
-            );
-        }
 
-        // 解析必需参数
-        if (!arguments.has("item")) {
-            return FunctionCallResult.failure(
-                    FunctionCallResult.ErrorType.INVALID_ARGUMENT,
-                    "缺少必需参数: item"
-            );
-        }
+        var itemResult = FunctionToolHelper.getRequiredString(arguments, "item");
+        if (itemResult.hasError()) return itemResult.error();
+        String itemStr = itemResult.value().toLowerCase();
 
-        String itemStr = arguments.get("item").getAsString();
-
-        // 解析count参数并添加类型验证
-        int count = DEFAULT_COUNT;
-        if (arguments.has("count")) {
-            try {
-                count = arguments.get("count").getAsInt();
-            } catch (IllegalStateException e) {
-                return FunctionCallResult.failure(
-                        FunctionCallResult.ErrorType.INVALID_ARGUMENT,
-                        "count参数必须是整数"
-                );
-            }
-        }
-
-        // 验证范围
+        int count = FunctionToolHelper.getOptionalInt(arguments, "count", DEFAULT_COUNT);
         count = Math.max(MIN_COUNT, Math.min(MAX_COUNT, count));
 
-        // 确定目标玩家
-        ServerPlayer targetPlayer = player;
-        String targetName = player.getGameProfile().getName();
+        var targetResult = FunctionToolHelper.getOptionalTargetPlayer(server, arguments, "targetPlayer", player);
+        if (targetResult.hasError()) return targetResult.error();
 
-        if (arguments.has("targetPlayer") && !arguments.get("targetPlayer").isJsonNull()) {
-            targetName = arguments.get("targetPlayer").getAsString();
-            targetPlayer = server.getPlayerList().getPlayerByName(targetName);
-            if (targetPlayer == null) {
-                return FunctionCallResult.failure(
-                        FunctionCallResult.ErrorType.EXECUTION_FAILED,
-                        "玩家 " + targetName + " 不在线"
-                );
-            }
+        String targetName = targetResult.player().getGameProfile().getName();
+        return giveItem(targetResult.player(), targetName, itemStr, count);
+    }
+
+    @Override
+    public FunctionCallResult execute(MinecraftServer server, JsonObject arguments) {
+        if (!arguments.has("targetPlayer")) {
+            return FunctionCallResult.failure(FunctionCallResult.ErrorType.INVALID_ARGUMENT, "从控制台执行必须指定 targetPlayer");
         }
 
-        // 解析物品ID
+        var itemResult = FunctionToolHelper.getRequiredString(arguments, "item");
+        if (itemResult.hasError()) return itemResult.error();
+        String itemStr = itemResult.value().toLowerCase();
+
+        int count = FunctionToolHelper.getOptionalInt(arguments, "count", DEFAULT_COUNT);
+        count = Math.max(MIN_COUNT, Math.min(MAX_COUNT, count));
+
+        var targetResult = FunctionToolHelper.getRequiredTargetPlayer(server, arguments, "targetPlayer");
+        if (targetResult.hasError()) return targetResult.error();
+
+        String targetName = targetResult.player().getGameProfile().getName();
+        return giveItem(targetResult.player(), targetName, itemStr, count);
+    }
+
+    /**
+     * 共享的物品给予逻辑
+     */
+    private FunctionCallResult giveItem(ServerPlayer targetPlayer, String targetName, String itemStr, int count) {
         ResourceLocation itemId = ResourceLocation.tryParse(itemStr);
         if (itemId == null) {
             return FunctionCallResult.failure(
                     FunctionCallResult.ErrorType.INVALID_ARGUMENT,
-                    "无效的物品ID: " + itemStr
-            );
+                    "无效的物品ID: " + itemStr);
         }
-
         Item item = BuiltInRegistries.ITEM.get(itemId);
         if (item == null || item == Items.AIR) {
             return FunctionCallResult.failure(
                     FunctionCallResult.ErrorType.INVALID_ARGUMENT,
-                    "未知的物品: " + itemStr
-            );
+                    "未知的物品: " + itemStr);
         }
 
-        // 创建物品堆并给予玩家
         ItemStack itemStack = new ItemStack(item, count);
-
-        // 尝试添加到玩家背包
         boolean added = targetPlayer.getInventory().add(itemStack);
-
-        // 如果背包满了，扔在地上
         if (!added) {
             targetPlayer.drop(itemStack, false);
             return FunctionCallResult.success(
                     String.format("已给予 %s %dx %s（背包已满，物品掉落在地上）",
-                            targetName, count, itemId.toString())
-            );
+                            targetName, count, itemId.toString()));
         }
-
         return FunctionCallResult.success(
-                String.format("已给予 %s %dx %s",
-                        targetName, count, itemId.toString())
-        );
+                String.format("已给予 %s %dx %s", targetName, count, itemId.toString()));
     }
 }
