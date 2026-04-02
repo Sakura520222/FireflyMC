@@ -4,7 +4,6 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import firefly520.fireflymc.ai.AIFunctionTool;
 import firefly520.fireflymc.ai.FunctionCallResult;
-import firefly520.fireflymc.ai.FunctionToolRegistry;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -102,158 +101,24 @@ public class SpawnAllFunctionTool implements AIFunctionTool {
 
     @Override
     public FunctionCallResult execute(ServerPlayer player, JsonObject arguments) {
-        // 权限验证（双重保险）
-        if (!FunctionToolRegistry.hasPermissionForTool(player, getName())) {
-            return FunctionCallResult.failure(
-                    FunctionCallResult.ErrorType.PERMISSION_DENIED,
-                    "权限不足：需要4级OP权限"
-            );
-        }
+        FunctionCallResult checkResult = FunctionToolHelper.checkPreconditions(player, this);
+        if (checkResult != null) return checkResult;
 
         var server = player.getServer();
-        if (server == null) {
-            return FunctionCallResult.failure(
-                    FunctionCallResult.ErrorType.EXECUTION_FAILED,
-                    "服务器未就绪"
-            );
-        }
-
         var allPlayers = server.getPlayerList().getPlayers();
         if (allPlayers.isEmpty()) {
-            return FunctionCallResult.failure(
-                    FunctionCallResult.ErrorType.EXECUTION_FAILED,
-                    "当前没有在线玩家"
-            );
+            return FunctionCallResult.failure(FunctionCallResult.ErrorType.EXECUTION_FAILED, "当前没有在线玩家");
         }
 
-        // 确定 target 玩家列表
-        List<ServerPlayer> targetPlayers;
-        if (arguments.has("targets") && arguments.get("targets").isJsonArray()) {
-            // 用户指定了 targets
-            JsonArray targetsArray = arguments.get("targets").getAsJsonArray();
-            if (targetsArray.size() > 0) {
-                targetPlayers = new ArrayList<>();
-                for (var targetElement : targetsArray) {
-                    String targetName = targetElement.getAsString();
-                    ServerPlayer target = allPlayers.stream()
-                            .filter(p -> p.getGameProfile().getName().equalsIgnoreCase(targetName))
-                            .findFirst()
-                            .orElse(null);
-                    if (target != null) {
-                        targetPlayers.add(target);
-                    }
-                }
-                if (targetPlayers.isEmpty()) {
-                    return FunctionCallResult.failure(
-                            FunctionCallResult.ErrorType.INVALID_ARGUMENT,
-                            "未找到任何指定的目标玩家"
-                    );
-                }
-            } else {
-                // 空数组，使用默认行为（除执行者外）
-                targetPlayers = allPlayers.stream()
-                        .filter(p -> !p.getUUID().equals(player.getUUID()))
-                        .collect(Collectors.toList());
-            }
-        } else {
-            // 未提供 targets，使用默认行为（除执行者外）
-            targetPlayers = allPlayers.stream()
-                    .filter(p -> !p.getUUID().equals(player.getUUID()))
-                    .collect(Collectors.toList());
-        }
+        // 默认排除执行者
+        List<ServerPlayer> defaultTargets = allPlayers.stream()
+                .filter(p -> !p.getUUID().equals(player.getUUID()))
+                .collect(Collectors.toList());
 
-        // 检查是否有目标玩家
-        if (targetPlayers.isEmpty()) {
-            return FunctionCallResult.failure(
-                    FunctionCallResult.ErrorType.EXECUTION_FAILED,
-                    "没有可用的目标玩家"
-            );
-        }
+        var targetResult = parseTargetPlayers(allPlayers, arguments, defaultTargets);
+        if (targetResult.error != null) return targetResult.error;
 
-        // 解析参数
-        if (!arguments.has("entityType")) {
-            return FunctionCallResult.failure(
-                    FunctionCallResult.ErrorType.INVALID_ARGUMENT,
-                    "缺少必需参数: entityType"
-            );
-        }
-
-        String entityTypeStr = arguments.get("entityType").getAsString();
-        int count = arguments.has("count")
-                ? arguments.get("count").getAsInt()
-                : DEFAULT_COUNT;
-        int radius = arguments.has("radius")
-                ? arguments.get("radius").getAsInt()
-                : DEFAULT_RADIUS;
-
-        // 验证范围
-        count = Math.max(MIN_COUNT, Math.min(MAX_COUNT, count));
-        radius = Math.max(MIN_RADIUS, Math.min(MAX_RADIUS, radius));
-
-        // 解析EntityType
-        ResourceLocation entityId = ResourceLocation.tryParse(entityTypeStr);
-        if (entityId == null) {
-            return FunctionCallResult.failure(
-                    FunctionCallResult.ErrorType.INVALID_ARGUMENT,
-                    "无效的生物类型: " + entityTypeStr
-            );
-        }
-
-        EntityType<?> entityType = BuiltInRegistries.ENTITY_TYPE.get(entityId);
-        if (entityType == null) {
-            return FunctionCallResult.failure(
-                    FunctionCallResult.ErrorType.INVALID_ARGUMENT,
-                    "未知的生物类型: " + entityTypeStr
-            );
-        }
-
-        // 执行生成逻辑
-        int totalSpawned = 0;
-        int playersProcessed = 0;
-
-        for (ServerPlayer targetPlayer : targetPlayers) {
-            ServerLevel level = targetPlayer.serverLevel();
-            BlockPos playerPos = targetPlayer.blockPosition();
-
-            int spawnedForPlayer = 0;
-            for (int i = 0; i < count; i++) {
-                double angle = level.random.nextDouble() * Math.PI * 2;
-                double distance = level.random.nextDouble() * radius;
-                int x = (int) Math.round(playerPos.getX() + Math.cos(angle) * distance);
-                int z = (int) Math.round(playerPos.getZ() + Math.sin(angle) * distance);
-
-                int y = level.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, x, z);
-                BlockPos spawnPos = new BlockPos(x, y, z);
-
-                var entity = entityType.spawn(level, null, null, spawnPos,
-                        MobSpawnType.COMMAND, true, false);
-
-                if (entity != null) {
-                    spawnedForPlayer++;
-                    totalSpawned++;
-                }
-            }
-
-            if (spawnedForPlayer > 0) {
-                playersProcessed++;
-                targetPlayer.sendSystemMessage(Component.literal(String.format(
-                        "§e你的附近生成了 §a%d §e只 §b%s",
-                        spawnedForPlayer, entityId.toString()
-                )));
-            }
-        }
-
-        if (totalSpawned > 0) {
-            return FunctionCallResult.success(String.format(
-                    "成功在 %d 名玩家附近生成 %d 只 %s",
-                    playersProcessed, totalSpawned, entityId.toString()
-            ));
-        } else {
-            return FunctionCallResult.failure(
-                    FunctionCallResult.ErrorType.EXECUTION_FAILED,
-                    "未能生成任何生物，可能位置不适合"
-            );
-        }
+        return executeSpawn(targetResult.players, arguments);
     }
 
     @Override
@@ -263,44 +128,48 @@ public class SpawnAllFunctionTool implements AIFunctionTool {
             return FunctionCallResult.failure(FunctionCallResult.ErrorType.EXECUTION_FAILED, "当前没有在线玩家");
         }
 
-        // 确定目标玩家列表（控制台不排除任何人）
-        List<ServerPlayer> targetPlayers;
-        if (arguments.has("targets") && arguments.get("targets").isJsonArray()) {
-            JsonArray targetsArray = arguments.get("targets").getAsJsonArray();
-            if (targetsArray.size() > 0) {
-                targetPlayers = new ArrayList<>();
-                for (var targetElement : targetsArray) {
-                    String targetName = targetElement.getAsString();
-                    ServerPlayer target = allPlayers.stream()
-                            .filter(p -> p.getGameProfile().getName().equalsIgnoreCase(targetName))
-                            .findFirst().orElse(null);
-                    if (target != null) targetPlayers.add(target);
-                }
-                if (targetPlayers.isEmpty()) {
-                    return FunctionCallResult.failure(FunctionCallResult.ErrorType.INVALID_ARGUMENT, "未找到任何指定的目标玩家");
-                }
-            } else {
-                // 空数组，默认所有在线玩家（控制台不排除任何人）
-                targetPlayers = new ArrayList<>(allPlayers);
-            }
-        } else {
-            // 未提供targets，默认所有在线玩家
-            targetPlayers = new ArrayList<>(allPlayers);
-        }
+        // 控制台不排除任何人
+        var targetResult = parseTargetPlayers(allPlayers, arguments, new ArrayList<>(allPlayers));
+        if (targetResult.error != null) return targetResult.error;
 
+        return executeSpawn(targetResult.players, arguments);
+    }
+
+    /**
+     * 解析目标玩家列表
+     */
+    private record TargetListResult(List<ServerPlayer> players, FunctionCallResult error) {}
+
+    private TargetListResult parseTargetPlayers(List<ServerPlayer> allPlayers, JsonObject arguments, List<ServerPlayer> defaultTargets) {
+        if (!arguments.has("targets") || !arguments.get("targets").isJsonArray()) {
+            return new TargetListResult(defaultTargets, null);
+        }
+        JsonArray targetsArray = arguments.get("targets").getAsJsonArray();
+        if (targetsArray.isEmpty()) {
+            return new TargetListResult(defaultTargets, null);
+        }
+        List<ServerPlayer> targetPlayers = new ArrayList<>();
+        for (var targetElement : targetsArray) {
+            String targetName = targetElement.getAsString();
+            allPlayers.stream()
+                    .filter(p -> p.getGameProfile().getName().equalsIgnoreCase(targetName))
+                    .findFirst()
+                    .ifPresent(targetPlayers::add);
+        }
         if (targetPlayers.isEmpty()) {
-            return FunctionCallResult.failure(FunctionCallResult.ErrorType.EXECUTION_FAILED, "没有可用的目标玩家");
+            return new TargetListResult(null, FunctionCallResult.failure(
+                    FunctionCallResult.ErrorType.INVALID_ARGUMENT, "未找到任何指定的目标玩家"));
         }
+        return new TargetListResult(targetPlayers, null);
+    }
 
-        if (!arguments.has("entityType")) {
-            return FunctionCallResult.failure(FunctionCallResult.ErrorType.INVALID_ARGUMENT, "缺少必需参数: entityType");
-        }
-
-        String entityTypeStr = arguments.get("entityType").getAsString();
-        int count = arguments.has("count") ? arguments.get("count").getAsInt() : DEFAULT_COUNT;
-        int radius = arguments.has("radius") ? arguments.get("radius").getAsInt() : DEFAULT_RADIUS;
-        count = Math.max(MIN_COUNT, Math.min(MAX_COUNT, count));
-        radius = Math.max(MIN_RADIUS, Math.min(MAX_RADIUS, radius));
+    /**
+     * 共享的生成执行逻辑
+     */
+    private FunctionCallResult executeSpawn(List<ServerPlayer> targetPlayers, JsonObject arguments) {
+        var entityTypeResult = FunctionToolHelper.getRequiredString(arguments, "entityType");
+        if (entityTypeResult.hasError()) return entityTypeResult.error();
+        String entityTypeStr = entityTypeResult.value();
 
         ResourceLocation entityId = ResourceLocation.tryParse(entityTypeStr);
         if (entityId == null) {
@@ -310,6 +179,11 @@ public class SpawnAllFunctionTool implements AIFunctionTool {
         if (entityType == null) {
             return FunctionCallResult.failure(FunctionCallResult.ErrorType.INVALID_ARGUMENT, "未知的生物类型: " + entityTypeStr);
         }
+
+        int count = FunctionToolHelper.getOptionalInt(arguments, "count", DEFAULT_COUNT);
+        int radius = FunctionToolHelper.getOptionalInt(arguments, "radius", DEFAULT_RADIUS);
+        count = Math.max(MIN_COUNT, Math.min(MAX_COUNT, count));
+        radius = Math.max(MIN_RADIUS, Math.min(MAX_RADIUS, radius));
 
         int totalSpawned = 0;
         int playersProcessed = 0;
@@ -341,8 +215,7 @@ public class SpawnAllFunctionTool implements AIFunctionTool {
         if (totalSpawned > 0) {
             return FunctionCallResult.success(String.format(
                     "成功在 %d 名玩家附近生成 %d 只 %s", playersProcessed, totalSpawned, entityId.toString()));
-        } else {
-            return FunctionCallResult.failure(FunctionCallResult.ErrorType.EXECUTION_FAILED, "未能生成任何生物，可能位置不适合");
         }
+        return FunctionCallResult.failure(FunctionCallResult.ErrorType.EXECUTION_FAILED, "未能生成任何生物，可能位置不适合");
     }
 }

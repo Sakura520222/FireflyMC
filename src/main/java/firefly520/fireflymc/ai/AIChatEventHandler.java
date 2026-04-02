@@ -144,7 +144,7 @@ public class AIChatEventHandler {
         var player = source.getPlayer();
 
         // 检查是否多人服务器
-        MinecraftServer server = player != null ? player.getServer() : source.getServer();
+        MinecraftServer server = source.getServer();
         if (!isMultiplayerServer(server)) {
             source.sendFailure(Component.literal("§cAI聊天仅在多人服务器可用"));
             return 0;

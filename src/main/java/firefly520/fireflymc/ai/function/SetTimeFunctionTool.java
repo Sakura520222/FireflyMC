@@ -80,122 +80,70 @@ public class SetTimeFunctionTool implements AIFunctionTool {
 
     @Override
     public FunctionCallResult execute(ServerPlayer player, JsonObject arguments) {
-        // 检查前置条件
         FunctionCallResult checkResult = FunctionToolHelper.checkPreconditions(player, this);
-        if (checkResult != null) {
-            return checkResult;
+        if (checkResult != null) return checkResult;
+
+        var result = parseTimeArgument(arguments);
+        if (result.error != null) return result.error;
+
+        for (ServerLevel level : player.getServer().getAllLevels()) {
+            level.setDayTime(result.timeValue);
         }
 
-        var server = player.getServer();
-
-        long timeValue;
-
-        // 解析时间参数
-        if (arguments.has("time") && !arguments.get("time").isJsonNull()) {
-            // 验证time参数类型
-            FunctionCallResult validationResult = FunctionToolHelper.validateStringType(
-                    arguments.get("time"), "time"
-            );
-            if (validationResult != null) {
-                return validationResult;
-            }
-
-            String timeStr = arguments.get("time").getAsString().toLowerCase().trim();
-
-            // 尝试解析关键字
-            if (TIME_KEYWORDS.containsKey(timeStr)) {
-                timeValue = TIME_KEYWORDS.get(timeStr);
-            } else {
-                // 尝试解析为数字
-                try {
-                    timeValue = Long.parseLong(timeStr);
-                    if (timeValue < 0 || timeValue > 24000) {
-                        return FunctionCallResult.failure(
-                                FunctionCallResult.ErrorType.INVALID_ARGUMENT,
-                                "时间值必须在0-24000之间"
-                        );
-                    }
-                } catch (NumberFormatException e) {
-                    return FunctionCallResult.failure(
-                            FunctionCallResult.ErrorType.INVALID_ARGUMENT,
-                            "无效的时间参数: " + timeStr + "。支持: day, night, noon, midnight, sunrise, sunset 或 0-24000的数字"
-                    );
-                }
-            }
-        } else if (arguments.has("timeValue")) {
-            // 验证timeValue参数类型
-            var timeValueElement = arguments.get("timeValue");
-            if (!timeValueElement.isJsonPrimitive() || !timeValueElement.getAsJsonPrimitive().isNumber()) {
-                return FunctionCallResult.failure(
-                        FunctionCallResult.ErrorType.INVALID_ARGUMENT,
-                        "timeValue 参数必须是数字"
-                );
-            }
-            timeValue = timeValueElement.getAsLong();
-            if (timeValue < 0 || timeValue > 24000) {
-                return FunctionCallResult.failure(
-                        FunctionCallResult.ErrorType.INVALID_ARGUMENT,
-                        "时间值必须在0-24000之间"
-                );
-            }
-        } else {
-            return FunctionCallResult.failure(
-                    FunctionCallResult.ErrorType.INVALID_ARGUMENT,
-                    "缺少时间参数"
-            );
-        }
-
-        // 设置所有维度的时间
-        for (ServerLevel level : server.getAllLevels()) {
-            level.setDayTime(timeValue);
-        }
-
-        // 返回友好的时间描述
-        String timeDesc = getTimeDescription(timeValue);
-        return FunctionCallResult.success("已将时间设置为 " + timeDesc);
+        return FunctionCallResult.success("已将时间设置为 " + getTimeDescription(result.timeValue));
     }
 
     @Override
     public FunctionCallResult execute(MinecraftServer server, JsonObject arguments) {
-        long timeValue;
+        var result = parseTimeArgument(arguments);
+        if (result.error != null) return result.error;
 
+        for (ServerLevel level : server.getAllLevels()) {
+            level.setDayTime(result.timeValue);
+        }
+
+        return FunctionCallResult.success("已将时间设置为 " + getTimeDescription(result.timeValue));
+    }
+
+    private record TimeResult(long timeValue, FunctionCallResult error) {}
+
+    private TimeResult parseTimeArgument(JsonObject arguments) {
         if (arguments.has("time") && !arguments.get("time").isJsonNull()) {
-            FunctionCallResult validationResult = FunctionToolHelper.validateStringType(arguments.get("time"), "time");
-            if (validationResult != null) return validationResult;
+            var validationResult = FunctionToolHelper.validateStringType(arguments.get("time"), "time");
+            if (validationResult != null) return new TimeResult(0, validationResult);
 
             String timeStr = arguments.get("time").getAsString().toLowerCase().trim();
+
             if (TIME_KEYWORDS.containsKey(timeStr)) {
-                timeValue = TIME_KEYWORDS.get(timeStr);
-            } else {
-                try {
-                    timeValue = Long.parseLong(timeStr);
-                    if (timeValue < 0 || timeValue > 24000) {
-                        return FunctionCallResult.failure(FunctionCallResult.ErrorType.INVALID_ARGUMENT, "时间值必须在0-24000之间");
-                    }
-                } catch (NumberFormatException e) {
-                    return FunctionCallResult.failure(FunctionCallResult.ErrorType.INVALID_ARGUMENT,
-                            "无效的时间参数: " + timeStr + "。支持: day, night, noon, midnight, sunrise, sunset 或 0-24000的数字");
+                return new TimeResult(TIME_KEYWORDS.get(timeStr), null);
+            }
+            try {
+                long timeValue = Long.parseLong(timeStr);
+                if (timeValue < 0 || timeValue > 24000) {
+                    return new TimeResult(0, FunctionCallResult.failure(
+                            FunctionCallResult.ErrorType.INVALID_ARGUMENT, "时间值必须在0-24000之间"));
                 }
+                return new TimeResult(timeValue, null);
+            } catch (NumberFormatException e) {
+                return new TimeResult(0, FunctionCallResult.failure(
+                        FunctionCallResult.ErrorType.INVALID_ARGUMENT,
+                        "无效的时间参数: " + timeStr + "。支持: day, night, noon, midnight, sunrise, sunset 或 0-24000的数字"));
             }
         } else if (arguments.has("timeValue")) {
             var timeValueElement = arguments.get("timeValue");
             if (!timeValueElement.isJsonPrimitive() || !timeValueElement.getAsJsonPrimitive().isNumber()) {
-                return FunctionCallResult.failure(FunctionCallResult.ErrorType.INVALID_ARGUMENT, "timeValue 参数必须是数字");
+                return new TimeResult(0, FunctionCallResult.failure(
+                        FunctionCallResult.ErrorType.INVALID_ARGUMENT, "timeValue 参数必须是数字"));
             }
-            timeValue = timeValueElement.getAsLong();
+            long timeValue = timeValueElement.getAsLong();
             if (timeValue < 0 || timeValue > 24000) {
-                return FunctionCallResult.failure(FunctionCallResult.ErrorType.INVALID_ARGUMENT, "时间值必须在0-24000之间");
+                return new TimeResult(0, FunctionCallResult.failure(
+                        FunctionCallResult.ErrorType.INVALID_ARGUMENT, "时间值必须在0-24000之间"));
             }
-        } else {
-            return FunctionCallResult.failure(FunctionCallResult.ErrorType.INVALID_ARGUMENT, "缺少时间参数");
+            return new TimeResult(timeValue, null);
         }
-
-        for (ServerLevel level : server.getAllLevels()) {
-            level.setDayTime(timeValue);
-        }
-
-        String timeDesc = getTimeDescription(timeValue);
-        return FunctionCallResult.success("已将时间设置为 " + timeDesc);
+        return new TimeResult(0, FunctionCallResult.failure(
+                FunctionCallResult.ErrorType.INVALID_ARGUMENT, "缺少时间参数"));
     }
 
     private String getTimeDescription(long time) {

@@ -107,19 +107,11 @@ public class SummonPlayerFunctionTool implements AIFunctionTool {
 
     @Override
     public FunctionCallResult execute(MinecraftServer server, JsonObject arguments) {
-        if (!arguments.has("playerName")) {
-            return FunctionCallResult.failure(FunctionCallResult.ErrorType.INVALID_ARGUMENT, "缺少必需参数: playerName");
-        }
-        FunctionCallResult validationResult = FunctionToolHelper.validateStringType(
-                arguments.get("playerName"), "playerName");
-        if (validationResult != null) return validationResult;
+        var targetResult = FunctionToolHelper.getRequiredTargetPlayer(server, arguments, "playerName");
+        if (targetResult.hasError()) return targetResult.error();
 
-        String targetName = arguments.get("playerName").getAsString();
-        ServerPlayer targetPlayer = server.getPlayerList().getPlayerByName(targetName);
-        if (targetPlayer == null) {
-            return FunctionCallResult.failure(FunctionCallResult.ErrorType.EXECUTION_FAILED,
-                    "玩家 " + targetName + " 不在线");
-        }
+        ServerPlayer targetPlayer = targetResult.player();
+        String targetName = targetPlayer.getGameProfile().getName();
 
         // 从控制台执行时，使用主世界出生点作为目标位置
         ServerLevel overworld = server.overworld();

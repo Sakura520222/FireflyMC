@@ -48,60 +48,25 @@ public class ListPlayersFunctionTool implements AIFunctionTool {
 
     @Override
     public FunctionCallResult execute(ServerPlayer player, JsonObject arguments) {
-        // 检查服务器就绪状态
         FunctionCallResult checkResult = FunctionToolHelper.checkServerReady(player);
-        if (checkResult != null) {
-            return checkResult;
-        }
+        if (checkResult != null) return checkResult;
 
-        var server = player.getServer();
-        var players = server.getPlayerList().getPlayers();
-        int maxPlayers = server.getPlayerList().getMaxPlayers();
-
-        // 获取includeDetails参数（默认false）
-        boolean includeDetails = false;
-        if (arguments.has("includeDetails") && !arguments.get("includeDetails").isJsonNull()) {
-            var elem = arguments.get("includeDetails");
-            if (elem.isJsonPrimitive() && elem.getAsJsonPrimitive().isBoolean()) {
-                includeDetails = elem.getAsBoolean();
-            }
-        }
-
-        StringBuilder result = new StringBuilder();
-        result.append(String.format("当前在线: %d/%d 人", players.size(), maxPlayers));
-
-        if (players.isEmpty()) {
-            return FunctionCallResult.success(result.toString());
-        }
-
-        result.append("\n玩家列表:");
-        for (ServerPlayer p : players) {
-            String gameMode = p.gameMode.getGameModeForPlayer().getName();
-            if (includeDetails) {
-                String dimension = p.serverLevel().dimension().location().toString();
-                result.append(String.format("\n- %s (%s, %s)",
-                        p.getGameProfile().getName(), gameMode, dimension));
-            } else {
-                result.append(String.format("\n- %s (%s)",
-                        p.getGameProfile().getName(), gameMode));
-            }
-        }
-
-        return FunctionCallResult.success(result.toString());
+        boolean includeDetails = FunctionToolHelper.getOptionalBoolean(arguments, "includeDetails", false);
+        return buildPlayerList(player.getServer(), includeDetails);
     }
 
     @Override
     public FunctionCallResult execute(MinecraftServer server, JsonObject arguments) {
+        boolean includeDetails = FunctionToolHelper.getOptionalBoolean(arguments, "includeDetails", false);
+        return buildPlayerList(server, includeDetails);
+    }
+
+    /**
+     * 共享的玩家列表构建逻辑
+     */
+    private FunctionCallResult buildPlayerList(MinecraftServer server, boolean includeDetails) {
         var players = server.getPlayerList().getPlayers();
         int maxPlayers = server.getPlayerList().getMaxPlayers();
-
-        boolean includeDetails = false;
-        if (arguments.has("includeDetails") && !arguments.get("includeDetails").isJsonNull()) {
-            var elem = arguments.get("includeDetails");
-            if (elem.isJsonPrimitive() && elem.getAsJsonPrimitive().isBoolean()) {
-                includeDetails = elem.getAsBoolean();
-            }
-        }
 
         StringBuilder result = new StringBuilder();
         result.append(String.format("当前在线: %d/%d 人", players.size(), maxPlayers));

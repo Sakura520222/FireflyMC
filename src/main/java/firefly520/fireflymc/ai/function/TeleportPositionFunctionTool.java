@@ -4,7 +4,6 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import firefly520.fireflymc.ai.AIFunctionTool;
 import firefly520.fireflymc.ai.FunctionCallResult;
-import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
@@ -84,102 +83,29 @@ public class TeleportPositionFunctionTool implements AIFunctionTool {
 
     @Override
     public FunctionCallResult execute(ServerPlayer player, JsonObject arguments) {
-        // 检查前置条件
         FunctionCallResult checkResult = FunctionToolHelper.checkPreconditions(player, this);
-        if (checkResult != null) {
-            return checkResult;
-        }
+        if (checkResult != null) return checkResult;
 
         var server = player.getServer();
 
-        // 解析必需参数
-        if (!arguments.has("x") || !arguments.has("y") || !arguments.has("z")) {
-            return FunctionCallResult.failure(
-                    FunctionCallResult.ErrorType.INVALID_ARGUMENT,
-                    "缺少必需参数: x, y, z"
-            );
-        }
-
-        // 验证坐标参数类型
-        FunctionCallResult validationResult;
-        validationResult = FunctionToolHelper.validateNumberType(arguments.get("x"), "x");
-        if (validationResult != null) return validationResult;
-        validationResult = FunctionToolHelper.validateNumberType(arguments.get("y"), "y");
-        if (validationResult != null) return validationResult;
-        validationResult = FunctionToolHelper.validateNumberType(arguments.get("z"), "z");
-        if (validationResult != null) return validationResult;
-
-        double x = arguments.get("x").getAsDouble();
-        double y = arguments.get("y").getAsDouble();
-        double z = arguments.get("z").getAsDouble();
+        // 解析坐标
+        var xResult = FunctionToolHelper.getRequiredDouble(arguments, "x");
+        if (xResult.hasError()) return xResult.error();
+        var yResult = FunctionToolHelper.getRequiredDouble(arguments, "y");
+        if (yResult.hasError()) return yResult.error();
+        var zResult = FunctionToolHelper.getRequiredDouble(arguments, "z");
+        if (zResult.hasError()) return zResult.error();
 
         // 确定目标玩家
-        ServerPlayer targetPlayer = player;
-        if (arguments.has("targetPlayer") && !arguments.get("targetPlayer").isJsonNull()) {
-            validationResult = FunctionToolHelper.validateStringType(
-                    arguments.get("targetPlayer"), "targetPlayer"
-            );
-            if (validationResult != null) {
-                return validationResult;
-            }
-            String targetName = arguments.get("targetPlayer").getAsString();
-            targetPlayer = server.getPlayerList().getPlayerByName(targetName);
-            if (targetPlayer == null) {
-                return FunctionCallResult.failure(
-                        FunctionCallResult.ErrorType.EXECUTION_FAILED,
-                        "玩家 " + targetName + " 不在线"
-                );
-            }
-        }
+        var targetResult = FunctionToolHelper.getOptionalTargetPlayer(server, arguments, "targetPlayer", player);
+        if (targetResult.hasError()) return targetResult.error();
+        ServerPlayer targetPlayer = targetResult.player();
 
         // 确定目标维度
-        ServerLevel targetLevel = targetPlayer.serverLevel();
-        if (arguments.has("dimension") && !arguments.get("dimension").isJsonNull()) {
-            validationResult = FunctionToolHelper.validateStringType(
-                    arguments.get("dimension"), "dimension"
-            );
-            if (validationResult != null) {
-                return validationResult;
-            }
-            String dimensionStr = arguments.get("dimension").getAsString();
-            ResourceLocation dimensionId = ResourceLocation.tryParse(dimensionStr);
-            if (dimensionId == null) {
-                return FunctionCallResult.failure(
-                        FunctionCallResult.ErrorType.INVALID_ARGUMENT,
-                        "无效的维度ID: " + dimensionStr
-                );
-            }
+        var levelResult = resolveTargetLevel(server, targetPlayer, arguments);
+        if (levelResult.hasError()) return levelResult.error();
 
-            // 查找维度
-            ServerLevel foundLevel = null;
-            for (ServerLevel level : server.getAllLevels()) {
-                if (level.dimension().location().equals(dimensionId)) {
-                    foundLevel = level;
-                    break;
-                }
-            }
-
-            if (foundLevel == null) {
-                return FunctionCallResult.failure(
-                        FunctionCallResult.ErrorType.EXECUTION_FAILED,
-                        "维度不存在: " + dimensionStr
-                );
-            }
-            targetLevel = foundLevel;
-        }
-
-        // 执行传送
-        String playerName = targetPlayer.getGameProfile().getName();
-        float yaw = targetPlayer.getYRot();
-        float pitch = targetPlayer.getXRot();
-
-        targetPlayer.teleportTo(targetLevel, x, y, z, yaw, pitch);
-
-        String dimensionName = targetLevel.dimension().location().toString();
-        return FunctionCallResult.success(
-                String.format("已将 %s 传送到 (%.1f, %.1f, %.1f) %s",
-                        playerName, x, y, z, dimensionName)
-        );
+        return teleportPlayer(targetPlayer, levelResult.level(), xResult.value(), yResult.value(), zResult.value());
     }
 
     @Override
@@ -188,49 +114,31 @@ public class TeleportPositionFunctionTool implements AIFunctionTool {
             return FunctionCallResult.failure(FunctionCallResult.ErrorType.INVALID_ARGUMENT, "从控制台执行必须指定 targetPlayer");
         }
 
-        if (!arguments.has("x") || !arguments.has("y") || !arguments.has("z")) {
-            return FunctionCallResult.failure(FunctionCallResult.ErrorType.INVALID_ARGUMENT, "缺少必需参数: x, y, z");
-        }
-
-        FunctionCallResult validationResult;
-        validationResult = FunctionToolHelper.validateNumberType(arguments.get("x"), "x");
-        if (validationResult != null) return validationResult;
-        validationResult = FunctionToolHelper.validateNumberType(arguments.get("y"), "y");
-        if (validationResult != null) return validationResult;
-        validationResult = FunctionToolHelper.validateNumberType(arguments.get("z"), "z");
-        if (validationResult != null) return validationResult;
-
-        double x = arguments.get("x").getAsDouble();
-        double y = arguments.get("y").getAsDouble();
-        double z = arguments.get("z").getAsDouble();
+        var xResult = FunctionToolHelper.getRequiredDouble(arguments, "x");
+        if (xResult.hasError()) return xResult.error();
+        var yResult = FunctionToolHelper.getRequiredDouble(arguments, "y");
+        if (yResult.hasError()) return yResult.error();
+        var zResult = FunctionToolHelper.getRequiredDouble(arguments, "z");
+        if (zResult.hasError()) return zResult.error();
 
         var targetResult = FunctionToolHelper.getRequiredTargetPlayer(server, arguments, "targetPlayer");
         if (targetResult.hasError()) return targetResult.error();
 
-        ServerPlayer targetPlayer = targetResult.player();
+        var levelResult = resolveTargetLevel(server, targetResult.player(), arguments);
+        if (levelResult.hasError()) return levelResult.error();
 
-        ServerLevel targetLevel = targetPlayer.serverLevel();
-        if (arguments.has("dimension") && !arguments.get("dimension").isJsonNull()) {
-            validationResult = FunctionToolHelper.validateStringType(arguments.get("dimension"), "dimension");
-            if (validationResult != null) return validationResult;
-            String dimensionStr = arguments.get("dimension").getAsString();
-            ResourceLocation dimensionId = ResourceLocation.tryParse(dimensionStr);
-            if (dimensionId == null) {
-                return FunctionCallResult.failure(FunctionCallResult.ErrorType.INVALID_ARGUMENT, "无效的维度ID: " + dimensionStr);
-            }
-            ServerLevel foundLevel = null;
-            for (ServerLevel level : server.getAllLevels()) {
-                if (level.dimension().location().equals(dimensionId)) {
-                    foundLevel = level;
-                    break;
-                }
-            }
-            if (foundLevel == null) {
-                return FunctionCallResult.failure(FunctionCallResult.ErrorType.EXECUTION_FAILED, "维度不存在: " + dimensionStr);
-            }
-            targetLevel = foundLevel;
+        return teleportPlayer(targetResult.player(), levelResult.level(), xResult.value(), yResult.value(), zResult.value());
+    }
+
+    private FunctionToolHelper.LevelResult resolveTargetLevel(MinecraftServer server, ServerPlayer targetPlayer, JsonObject arguments) {
+        String dimensionStr = FunctionToolHelper.getOptionalString(arguments, "dimension", null);
+        if (dimensionStr == null || dimensionStr.isBlank()) {
+            return new FunctionToolHelper.LevelResult(targetPlayer.serverLevel(), null);
         }
+        return FunctionToolHelper.resolveDimension(server, dimensionStr);
+    }
 
+    private FunctionCallResult teleportPlayer(ServerPlayer targetPlayer, ServerLevel targetLevel, double x, double y, double z) {
         String playerName = targetPlayer.getGameProfile().getName();
         float yaw = targetPlayer.getYRot();
         float pitch = targetPlayer.getXRot();

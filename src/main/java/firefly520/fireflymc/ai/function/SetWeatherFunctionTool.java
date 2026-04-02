@@ -8,6 +8,8 @@ import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 
+import java.util.Map;
+
 /**
  * 设置天气的函数工具
  */
@@ -68,101 +70,43 @@ public class SetWeatherFunctionTool implements AIFunctionTool {
         return 3;  // 3级OP权限
     }
 
+    private static final Map<String, String> WEATHER_DESCRIPTIONS = Map.of(
+            "clear", "晴天", "rain", "雨天", "thunder", "雷暴"
+    );
+
     @Override
     public FunctionCallResult execute(ServerPlayer player, JsonObject arguments) {
-        // 检查前置条件
         FunctionCallResult checkResult = FunctionToolHelper.checkPreconditions(player, this);
-        if (checkResult != null) {
-            return checkResult;
-        }
+        if (checkResult != null) return checkResult;
 
-        var server = player.getServer();
+        var params = parseWeatherArguments(arguments);
+        if (params.error != null) return params.error;
 
-        // 解析天气类型
-        if (!arguments.has("weather")) {
-            return FunctionCallResult.failure(
-                    FunctionCallResult.ErrorType.INVALID_ARGUMENT,
-                    "缺少必需参数: weather"
-            );
-        }
-
-        // 验证weather参数类型
-        var weatherElement = arguments.get("weather");
-        if (!weatherElement.isJsonPrimitive() || !weatherElement.getAsJsonPrimitive().isString()) {
-            return FunctionCallResult.failure(
-                    FunctionCallResult.ErrorType.INVALID_ARGUMENT,
-                    "weather 参数必须是字符串"
-            );
-        }
-
-        String weather = weatherElement.getAsString().toLowerCase();
-
-        // 解析duration参数
-        int duration = DEFAULT_DURATION;
-        if (arguments.has("duration")) {
-            var durationElement = arguments.get("duration");
-            if (!durationElement.isJsonPrimitive() || !durationElement.getAsJsonPrimitive().isNumber()) {
-                return FunctionCallResult.failure(
-                        FunctionCallResult.ErrorType.INVALID_ARGUMENT,
-                        "duration 参数必须是数字"
-                );
-            }
-            duration = durationElement.getAsInt();
-        }
-
-        // 验证范围
-        duration = Math.max(MIN_DURATION, Math.min(MAX_DURATION, duration));
-        int durationTicks = duration * 20;  // 转换为tick
-
-        // 设置所有维度的天气
-        for (ServerLevel level : server.getAllLevels()) {
-            switch (weather) {
-                case "clear" -> level.setWeatherParameters(durationTicks, 0, false, false);
-                case "rain" -> level.setWeatherParameters(0, durationTicks, true, false);
-                case "thunder" -> level.setWeatherParameters(0, durationTicks, true, true);
-                default -> {
-                    return FunctionCallResult.failure(
-                            FunctionCallResult.ErrorType.INVALID_ARGUMENT,
-                            "无效的天气类型: " + weather + "。支持: clear, rain, thunder"
-                    );
-                }
-            }
-        }
-
-        // weather 已在前面验证过，default分支不会执行（防御性编程）
-        String weatherDesc = switch (weather) {
-            case "clear" -> "晴天";
-            case "rain" -> "雨天";
-            case "thunder" -> "雷暴";
-            default -> throw new IllegalStateException("无效的天气类型: " + weather);
-        };
-
-        String durationDesc = duration == 0 ? "永久" : duration + "秒";
-        return FunctionCallResult.success("已将天气设置为 " + weatherDesc + "，持续 " + durationDesc);
+        return setWeather(player.getServer(), params.weather, params.duration);
     }
 
     @Override
     public FunctionCallResult execute(MinecraftServer server, JsonObject arguments) {
-        if (!arguments.has("weather")) {
-            return FunctionCallResult.failure(FunctionCallResult.ErrorType.INVALID_ARGUMENT, "缺少必需参数: weather");
-        }
-        var weatherElement = arguments.get("weather");
-        if (!weatherElement.isJsonPrimitive() || !weatherElement.getAsJsonPrimitive().isString()) {
-            return FunctionCallResult.failure(FunctionCallResult.ErrorType.INVALID_ARGUMENT, "weather 参数必须是字符串");
-        }
+        var params = parseWeatherArguments(arguments);
+        if (params.error != null) return params.error;
 
-        String weather = weatherElement.getAsString().toLowerCase();
+        return setWeather(server, params.weather, params.duration);
+    }
 
-        int duration = DEFAULT_DURATION;
-        if (arguments.has("duration")) {
-            var durationElement = arguments.get("duration");
-            if (!durationElement.isJsonPrimitive() || !durationElement.getAsJsonPrimitive().isNumber()) {
-                return FunctionCallResult.failure(FunctionCallResult.ErrorType.INVALID_ARGUMENT, "duration 参数必须是数字");
-            }
-            duration = durationElement.getAsInt();
-        }
+    private record WeatherParams(String weather, int duration, FunctionCallResult error) {}
 
+    private WeatherParams parseWeatherArguments(JsonObject arguments) {
+        var weatherResult = FunctionToolHelper.getRequiredString(arguments, "weather");
+        if (weatherResult.hasError()) return new WeatherParams(null, 0, weatherResult.error());
+
+        String weather = weatherResult.value().toLowerCase();
+        int duration = FunctionToolHelper.getOptionalInt(arguments, "duration", DEFAULT_DURATION);
         duration = Math.max(MIN_DURATION, Math.min(MAX_DURATION, duration));
+
+        return new WeatherParams(weather, duration, null);
+    }
+
+    private FunctionCallResult setWeather(MinecraftServer server, String weather, int duration) {
         int durationTicks = duration * 20;
 
         for (ServerLevel level : server.getAllLevels()) {
@@ -171,18 +115,14 @@ public class SetWeatherFunctionTool implements AIFunctionTool {
                 case "rain" -> level.setWeatherParameters(0, durationTicks, true, false);
                 case "thunder" -> level.setWeatherParameters(0, durationTicks, true, true);
                 default -> {
-                    return FunctionCallResult.failure(FunctionCallResult.ErrorType.INVALID_ARGUMENT,
+                    return FunctionCallResult.failure(
+                            FunctionCallResult.ErrorType.INVALID_ARGUMENT,
                             "无效的天气类型: " + weather + "。支持: clear, rain, thunder");
                 }
             }
         }
 
-        String weatherDesc = switch (weather) {
-            case "clear" -> "晴天";
-            case "rain" -> "雨天";
-            case "thunder" -> "雷暴";
-            default -> throw new IllegalStateException("无效的天气类型: " + weather);
-        };
+        String weatherDesc = WEATHER_DESCRIPTIONS.getOrDefault(weather, weather);
         String durationDesc = duration == 0 ? "永久" : duration + "秒";
         return FunctionCallResult.success("已将天气设置为 " + weatherDesc + "，持续 " + durationDesc);
     }

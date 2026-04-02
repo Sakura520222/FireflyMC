@@ -173,7 +173,7 @@ public class GiveEffectFunctionTool implements AIFunctionTool {
 
         var targetResult = FunctionToolHelper.getRequiredTargetPlayer(server, arguments, "targetPlayer");
         if (targetResult.hasError()) return targetResult.error();
-        String targetName = arguments.get("targetPlayer").getAsString();
+        String targetName = targetResult.player().getGameProfile().getName();
         ServerPlayer targetPlayer = targetResult.player();
 
         ResourceLocation effectId = ResourceLocation.tryParse(effectStr);
