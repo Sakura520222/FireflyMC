@@ -23,6 +23,8 @@ public class ServerConfig {
         public final ModConfigSpec.ConfigValue<String> shutdownKey;
         public final ModConfigSpec.BooleanValue enableMemberVerification;
         public final ModConfigSpec.IntValue memberVerificationTimeout;
+        public final ModConfigSpec.BooleanValue enableItemCleanup;
+        public final ModConfigSpec.IntValue itemCleanupIntervalMinutes;
 
         // AI配置
         public final ModConfigSpec.ConfigValue<String> aiApiUrl;
@@ -72,6 +74,16 @@ public class ServerConfig {
                     .comment("Member verification timeout in seconds")
                     .translation("fireflymc.config.server.member_verification_timeout")
                     .defineInRange("memberVerificationTimeout", 10, 3, 60);
+
+            enableItemCleanup = builder
+                    .comment("Enable automatic item cleanup (remove dropped items periodically)")
+                    .translation("fireflymc.config.server.enable_item_cleanup")
+                    .define("enableItemCleanup", true);
+
+            itemCleanupIntervalMinutes = builder
+                    .comment("Item cleanup interval in minutes")
+                    .translation("fireflymc.config.server.item_cleanup_interval_minutes")
+                    .defineInRange("itemCleanupIntervalMinutes", 5, 1, 60);
 
             builder.pop();
 
