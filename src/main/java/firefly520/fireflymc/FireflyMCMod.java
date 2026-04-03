@@ -16,6 +16,7 @@ import firefly520.fireflymc.client.UpdateChecker;
 import firefly520.fireflymc.client.TitleScreenDetector;
 import firefly520.fireflymc.event.websocket.PlayerEventWebSocketClient;
 import firefly520.fireflymc.network.ModNetwork;
+import firefly520.fireflymc.playtime.PlaytimeManager;
 import firefly520.fireflymc.util.ServerLanguageLoader;
 
 @Mod(FireflyMCMod.MODID)
@@ -71,6 +72,8 @@ public class FireflyMCMod {
     firefly520.fireflymc.event.websocket.PlayerEventWebSocketClient.setServer(event.getServer());
     // 启动掉落物自动清理
     ItemCleanupManager.getInstance().start(event.getServer());
+    // 启动在线时长限制
+    PlaytimeManager.getInstance().start(event.getServer());
   }
 
   // 服务端关闭时清理资源
@@ -80,6 +83,8 @@ public class FireflyMCMod {
     firefly520.fireflymc.event.websocket.PlayerEventWebSocketClient.clearServer();
     // 关闭成员验证管理器
     firefly520.fireflymc.event.websocket.MemberVerificationManager.getInstance().shutdown();
+    // 停止在线时长限制
+    PlaytimeManager.getInstance().stop();
     // 停止掉落物自动清理
     ItemCleanupManager.getInstance().stop();
   }

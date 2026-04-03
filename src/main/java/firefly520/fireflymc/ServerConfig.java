@@ -51,6 +51,15 @@ public class ServerConfig {
         // 新手福利包配置
         public final ModConfigSpec.BooleanValue enableStarterKit;
 
+        // 在线时长限制配置
+        public final ModConfigSpec.BooleanValue enablePlaytimeLimiter;
+        public final ModConfigSpec.IntValue playtimeDailyLimitMinutes;
+        public final ModConfigSpec.IntValue playtimeContinuousLimitMinutes;
+        public final ModConfigSpec.IntValue playtimeBypassOpLevel;
+        public final ModConfigSpec.IntValue playtimeCheckIntervalSeconds;
+        public final ModConfigSpec.ConfigValue<String> playtimeKickMessageDaily;
+        public final ModConfigSpec.ConfigValue<String> playtimeKickMessageContinuous;
+
         public ServerConfigImpl(ModConfigSpec.Builder builder) {
             builder.push("server")
                     .translation("fireflymc.config.server");
@@ -184,6 +193,48 @@ public class ServerConfig {
                     .comment("是否启用新手福利包（首次加入服务器时给予）")
                     .translation("fireflymc.config.starter_kit.enabled")
                     .define("enabled", true);
+
+            builder.pop();
+
+            // 在线时长限制配置
+            builder.push("playtime")
+                    .comment("玩家在线时长限制配置")
+                    .translation("fireflymc.config.playtime");
+
+            enablePlaytimeLimiter = builder
+                    .comment("是否启用玩家在线时长限制")
+                    .translation("fireflymc.config.playtime.enabled")
+                    .define("enablePlaytimeLimiter", false);
+
+            playtimeDailyLimitMinutes = builder
+                    .comment("每日最大在线时长（分钟）")
+                    .translation("fireflymc.config.playtime.daily_limit_minutes")
+                    .defineInRange("dailyLimitMinutes", 480, 30, 1440);
+
+            playtimeContinuousLimitMinutes = builder
+                    .comment("连续在线最大时长（分钟）")
+                    .translation("fireflymc.config.playtime.continuous_limit_minutes")
+                    .defineInRange("continuousLimitMinutes", 120, 15, 720);
+
+            playtimeBypassOpLevel = builder
+                    .comment("跳过时长限制的最低OP等级（0=无人跳过，2=OP，4=最高OP）")
+                    .translation("fireflymc.config.playtime.bypass_op_level")
+                    .defineInRange("bypassOpLevel", 2, 0, 4);
+
+            playtimeCheckIntervalSeconds = builder
+                    .comment("时长检查间隔（秒）")
+                    .translation("fireflymc.config.playtime.check_interval_seconds")
+                    .defineInRange("checkIntervalSeconds", 30, 10, 300);
+
+            playtimeKickMessageDaily = builder
+                    .comment("达到每日时长限制时的踢出提示")
+                    .translation("fireflymc.config.playtime.kick_message_daily")
+                    .define("kickMessageDaily", "§c[FireflyMC] 你今日的在线时长已达上限，明天再来吧！");
+
+            playtimeKickMessageContinuous = builder
+                    .comment("达到连续在线时长限制时的踢出提示")
+                    .translation("fireflymc.config.playtime.kick_message_continuous")
+                    .define("kickMessageContinuous", "§c[FireflyMC] 你已连续在线过久，请休息一下再回来！");
 
             builder.pop();
         }
