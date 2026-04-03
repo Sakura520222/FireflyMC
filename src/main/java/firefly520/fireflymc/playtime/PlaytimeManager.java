@@ -110,6 +110,8 @@ public class PlaytimeManager {
 
         this.dataFile = server.getServerDirectory().resolve("fireflymc_playtime.json");
         loadData();
+        // 服务器重启后冷却期自然过期（冷却期仅10分钟），清理残留记录
+        continuousKickCooldowns.clear();
         this.started = true;
 
         int checkInterval = ServerConfig.SERVER.playtimeCheckIntervalSeconds.get();
@@ -126,6 +128,17 @@ public class PlaytimeManager {
                 LOGGER.error("[FireflyMC] 时长检查任务异常", e);
             }
         }, checkInterval, checkInterval, TimeUnit.SECONDS);
+    }
+
+    /**
+     * 配置热重载时更新缓存值
+     */
+    public void onConfigReload() {
+        this.cachedDailyLimitSeconds = (long) ServerConfig.SERVER.playtimeDailyLimitMinutes.get() * 60;
+        this.cachedContinuousLimitSeconds = (long) ServerConfig.SERVER.playtimeContinuousLimitMinutes.get() * 60;
+        LOGGER.info("[FireflyMC] 在线时长配置已重载 — 每日上限: {}分钟, 连续上限: {}分钟",
+                ServerConfig.SERVER.playtimeDailyLimitMinutes.get(),
+                ServerConfig.SERVER.playtimeContinuousLimitMinutes.get());
     }
 
     /**
@@ -292,6 +305,7 @@ public class PlaytimeManager {
             }
 
             // 踢出检查：连续在线超限
+            // 先累加时间（需在移除会话前统计本次时长），再添加到待移除列表
             if (continuousRemaining <= 0) {
                 toRemove.add(uuid);
                 accumulateDaily(uuid, continuousSeconds);
@@ -303,6 +317,7 @@ public class PlaytimeManager {
             }
 
             // 踢出检查：每日总时长超限
+            // 先累加时间（需在移除会话前统计本次时长），再添加到待移除列表
             if (dailyRemaining <= 0) {
                 toRemove.add(uuid);
                 accumulateDaily(uuid, continuousSeconds);

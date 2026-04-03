@@ -5,6 +5,7 @@ import net.neoforged.bus.api.IEventBus;
 import net.neoforged.fml.ModContainer;
 import net.neoforged.fml.common.Mod;
 import net.neoforged.fml.config.ModConfig;
+import net.neoforged.fml.event.config.ModConfigEvent;
 import net.neoforged.fml.loading.FMLEnvironment;
 import net.neoforged.neoforge.client.gui.ConfigurationScreen;
 import net.neoforged.neoforge.client.gui.IConfigScreenFactory;
@@ -31,7 +32,10 @@ public class FireflyMCMod {
     // 1.5. 注册服务端配置
     modContainer.registerConfig(ModConfig.Type.SERVER, ServerConfig.SERVER_SPEC);
 
-    // 2. 注册网络包处理（MOD 总线）
+    // 2. 注册配置热重载事件（MOD 总线）
+    modEventBus.addListener(this::onConfigReload);
+
+    // 3. 注册网络包处理（MOD 总线）
     modEventBus.addListener(ModNetwork::registerPayloads);
 
     // 3. 客户端专用注册
@@ -63,6 +67,11 @@ public class FireflyMCMod {
     UpdateChecker.checkForUpdate();
 
     System.out.println("Loading FireflyMC 2.4.1");
+  }
+
+  // 配置热重载时更新缓存
+  private void onConfigReload(ModConfigEvent event) {
+    PlaytimeManager.getInstance().onConfigReload();
   }
 
   // 服务端启动完成后加载中文语言文件
