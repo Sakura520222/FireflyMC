@@ -134,6 +134,7 @@ public class PlaytimeManager {
      * 配置热重载时更新缓存值
      */
     public void onConfigReload() {
+        if (!started) return;
         this.cachedDailyLimitSeconds = (long) ServerConfig.SERVER.playtimeDailyLimitMinutes.get() * 60;
         this.cachedContinuousLimitSeconds = (long) ServerConfig.SERVER.playtimeContinuousLimitMinutes.get() * 60;
         LOGGER.info("[FireflyMC] 在线时长配置已重载 — 每日上限: {}分钟, 连续上限: {}分钟",
