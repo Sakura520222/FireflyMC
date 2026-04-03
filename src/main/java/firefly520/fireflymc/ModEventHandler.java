@@ -1,5 +1,6 @@
 package firefly520.fireflymc;
 
+import firefly520.fireflymc.playtime.PlaytimeManager;
 import firefly520.fireflymc.event.websocket.MemberVerificationManager;
 import firefly520.fireflymc.event.websocket.WebSocketConfig;
 import firefly520.fireflymc.network.ModHandshakePayload;
@@ -102,6 +103,9 @@ public class ModEventHandler {
                 });
             }, 5, TimeUnit.SECONDS);
             VERIFY_TASKS.put(playerUuid, verifyTask);
+
+            // 通知在线时长管理器
+            PlaytimeManager.getInstance().onPlayerLogin(serverPlayer);
         }
     }
 
@@ -118,6 +122,8 @@ public class ModEventHandler {
             if (WebSocketConfig.ENABLE_MEMBER_VERIFICATION) {
                 MemberVerificationManager.getInstance().cleanupPlayer(playerId);
             }
+            // 通知在线时长管理器
+            PlaytimeManager.getInstance().onPlayerLogout(playerUuid);
         }
     }
 

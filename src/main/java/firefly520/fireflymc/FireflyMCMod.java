@@ -5,6 +5,7 @@ import net.neoforged.bus.api.IEventBus;
 import net.neoforged.fml.ModContainer;
 import net.neoforged.fml.common.Mod;
 import net.neoforged.fml.config.ModConfig;
+import net.neoforged.fml.event.config.ModConfigEvent;
 import net.neoforged.fml.loading.FMLEnvironment;
 import net.neoforged.neoforge.client.gui.ConfigurationScreen;
 import net.neoforged.neoforge.client.gui.IConfigScreenFactory;
@@ -16,6 +17,7 @@ import firefly520.fireflymc.client.UpdateChecker;
 import firefly520.fireflymc.client.TitleScreenDetector;
 import firefly520.fireflymc.event.websocket.PlayerEventWebSocketClient;
 import firefly520.fireflymc.network.ModNetwork;
+import firefly520.fireflymc.playtime.PlaytimeManager;
 import firefly520.fireflymc.util.ServerLanguageLoader;
 
 @Mod(FireflyMCMod.MODID)
@@ -30,7 +32,10 @@ public class FireflyMCMod {
     // 1.5. 注册服务端配置
     modContainer.registerConfig(ModConfig.Type.SERVER, ServerConfig.SERVER_SPEC);
 
-    // 2. 注册网络包处理（MOD 总线）
+    // 2. 注册配置热重载事件（MOD 总线）
+    modEventBus.addListener(this::onConfigReload);
+
+    // 3. 注册网络包处理（MOD 总线）
     modEventBus.addListener(ModNetwork::registerPayloads);
 
     // 3. 客户端专用注册
@@ -64,6 +69,11 @@ public class FireflyMCMod {
     System.out.println("Loading FireflyMC 2.4.1");
   }
 
+  // 配置热重载时更新缓存
+  private void onConfigReload(ModConfigEvent event) {
+    PlaytimeManager.getInstance().onConfigReload();
+  }
+
   // 服务端启动完成后加载中文语言文件
   private void onServerStarted(ServerStartedEvent event) {
     ServerLanguageLoader.loadZhCnLanguage();
@@ -71,6 +81,8 @@ public class FireflyMCMod {
     firefly520.fireflymc.event.websocket.PlayerEventWebSocketClient.setServer(event.getServer());
     // 启动掉落物自动清理
     ItemCleanupManager.getInstance().start(event.getServer());
+    // 启动在线时长限制
+    PlaytimeManager.getInstance().start(event.getServer());
   }
 
   // 服务端关闭时清理资源
@@ -80,6 +92,8 @@ public class FireflyMCMod {
     firefly520.fireflymc.event.websocket.PlayerEventWebSocketClient.clearServer();
     // 关闭成员验证管理器
     firefly520.fireflymc.event.websocket.MemberVerificationManager.getInstance().shutdown();
+    // 停止在线时长限制
+    PlaytimeManager.getInstance().stop();
     // 停止掉落物自动清理
     ItemCleanupManager.getInstance().stop();
   }
