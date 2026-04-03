@@ -355,6 +355,7 @@ public class PlaytimeManager {
      */
     private boolean isBypassed(ServerPlayer player) {
         int bypassLevel = ServerConfig.SERVER.playtimeBypassOpLevel.get();
+        if (bypassLevel <= 0) return false; // 0 = 无人跳过
         return player.createCommandSourceStack().hasPermission(bypassLevel);
     }
 
