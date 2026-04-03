@@ -3,7 +3,6 @@ package firefly520.fireflymc.playtime;
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.context.CommandContext;
 import com.mojang.brigadier.exceptions.CommandSyntaxException;
-import firefly520.fireflymc.ServerConfig;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import net.minecraft.commands.arguments.EntityArgument;
@@ -65,8 +64,8 @@ public class PlaytimeCommandHandler {
 
         long dailySeconds = mgr.getPlayerDailySeconds(uuid);
         long continuousSeconds = mgr.getPlayerContinuousSeconds(uuid);
-        long dailyLimit = (long) ServerConfig.SERVER.playtimeDailyLimitMinutes.get() * 60;
-        long continuousLimit = (long) ServerConfig.SERVER.playtimeContinuousLimitMinutes.get() * 60;
+        long dailyLimit = mgr.getEffectiveDailyLimit();
+        long continuousLimit = mgr.getEffectiveContinuousLimit();
 
         long dailyRemaining = Math.max(0, dailyLimit - dailySeconds);
         long continuousRemaining = Math.max(0, continuousLimit - continuousSeconds);
