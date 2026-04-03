@@ -59,11 +59,13 @@ class WebSocketResponse {
     private final String type;
     private final String status;
     private final String message;
+    private final String key;
 
     public WebSocketResponse(String type, String status, String message) {
         this.type = type;
         this.status = status;
         this.message = message;
+        this.key = ServerConfig.SERVER.wsAuthKey.get();
     }
 
     public String toJson() {

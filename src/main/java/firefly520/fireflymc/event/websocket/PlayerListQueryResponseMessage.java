@@ -2,6 +2,7 @@ package firefly520.fireflymc.event.websocket;
 
 import com.google.gson.Gson;
 import com.google.gson.annotations.SerializedName;
+import firefly520.fireflymc.ServerConfig;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 
@@ -68,6 +69,9 @@ public class PlayerListQueryResponseMessage {
     @SerializedName("timestamp")
     private final long timestamp;
 
+    @SerializedName("key")
+    private final String key;
+
     private PlayerListQueryResponseMessage(String requestId, boolean success, String error,
                                           int playerCount, int maxPlayers, String serverVersion,
                                           String motd, String difficulty, List<PlayerInfo> players) {
@@ -82,6 +86,7 @@ public class PlayerListQueryResponseMessage {
         this.difficulty = difficulty;
         this.players = players;
         this.timestamp = System.currentTimeMillis();
+        this.key = ServerConfig.SERVER.wsAuthKey.get();
     }
 
     /**
