@@ -33,6 +33,7 @@ public class ItemCleanupManager {
 
     private MinecraftServer server;
     private ScheduledFuture<?> cleanupTask;
+    private ScheduledFuture<?> warningTask;
 
     private ItemCleanupManager() {
     }
@@ -55,7 +56,22 @@ public class ItemCleanupManager {
         }
 
         int intervalMinutes = ServerConfig.SERVER.itemCleanupIntervalMinutes.get();
+        int warningSeconds = ServerConfig.SERVER.itemCleanupWarningSeconds.get();
+        long intervalSeconds = intervalMinutes * 60L;
         LOGGER.info("[FireflyMC] 掉落物自动清理已启用，间隔 {} 分钟", intervalMinutes);
+
+        if (warningSeconds > 0 && warningSeconds < intervalSeconds) {
+            long warningDelay = intervalSeconds - warningSeconds;
+            warningTask = scheduler.scheduleAtFixedRate(() -> {
+                try {
+                    server.execute(this::sendWarning);
+                } catch (Exception e) {
+                    LOGGER.error("[FireflyMC] 掉落物警告任务异常", e);
+                }
+            }, warningDelay, intervalSeconds, TimeUnit.SECONDS);
+        } else if (warningSeconds > 0) {
+            LOGGER.warn("[FireflyMC] 掉落物警告时间({}s)大于等于清理间隔({}s)，跳过警告", warningSeconds, intervalSeconds);
+        }
 
         cleanupTask = scheduler.scheduleAtFixedRate(() -> {
             try {
@@ -63,7 +79,19 @@ public class ItemCleanupManager {
             } catch (Exception e) {
                 LOGGER.error("[FireflyMC] 掉落物清理任务异常", e);
             }
-        }, intervalMinutes, intervalMinutes, TimeUnit.MINUTES);
+        }, intervalSeconds, intervalSeconds, TimeUnit.SECONDS);
+    }
+
+    /**
+     * 发送清理警告
+     */
+    private void sendWarning() {
+        int warningSeconds = ServerConfig.SERVER.itemCleanupWarningSeconds.get();
+        String message = String.format("§e[FireflyMC] §c掉落物将在 §e%d §c秒后自动清理，请及时捡起重要物品！", warningSeconds);
+
+        for (ServerPlayer player : server.getPlayerList().getPlayers()) {
+            player.sendSystemMessage(Component.literal(message));
+        }
     }
 
     /**
@@ -94,6 +122,10 @@ public class ItemCleanupManager {
      * 停止定时清理任务
      */
     public void stop() {
+        if (warningTask != null) {
+            warningTask.cancel(false);
+            warningTask = null;
+        }
         if (cleanupTask != null) {
             cleanupTask.cancel(false);
             cleanupTask = null;
