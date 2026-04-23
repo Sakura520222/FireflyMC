@@ -25,6 +25,7 @@ public class ServerConfig {
         public final ModConfigSpec.IntValue memberVerificationTimeout;
         public final ModConfigSpec.BooleanValue enableItemCleanup;
         public final ModConfigSpec.IntValue itemCleanupIntervalMinutes;
+        public final ModConfigSpec.IntValue itemCleanupWarningSeconds;
 
         // AI配置
         public final ModConfigSpec.ConfigValue<String> aiApiUrl;
@@ -93,6 +94,11 @@ public class ServerConfig {
                     .comment("Item cleanup interval in minutes")
                     .translation("fireflymc.config.server.item_cleanup_interval_minutes")
                     .defineInRange("itemCleanupIntervalMinutes", 5, 1, 60);
+
+            itemCleanupWarningSeconds = builder
+                    .comment("Warning time before item cleanup in seconds (0 to disable)")
+                    .translation("fireflymc.config.server.item_cleanup_warning_seconds")
+                    .defineInRange("itemCleanupWarningSeconds", 60, 0, 300);
 
             builder.pop();
 
