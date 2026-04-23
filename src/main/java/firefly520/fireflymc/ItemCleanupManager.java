@@ -79,7 +79,7 @@ public class ItemCleanupManager {
             } catch (Exception e) {
                 LOGGER.error("[FireflyMC] 掉落物清理任务异常", e);
             }
-        }, intervalMinutes, intervalMinutes, TimeUnit.MINUTES);
+        }, intervalSeconds, intervalSeconds, TimeUnit.SECONDS);
     }
 
     /**
