@@ -57,8 +57,13 @@ public final class SingleplayerRelayManager {
                 boolean allowCommands = Config.CLIENT.SINGLEPLAYER_RELAY_ALLOW_COMMANDS.get();
                 int requestedPort = findAvailablePort();
                 boolean published = server.publishServer(GameType.SURVIVAL, allowCommands, requestedPort);
+                server.setUsesAuthentication(false);
+                server.setPreventProxyConnections(false);
                 LOGGER.info("[FireflyMC] 单人世界开放 LAN 结果: {}, requestedPort={}, allowCommands={}",
                         published, requestedPort, allowCommands);
+            } else {
+                server.setUsesAuthentication(false);
+                server.setPreventProxyConnections(false);
             }
 
             int port = server.getPort();

@@ -4,14 +4,10 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.screens.ConnectScreen;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.multiplayer.ServerData;
-import net.minecraft.client.multiplayer.TransferState;
 import net.minecraft.client.multiplayer.resolver.ServerAddress;
 import net.minecraft.network.chat.Component;
-import net.minecraft.resources.ResourceLocation;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import java.util.Map;
 
 /**
  * Guest 加入公开房间流程。
@@ -67,7 +63,7 @@ public final class RelayGuestJoiner {
                 address,
                 serverData,
                 false,
-                new TransferState(Map.<ResourceLocation, byte[]>of())
+                null
         );
     }
 }

@@ -42,6 +42,7 @@ public final class RelayLobbyWebSocketClient {
     private RelayHostBridge hostBridge;
     private CompletableFuture<String> pendingJoin;
     private final StringBuilder textAccumulator = new StringBuilder();
+    private long lastLobbyListRequestAt = 0L;
 
     private RelayLobbyWebSocketClient() {
     }
@@ -83,6 +84,12 @@ public final class RelayLobbyWebSocketClient {
     }
 
     public void requestLobbyList() {
+        long now = System.currentTimeMillis();
+        if (RelayLobbyState.isRefreshing() || now - lastLobbyListRequestAt < 1000) {
+            LOGGER.debug("[FireflyMC] 跳过重复公开大厅刷新请求");
+            return;
+        }
+        lastLobbyListRequestAt = now;
         RelayLobbyState.setRefreshing(true);
         executor.execute(() -> {
             try {
