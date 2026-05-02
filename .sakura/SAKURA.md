@@ -1,25 +1,73 @@
 # 项目概述文档：FireflyMC
 
 ## 1. 项目简介
-FireflyMC 是一个基于 Java 开发的 Minecraft 模组项目，旨在为游戏扩展自定义的方块、方块实体及相关玩法机制。
+FireflyMC 是一个基于 Java 开发的 Minecraft 模组项目，旨在为游戏扩展自定义的方块、方块实体及相关玩法机制。项目采用 Minecraft Mod 开发框架（Forge/NeoForge 体系），注重模块化设计与规范的注册机制。
 
 ## 2. 技术栈
-- 核心语言：Java
-- 构建工具：Gradle（含 Gradle Wrapper）
-- 基础框架：Minecraft Mod 开发框架（根据文档术语推断为 Forge 或 NeoForge 体系）
-- 持续集成：GitHub Actions
+- **核心语言**：Java
+- **构建工具**：Gradle（含 Gradle Wrapper）
+- **基础框架**：Minecraft Mod 开发框架（Forge/NeoForge）
+- **持续集成**：GitHub Actions
+- **任务调度**：ScheduledExecutorService（用于定时清理、倒计时等后台任务）
 
-## 3. 项目结构
-- .github/workflows/：存放 GitHub Actions 自动化构建与测试的工作流配置文件。
-- .sakura/：项目的专属开发知识库与规范文档，内容涵盖新手入门、项目结构划分、版本控制，以及底层机制（如注册表、客户端与服务端概念、NBT 数据存储、访问转换器、方块与方块实体索引等）。
-- gradle/ 及构建脚本：包含 Gradle Wrapper 的 jar 包和配置文件，以及 build.gradle、settings.gradle 等项目构建与依赖管理声明文件。
-- src/main/：项目核心源代码及资源根目录，存放所有的 Java 代码包、游戏 assets 和 data 资源文件。
-- .gitignore：Git 版本控制忽略规则文件。
+## 3. 架构设计与关键决策
 
-## 4. 开发约定
-基于项目结构和知识库目录，该项目遵循以下开发规范：
-- **规范的注册机制**：新增的游戏内容（如方块、方块实体）必须严格遵循 Minecraft 的 Registry（注册表）体系进行统一注册。
-- **严格的物理侧隔离**：在开发逻辑时需明确区分 Client（客户端）和 Server（服务端），确保逻辑在正确的物理侧执行，避免跨端调用导致的崩溃。
-- **合规的原版侵入**：在需要修改 Minecraft 原版代码访问权限（如将 private 改为 public）时，统一使用 Access Transformers (AT) 机制，而非直接反编译混淆源码。
-- **标准化的数据存储**：对于需要保存的动态数据（如方块实体的状态），统一使用 NBT（Named Binary Tag）数据格式进行序列化与反序列化。
-- **模块化与版本化管理**：代码结构需符合 gettingstarted_structuring 规范，并遵循 gettingstarted_versioning 进行模组版本号的迭代管理。
+### 整体架构
+- **Manager 层**：如 `ItemCleanupManager`，负责任务的生命周期管理（启动、停止、取消）
+- **Config 层**：如 `ServerConfig`，配置与业务逻辑分离
+- **线程模型**：后台异步任务通过 `server.execute()` 委托至主线程执行 Bukkit 相关操作
+
+### 关键决策
+- **单例模式**：Manager 采用单例管理全局任务状态
+- **配置开关**：以 0 值表示功能禁用，正数表示启用并作为参数值
+- **资源清理**：任务取消后必须置 null 并记录日志，防止内存泄漏
+- **物理侧隔离**：明确区分客户端与服务端逻辑，避免跨端崩溃
+
+## 4. 已知问题和注意事项
+
+### 设计缺陷
+- **配置热更新缺失**：运行时修改配置（如 `warningSeconds`）不会重新调度任务，导致行为不一致
+- **竞态条件风险**：`start()` 与 `stop()` 之间缺乏同步机制，并发调用可能导致任务泄露
+- **隐含耦合约束**：多阶段倒计时中，`warningTask` 与 `cleanupTask` 的周期关系（如 `warningDelay = intervalSeconds - warningSeconds`）未在注释中显式说明
+
+### 潜在风险
+- **数据流不一致**：向用户展示的数值（如倒计时秒数）可能是配置原始值而非计算后的实际值，造成误导
+- **单位转换连锁反应**：时间变量重命名（如 `intervalMinutes` → `intervalSeconds`）时，必须同步验证赋值源头（配置文件、计算逻辑）是否做了等比转换
+
+## 5. 审查中发现的重要模式
+
+### 代码模式
+| 模式 | 说明 |
+|------|------|
+| 定时任务模式 | `ScheduledExecutorService` + `scheduleAtFixedRate` |
+| 线程委托模式 | 异步线程 → `server.execute()` → 主线程执行 |
+| 资源清理模式 | `cancel()` + 置 null + 日志记录 |
+| 配置开关模式 | 0 = 禁用，>0 = 启用并作为参数值 |
+
+### 常见错误模式
+- **变量命名与单位脱节**：变量名含 `Seconds` 却使用 `TimeUnit.MINUTES`
+- **描述与实现不一致**：PR 描述中列举的功能点（如“10s/5s/3s 分别提醒”）未在代码中完整实现
+- **展示值硬编码配置值**：向用户展示的数值直接取自配置，忽略运行时动态变化
+
+## 6. 团队约定和规范
+
+### 审查规则
+- **PR描述-实现对照**：描述中的每一项功能必须有对应的代码实现
+- **时间单位一致性**：同一方法/功能块内的 `TimeUnit` 必须统一，否则需注释说明原因
+- **动态显示值校验**：用户可见的数值必须是计算后的实际值，禁止直接展示配置原始值
+- **定时任务线程安全**：`start()`/`stop()` 必须考虑重入和并发调用场景
+
+### 代码规范
+- 新增游戏内容（方块、方块实体等）必须遵循 Registry 注册体系
+- 修改原版访问权限统一使用 Access Transformers (AT) 机制
+- 动态数据存储统一使用 NBT 格式
+- Bukkit 消息发送必须走 `server.execute()` 确保主线程执行
+- 配置项范围校验应在加载时完成并记录警告日志
+
+### 快速审查补充策略
+对于涉及“用户可见输出”的变更，即使采用 `quick` 策略，也必须完整走读数据流，追踪数值从配置到展示的全链路。
+
+## 仓库信息
+- 仓库名: Sakura520222/FireflyMC
+- 语言统计: Java: 363972
+- 累计反思次数: 3
