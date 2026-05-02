@@ -3,6 +3,7 @@ package firefly520.fireflymc.client.screen;
 import firefly520.fireflymc.client.relay.RelayLobbyRoom;
 import firefly520.fireflymc.client.relay.RelayLobbyState;
 import firefly520.fireflymc.client.relay.RelayLobbyWebSocketClient;
+import firefly520.fireflymc.client.relay.RelayGuestJoiner;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
@@ -107,7 +108,7 @@ public class RelayLobbyScreen extends Screen {
         if (button == 0) {
             RelayLobbyRoom clicked = getRoomAt(mouseX, mouseY);
             if (clicked != null) {
-                RelayLobbyState.setStatusMessage("加入房间将在下一阶段接入: " + clicked.worldName());
+                RelayGuestJoiner.join(this, clicked);
                 return true;
             }
         }

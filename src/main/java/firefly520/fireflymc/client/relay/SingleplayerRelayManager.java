@@ -21,6 +21,7 @@ public final class SingleplayerRelayManager {
     private static final Logger LOGGER = LoggerFactory.getLogger(SingleplayerRelayManager.class);
     private static final SingleplayerRelayManager INSTANCE = new SingleplayerRelayManager();
     private String currentRoomId;
+    private RelayHostBridge hostBridge;
 
     private SingleplayerRelayManager() {
     }
@@ -85,6 +86,11 @@ public final class SingleplayerRelayManager {
             LOGGER.info("[FireflyMC] 停止单人世界联机准备状态");
         }
         RelayLobbyWebSocketClient.getInstance().closeRoom();
+        if (hostBridge != null) {
+            hostBridge.stop();
+            hostBridge = null;
+        }
+        RelayLobbyWebSocketClient.getInstance().setHostBridge(null);
         currentRoomId = null;
         ClientState.isSingleplayerRelayHosting = false;
         ClientState.singleplayerRelayLanPort = -1;
@@ -108,6 +114,11 @@ public final class SingleplayerRelayManager {
                 port,
                 maxPlayers
         );
+            if (hostBridge != null) {
+                hostBridge.stop();
+            }
+            hostBridge = new RelayHostBridge(port);
+            RelayLobbyWebSocketClient.getInstance().setHostBridge(hostBridge);
         RelayLobbyWebSocketClient.getInstance().publishRoom(message, currentRoomId);
         LOGGER.info("[FireflyMC] 已准备发布公开房间: roomId={}, worldName={}, maxPlayers={}",
                 currentRoomId, worldName, maxPlayers);

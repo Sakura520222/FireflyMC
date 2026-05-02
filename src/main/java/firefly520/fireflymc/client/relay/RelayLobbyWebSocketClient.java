@@ -38,6 +38,9 @@ public final class RelayLobbyWebSocketClient {
     private WebSocket webSocket;
     private ScheduledFuture<?> heartbeatTask;
     private String currentRoomId;
+    private RelayGuestProxy guestProxy;
+    private RelayHostBridge hostBridge;
+    private CompletableFuture<String> pendingJoin;
     private final StringBuilder textAccumulator = new StringBuilder();
 
     private RelayLobbyWebSocketClient() {
@@ -58,6 +61,10 @@ public final class RelayLobbyWebSocketClient {
                 LOGGER.warn("[FireflyMC] 发布单人世界公开房间失败: {}", e.getMessage());
             }
         });
+    }
+
+    public void setHostBridge(RelayHostBridge hostBridge) {
+        this.hostBridge = hostBridge;
     }
 
     public void closeRoom() {
@@ -86,6 +93,46 @@ public final class RelayLobbyWebSocketClient {
             } catch (Exception e) {
                 RelayLobbyState.setStatusMessage("刷新失败: " + e.getMessage());
                 LOGGER.warn("[FireflyMC] 请求公开大厅列表失败: {}", e.getMessage());
+            }
+        });
+    }
+
+    public CompletableFuture<String> joinRoom(RelayLobbyRoom room, String guestPlayerName, String guestUuid) {
+        CompletableFuture<String> future = new CompletableFuture<>();
+        pendingJoin = future;
+        executor.execute(() -> {
+            try {
+                ensureConnected();
+                send(RelayLobbyMessage.guestJoin(room.roomId(), guestPlayerName, guestUuid));
+            } catch (Exception e) {
+                future.completeExceptionally(e);
+            }
+        });
+        return future;
+    }
+
+    public void setGuestProxy(RelayGuestProxy proxy) {
+        this.guestProxy = proxy;
+    }
+
+    public void sendControl(RelayLobbyMessage message) {
+        executor.execute(() -> {
+            try {
+                ensureConnected();
+                send(message);
+            } catch (Exception e) {
+                LOGGER.debug("[FireflyMC] 发送 relay 控制消息失败: {}", e.getMessage());
+            }
+        });
+    }
+
+    public void sendBinary(ByteBuffer buffer) {
+        executor.execute(() -> {
+            try {
+                ensureConnected();
+                webSocket.sendBinary(buffer, true).join();
+            } catch (Exception e) {
+                LOGGER.debug("[FireflyMC] 发送 relay 二进制数据失败: {}", e.getMessage());
             }
         });
     }
@@ -136,7 +183,7 @@ public final class RelayLobbyWebSocketClient {
                                 LOGGER.info("[FireflyMC] 收到公开大厅二进制JSON消息: {}", message);
                                 handleTextMessage(message);
                             } else {
-                                LOGGER.debug("[FireflyMC] 收到公开大厅二进制消息: {} bytes", bytes.length);
+                                handleBinaryFrame(bytes);
                             }
                         } else {
                             LOGGER.debug("[FireflyMC] 收到公开大厅二进制分片，等待后续阶段处理");
@@ -186,7 +233,55 @@ public final class RelayLobbyWebSocketClient {
         } else if (result == null) {
             LOGGER.warn("[FireflyMC] 公开大厅消息 JSON 解析失败: {}", json);
         } else {
-            LOGGER.info("[FireflyMC] 收到未处理的公开大厅消息: {}", json);
+            RelayControlMessage message = RelayControlMessage.fromJson(json);
+            handleControlMessage(message, json);
+        }
+    }
+
+    private void handleControlMessage(RelayControlMessage message, String rawJson) {
+        if (message == null || message.type() == null) {
+            LOGGER.info("[FireflyMC] 收到未处理的公开大厅消息: {}", rawJson);
+            return;
+        }
+
+        switch (message.type()) {
+            case "join_accepted" -> {
+                if (pendingJoin != null) {
+                    pendingJoin.complete(message.guestSessionId());
+                    pendingJoin = null;
+                }
+            }
+            case "stream_open" -> {
+                if (hostBridge != null && message.streamId() != null) {
+                    hostBridge.openStream(message.streamId());
+                }
+            }
+            case "stream_close" -> {
+                if (hostBridge != null && message.streamId() != null) {
+                    hostBridge.closeStream(message.streamId(), "remote_closed");
+                }
+            }
+            case "error" -> {
+                if (pendingJoin != null) {
+                    pendingJoin.completeExceptionally(new IllegalStateException(message.code() + ": " + message.message()));
+                    pendingJoin = null;
+                }
+                RelayLobbyState.setStatusMessage("Relay 错误: " + message.message());
+            }
+            default -> LOGGER.info("[FireflyMC] 收到未处理的公开大厅消息: {}", rawJson);
+        }
+    }
+
+    private void handleBinaryFrame(byte[] bytes) {
+        boolean handled = false;
+        if (guestProxy != null) {
+            handled = guestProxy.handleBinary(bytes);
+        }
+        if (!handled && hostBridge != null) {
+            handled = hostBridge.handleBinary(bytes);
+        }
+        if (!handled) {
+            LOGGER.debug("[FireflyMC] 收到未路由的 relay 二进制消息: {} bytes", bytes.length);
         }
     }
 

@@ -34,6 +34,21 @@ public final class RelayLobbyMessage {
     @SerializedName("maxPlayers")
     private final int maxPlayers;
 
+    @SerializedName("guestPlayerName")
+    private final String guestPlayerName;
+
+    @SerializedName("guestUuid")
+    private final String guestUuid;
+
+    @SerializedName("guestSessionId")
+    private final String guestSessionId;
+
+    @SerializedName("streamId")
+    private final String streamId;
+
+    @SerializedName("reason")
+    private final String reason;
+
     @SerializedName("modVersion")
     private final String modVersion;
 
@@ -45,6 +60,13 @@ public final class RelayLobbyMessage {
 
     private RelayLobbyMessage(String type, String roomId, String worldName, String hostPlayerName,
                               String hostUuid, int lanPort, int maxPlayers) {
+        this(type, roomId, worldName, hostPlayerName, hostUuid, lanPort, maxPlayers,
+            null, null, null, null, null);
+        }
+
+        private RelayLobbyMessage(String type, String roomId, String worldName, String hostPlayerName,
+                      String hostUuid, int lanPort, int maxPlayers, String guestPlayerName,
+                      String guestUuid, String guestSessionId, String streamId, String reason) {
         this.type = type;
         this.roomId = roomId;
         this.worldName = worldName;
@@ -52,6 +74,11 @@ public final class RelayLobbyMessage {
         this.hostUuid = hostUuid;
         this.lanPort = lanPort;
         this.maxPlayers = maxPlayers;
+        this.guestPlayerName = guestPlayerName;
+        this.guestUuid = guestUuid;
+        this.guestSessionId = guestSessionId;
+        this.streamId = streamId;
+        this.reason = reason;
         this.modVersion = FireflyMCMod.VERSION;
         this.minecraftVersion = "1.21.1";
         this.timestamp = System.currentTimeMillis();
@@ -72,6 +99,21 @@ public final class RelayLobbyMessage {
 
     public static RelayLobbyMessage lobbyList() {
         return new RelayLobbyMessage("lobby_list", null, null, null, null, -1, -1);
+    }
+
+    public static RelayLobbyMessage guestJoin(String roomId, String guestPlayerName, String guestUuid) {
+        return new RelayLobbyMessage("guest_join", roomId, null, null, null, -1, -1,
+                guestPlayerName, guestUuid, null, null, null);
+    }
+
+    public static RelayLobbyMessage streamOpen(String roomId, String guestSessionId, String streamId) {
+        return new RelayLobbyMessage("stream_open", roomId, null, null, null, -1, -1,
+                null, null, guestSessionId, streamId, null);
+    }
+
+    public static RelayLobbyMessage streamClose(String roomId, String streamId, String reason) {
+        return new RelayLobbyMessage("stream_close", roomId, null, null, null, -1, -1,
+                null, null, null, streamId, reason);
     }
 
     public String type() {
@@ -98,6 +140,21 @@ public final class RelayLobbyMessage {
         }
         if (maxPlayers >= 0) {
             json.addProperty("maxPlayers", maxPlayers);
+        }
+        if (guestPlayerName != null) {
+            json.addProperty("guestPlayerName", guestPlayerName);
+        }
+        if (guestUuid != null) {
+            json.addProperty("guestUuid", guestUuid);
+        }
+        if (guestSessionId != null) {
+            json.addProperty("guestSessionId", guestSessionId);
+        }
+        if (streamId != null) {
+            json.addProperty("streamId", streamId);
+        }
+        if (reason != null) {
+            json.addProperty("reason", reason);
         }
         json.addProperty("modVersion", modVersion);
         json.addProperty("minecraftVersion", minecraftVersion);
