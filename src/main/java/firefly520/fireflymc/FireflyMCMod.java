@@ -15,6 +15,7 @@ import net.neoforged.neoforge.event.server.ServerStoppingEvent;
 import firefly520.fireflymc.client.ClientHandler;
 import firefly520.fireflymc.client.UpdateChecker;
 import firefly520.fireflymc.client.TitleScreenDetector;
+import firefly520.fireflymc.client.relay.SingleplayerRelayClientEvents;
 import firefly520.fireflymc.event.websocket.PlayerEventWebSocketClient;
 import firefly520.fireflymc.network.ModNetwork;
 import firefly520.fireflymc.playtime.PlaytimeManager;
@@ -48,6 +49,11 @@ public class FireflyMCMod {
       NeoForge.EVENT_BUS.addListener(ClientHandler::onRenderGui);
       // 注册主菜单更新通知检测器
       NeoForge.EVENT_BUS.addListener(TitleScreenDetector::onScreenRender);
+      // 注册单人世界联机阶段一事件
+      NeoForge.EVENT_BUS.addListener(SingleplayerRelayClientEvents::onClientLoggedIn);
+      NeoForge.EVENT_BUS.addListener(SingleplayerRelayClientEvents::onClientLoggedOut);
+      NeoForge.EVENT_BUS.addListener(SingleplayerRelayClientEvents::onClientTick);
+      NeoForge.EVENT_BUS.addListener(SingleplayerRelayClientEvents::onScreenInit);
     }
 
     // 4. 注册游戏事件处理（GAME 总线）
@@ -76,6 +82,10 @@ public class FireflyMCMod {
 
   // 服务端启动完成后加载中文语言文件
   private void onServerStarted(ServerStartedEvent event) {
+    if (event.getServer().isSingleplayer()) {
+      return;
+    }
+
     ServerLanguageLoader.loadZhCnLanguage();
     // 设置服务器实例，用于WebSocket接收消息后广播
     firefly520.fireflymc.event.websocket.PlayerEventWebSocketClient.setServer(event.getServer());
@@ -87,6 +97,10 @@ public class FireflyMCMod {
 
   // 服务端关闭时清理资源
   private void onServerStopping(ServerStoppingEvent event) {
+    if (event.getServer().isSingleplayer()) {
+      return;
+    }
+
     ServerLanguageLoader.clear();
     // 清理WebSocket服务器实例引用
     firefly520.fireflymc.event.websocket.PlayerEventWebSocketClient.clearServer();

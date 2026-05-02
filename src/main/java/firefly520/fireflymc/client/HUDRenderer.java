@@ -43,6 +43,10 @@ public class HUDRenderer
       return;
     }
 
+    if (mc.getSingleplayerServer() != null) {
+      return;
+    }
+
     LocalPlayer player = mc.player;
     if (player == null) {
       return;

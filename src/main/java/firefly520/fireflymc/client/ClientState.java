@@ -12,6 +12,21 @@ public class ClientState {
     public static boolean hasSeenRulesThisSession = false;
 
     /**
+     * 当前单人世界会话是否已处理过联机提示
+     */
+    public static boolean hasHandledSingleplayerRelayPrompt = false;
+
+    /**
+     * 当前会话是否正在为单人世界联机进行 LAN 暴露准备
+     */
+    public static boolean isSingleplayerRelayHosting = false;
+
+    /**
+     * 当前单人世界联机使用的 LAN 端口，-1 表示尚未获取
+     */
+    public static int singleplayerRelayLanPort = -1;
+
+    /**
      * Mod更新通知
      */
     public static boolean hasUpdateAvailable = false;

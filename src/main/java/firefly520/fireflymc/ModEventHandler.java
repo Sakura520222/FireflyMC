@@ -50,7 +50,11 @@ public class ModEventHandler {
             UUID playerUuid = serverPlayer.getUUID();
             MinecraftServer server = serverPlayer.server;
 
-            // 检查成员验证状态
+            if (server.isSingleplayer()) {
+                return;
+            }
+
+            // 检查成员验证状态（仅多人/专用服务器需要；单人世界的集成服务器不走验证服务器流程）
             if (WebSocketConfig.ENABLE_MEMBER_VERIFICATION &&
                 ServerConfig.SERVER.enableMemberVerification.get()) {
                 MemberVerificationManager.getInstance().requestVerification(serverPlayer);
@@ -113,6 +117,10 @@ public class ModEventHandler {
         if (event.getEntity() instanceof ServerPlayer serverPlayer) {
             UUID playerUuid = serverPlayer.getUUID();
             String playerId = serverPlayer.getGameProfile().getName();
+            if (serverPlayer.server.isSingleplayer()) {
+                return;
+            }
+
             ModPayloadHandler.VERIFIED_PLAYERS.remove(playerUuid);
             ModPayloadHandler.CONFIRMED_PLAYERS.remove(playerUuid);
             // 清理超时任务
