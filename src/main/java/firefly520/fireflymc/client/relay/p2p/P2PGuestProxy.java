@@ -67,6 +67,7 @@ public class P2PGuestProxy {
         } catch (IOException ignored) {
         }
         channel.unregisterStream(STREAM_ID);
+        channel.close();
         executor.shutdownNow();
     }
 
@@ -102,7 +103,9 @@ public class P2PGuestProxy {
         } catch (IOException e) {
             LOGGER.debug("[FireflyMC] P2P Guest 本地流关闭: {}", e.getMessage());
         } finally {
-            channel.sendFin(STREAM_ID);
+            if (channel.isRunning()) {
+                channel.sendFin(STREAM_ID);
+            }
             channel.unregisterStream(STREAM_ID);
         }
     }

@@ -58,6 +58,8 @@ public class ReliableUdpChannel {
     private final AtomicLong nextSentLogAt = new AtomicLong(64 * 1024);
     private final AtomicLong nextReceivedLogAt = new AtomicLong(64 * 1024);
     private final SendWindow sendWindow;
+    private volatile long lastReceivedAt = System.currentTimeMillis();
+    private static final long PEER_IDLE_TIMEOUT_MS = 30_000;
 
     public ReliableUdpChannel() throws SocketException {
         this.socket = createSocket();
@@ -101,6 +103,7 @@ public class ReliableUdpChannel {
             if (observedByServer && punchedPeer && !result.isDone()) {
                 LOGGER.info("[FireflyMC] P2P {} 打洞完成: peer={}", role, peerAddress);
                 sendWindow.start();
+                startIdleCheck();
                 result.complete(true);
             }
         }, 0, 300, TimeUnit.MILLISECONDS);
@@ -147,7 +150,7 @@ public class ReliableUdpChannel {
 
     public void sendData(int streamId, byte[] bytes, int length) {
         InetSocketAddress peer = peerAddress;
-        if (peer == null || length <= 0) {
+        if (peer == null || length <= 0 || !running.get()) {
             return;
         }
         int offset = 0;
@@ -171,16 +174,34 @@ public class ReliableUdpChannel {
 
     public void sendFin(int streamId) {
         InetSocketAddress peer = peerAddress;
-        if (peer != null) {
+        if (peer != null && running.get()) {
             send(peer, UdpPacketCodec.fin(streamId, nextSeq.getAndIncrement(), lastAck.get()));
         }
     }
 
+    public boolean isRunning() {
+        return running.get() && !socket.isClosed();
+    }
+
     public void close() {
-        running.set(false);
+        if (!running.compareAndSet(true, false)) {
+            return;
+        }
+        LOGGER.info("[FireflyMC] P2P UDP channel closing: localPort={}", socket.getLocalPort());
         sendWindow.close();
         socket.close();
         executor.shutdownNow();
+    }
+
+    private void startIdleCheck() {
+        executor.scheduleAtFixedRate(() -> {
+            if (!running.get()) return;
+            long idle = System.currentTimeMillis() - lastReceivedAt;
+            if (idle > PEER_IDLE_TIMEOUT_MS) {
+                LOGGER.warn("[FireflyMC] P2P peer idle timeout ({}ms), closing channel", idle);
+                close();
+            }
+        }, 5, 5, TimeUnit.SECONDS);
     }
 
     private void receiveLoop() {
@@ -191,6 +212,7 @@ public class ReliableUdpChannel {
                 socket.receive(packet);
                 byte[] packetBytes = Arrays.copyOfRange(packet.getData(), packet.getOffset(), packet.getOffset() + packet.getLength());
                 if (UdpPacketCodec.isBinaryData(packetBytes)) {
+                    lastReceivedAt = System.currentTimeMillis();
                     handleDataPacket(packetBytes, packet);
                     continue;
                 }
@@ -203,6 +225,7 @@ public class ReliableUdpChannel {
                     }
                 } else if (text.contains("punch")) {
                     punchedPeer = true;
+                    lastReceivedAt = System.currentTimeMillis();
                     peerAddress = new InetSocketAddress(packet.getAddress(), packet.getPort());
                     if (!loggedPunch) {
                         loggedPunch = true;

@@ -10,6 +10,7 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 
 /** Host-side bridge from P2P UDP streams to local integrated-server LAN TCP. */
@@ -28,6 +29,7 @@ public class P2PHostBridge {
     });
     private final Map<Integer, Socket> sockets = new ConcurrentHashMap<>();
     private final AtomicLong lanToP2pBytes = new AtomicLong(0);
+    private final AtomicBoolean running = new AtomicBoolean(true);
 
     public P2PHostBridge(int lanPort, ReliableUdpChannel channel) {
         this.lanPort = lanPort;
@@ -40,6 +42,7 @@ public class P2PHostBridge {
     }
 
     public void stop() {
+        running.set(false);
         sockets.values().forEach(socket -> {
             try {
                 socket.close();
@@ -75,7 +78,8 @@ public class P2PHostBridge {
         byte[] buffer = new byte[BUFFER_SIZE];
         try (Socket ignored = socket; InputStream input = socket.getInputStream()) {
             int read;
-            while ((read = input.read(buffer)) != -1) {
+            while (running.get() && (read = input.read(buffer)) != -1) {
+                if (!running.get()) break;
                 channel.sendData(streamId, buffer, read);
                 lanToP2pBytes.addAndGet(read);
                 if (lanToP2pBytes.get() <= 8192 || read > 1000) {
@@ -83,10 +87,14 @@ public class P2PHostBridge {
                 }
             }
         } catch (IOException e) {
-            LOGGER.debug("[FireflyMC] P2P Host LAN 流关闭: {}", e.getMessage());
+            if (running.get()) {
+                LOGGER.debug("[FireflyMC] P2P Host LAN 流关闭: {}", e.getMessage());
+            }
         } finally {
             sockets.remove(streamId);
-            channel.sendFin(streamId);
+            if (channel.isRunning()) {
+                channel.sendFin(streamId);
+            }
             channel.unregisterStream(streamId);
         }
     }
