@@ -53,7 +53,8 @@ public class HUDRenderer
     }
 
 
-    int playerCount = getPlayerCount(player);
+    List<String> playerNames = getOnlinePlayerNames(player);
+    int playerCount = playerNames.size();
 
 
     Font font = mc.font;
@@ -68,8 +69,9 @@ public class HUDRenderer
     // 计算网址换行后的行数
     int urlLines = font.split(WEBSITE_URL, baseWidth).size();
 
-    // 总高度 = 服务器名(1行) + 在线人数(1行) + 网址(urlLines行) + 分隔线(1行) + 玩家列表(MAX_VISIBLE_PLAYERS行)
-    int playerListHeight = lineHeight * (MAX_VISIBLE_PLAYERS + 1); // +1 for separator
+    // 总高度 = 服务器名(1行) + 在线人数(1行) + 网址(urlLines行) + 分隔线(1行) + 实际可见玩家列表行
+    int visiblePlayerCount = Math.min(playerCount, MAX_VISIBLE_PLAYERS);
+    int playerListHeight = lineHeight * (visiblePlayerCount + 1); // +1 for separator
     int totalHeight = lineHeight * (2 + urlLines) + playerListHeight + 6;
     int x = 5;
 
@@ -139,33 +141,12 @@ public class HUDRenderer
     y += lineHeight;
 
     // 渲染玩家列表
-    renderPlayerList(guiGraphics, font, x, y, baseWidth, lineHeight, player);
+    renderPlayerList(guiGraphics, font, x, y, baseWidth, lineHeight, playerNames);
 
     // 恢复缩放
     guiGraphics.pose().popPose();
   }
 
-
-
-
-
-  private static int getPlayerCount(LocalPlayer player) {
-    ClientPacketListener connection = player.connection;
-    if (connection != null) {
-
-      try {
-        if (connection.getOnlinePlayers() != null) {
-          return connection.getOnlinePlayers().size();
-        }
-      } catch (Exception e) {
-
-        return 1;
-      }
-    }
-
-
-    return 1;
-  }
 
   private static List<String> getOnlinePlayerNames(LocalPlayer player) {
     List<String> playerNames = new ArrayList<>();
@@ -204,8 +185,7 @@ public class HUDRenderer
 
   private static int renderPlayerList(GuiGraphics guiGraphics, Font font,
                                      int x, int y, int width, int lineHeight,
-                                     LocalPlayer player) {
-    List<String> playerNames = getOnlinePlayerNames(player);
+                                     List<String> playerNames) {
     int totalPlayers = playerNames.size();
 
     // 分隔线
