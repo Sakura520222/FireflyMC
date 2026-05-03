@@ -17,6 +17,9 @@ public final class UdpPacketCodec {
     public static final String MAGIC = "fireflymc-p2p";
     public static final int PROTOCOL_VERSION = 1;
     public static final int MAX_PAYLOAD_SIZE = 1200;
+    public static final byte FLAG_ACK = 1;
+    public static final byte FLAG_FIN = 2;
+    public static final byte FLAG_RST = 4;
     private static final int BINARY_MAGIC = 0x46465032; // FFP2
     private static final Gson GSON = new Gson();
 
@@ -60,6 +63,21 @@ public final class UdpPacketCodec {
         buffer.putShort((short) safeLength);
         buffer.put(payload, 0, safeLength);
         return buffer.array();
+    }
+
+    public static byte[] ack(int streamId, int ack) {
+        return data(streamId, 0, ack, FLAG_ACK, new byte[0], 0);
+    }
+
+    public static byte[] fin(int streamId, int seq, int ack) {
+        return data(streamId, seq, ack, FLAG_FIN, new byte[0], 0);
+    }
+
+    public static boolean isBinaryData(byte[] packet) {
+        if (packet.length < 4) {
+            return false;
+        }
+        return ByteBuffer.wrap(packet, 0, 4).getInt() == BINARY_MAGIC;
     }
 
     public static DecodedData decodeData(byte[] packet) {

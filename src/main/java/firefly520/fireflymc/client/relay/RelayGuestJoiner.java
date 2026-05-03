@@ -2,6 +2,7 @@ package firefly520.fireflymc.client.relay;
 
 import firefly520.fireflymc.Config;
 import firefly520.fireflymc.client.relay.p2p.P2PConnectionManager;
+import firefly520.fireflymc.client.relay.p2p.P2PGuestProxy;
 import firefly520.fireflymc.client.relay.p2p.P2PJoinInfo;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.screens.ConnectScreen;
@@ -75,6 +76,9 @@ public final class RelayGuestJoiner {
                                         try {
                                             if (p2pError == null && result != null && result.success()) {
                                                 RelayLobbyState.setStatusMessage("P2P 连接成功");
+                                                P2PGuestProxy proxy = new P2PGuestProxy(result.channel());
+                                                proxy.start();
+                                                proxy.connectMinecraft(parent, room.worldName());
                                                 return;
                                             }
                                             RelayLobbyState.setStatusMessage("P2P 不可用，正在切换中继...");

@@ -2,6 +2,7 @@ package firefly520.fireflymc.client.relay;
 
 import firefly520.fireflymc.Config;
 import firefly520.fireflymc.client.ClientState;
+import firefly520.fireflymc.client.relay.p2p.P2PConnectionManager;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.server.IntegratedServer;
 import net.minecraft.world.level.GameType;
@@ -86,6 +87,7 @@ public final class SingleplayerRelayManager {
             LOGGER.info("[FireflyMC] 停止单人世界公开联机状态");
         }
         RelayLobbyWebSocketClient.getInstance().closeRoom();
+        P2PConnectionManager.getInstance().stopHost();
         if (hostBridge != null) {
             hostBridge.stop();
             hostBridge = null;
@@ -129,6 +131,7 @@ public final class SingleplayerRelayManager {
             }
             hostBridge = new RelayHostBridge(port);
             RelayLobbyWebSocketClient.getInstance().setHostBridge(hostBridge);
+            P2PConnectionManager.getInstance().prepareHost(currentRoomId, port);
         RelayLobbyWebSocketClient.getInstance().publishRoom(message, currentRoomId);
         LOGGER.info("[FireflyMC] 已准备发布公开房间: roomId={}, worldName={}, maxPlayers={}",
                 currentRoomId, worldName, maxPlayers);

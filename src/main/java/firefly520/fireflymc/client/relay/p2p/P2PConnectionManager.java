@@ -18,6 +18,14 @@ public final class P2PConnectionManager {
 
     private final Map<String, ReliableUdpChannel> channels = new ConcurrentHashMap<>();
     private final Map<String, P2PCandidate> candidates = new ConcurrentHashMap<>();
+    private final Map<String, P2PJoinInfo> joinInfos = new ConcurrentHashMap<>();
+    private volatile P2PHostBridge hostBridge;
+    private volatile int hostLanPort = -1;
+    private volatile String hostRoomId;
+    private volatile String hostSessionId;
+    private volatile String hostToken;
+    private volatile String hostUdpHost;
+    private volatile int hostUdpPort = -1;
 
     private P2PConnectionManager() {
     }
@@ -37,6 +45,9 @@ public final class P2PConnectionManager {
         try {
             ReliableUdpChannel channel = new ReliableUdpChannel();
             channels.put(info.guestSessionId(), channel);
+            joinInfos.put(info.guestSessionId(), info);
+            LOGGER.info("[FireflyMC] P2P Guest 开始连接: room={}, session={}, udp={}:{}",
+                    info.roomId(), info.guestSessionId(), info.udpHost(), info.udpPort());
             RelayLobbyWebSocketClient.getInstance().sendControl(
                     RelayLobbyMessage.p2pOffer(info.roomId(), info.guestSessionId(), info.p2pSessionId(), info.p2pToken())
             );
@@ -47,13 +58,14 @@ public final class P2PConnectionManager {
                             RelayLobbyMessage.relayFallback(info.roomId(), info.guestSessionId(), info.p2pSessionId(), info.p2pToken(), "p2p_timeout")
                     );
                     result.complete(P2PResult.failed("p2p_timeout"));
+                    LOGGER.warn("[FireflyMC] P2P Guest 连接失败，回退中继: room={}, session={}", info.roomId(), info.guestSessionId());
                     return;
                 }
                 RelayLobbyWebSocketClient.getInstance().sendControl(
                         RelayLobbyMessage.p2pReady(info.roomId(), info.guestSessionId(), info.p2pSessionId(), info.p2pToken())
                 );
-                // The reliable stream bridge is reserved for the next increment; fallback remains safe.
-                result.complete(P2PResult.failed("p2p_stream_bridge_not_ready"));
+                result.complete(P2PResult.success(-1, channel));
+                LOGGER.info("[FireflyMC] P2P Guest 连接成功: room={}, session={}", info.roomId(), info.guestSessionId());
             });
         } catch (SocketException e) {
             LOGGER.warn("[FireflyMC] P2P UDP channel create failed: {}", e.getMessage());
@@ -67,6 +79,9 @@ public final class P2PConnectionManager {
             return;
         }
         if ("p2p_udp_observed".equals(message.type()) && message.candidate() != null) {
+            LOGGER.info("[FireflyMC] P2P 服务端观测本端 UDP: role={}, candidate={}:{}",
+                    message.role(), message.candidate().address(), message.candidate().port());
+        } else if ("p2p_candidate".equals(message.type()) && message.candidate() != null) {
             RelayControlMessage.P2PCandidate raw = message.candidate();
             P2PCandidate candidate = new P2PCandidate(raw.address(), raw.port());
             candidates.put(message.guestSessionId(), candidate);
@@ -74,6 +89,69 @@ public final class P2PConnectionManager {
             if (channel != null) {
                 channel.setPeerCandidate(candidate);
             }
+            LOGGER.info("[FireflyMC] P2P 收到对端候选: session={}, candidate={}:{}",
+                    message.guestSessionId(), raw.address(), raw.port());
+        } else if ("guest_joined".equals(message.type()) && message.p2pSupported()) {
+            hostSessionId = message.guestSessionId();
+            hostRoomId = message.roomId();
+            hostToken = message.p2pToken();
+            startHostProbeIfReady();
+        } else if ("host_open_ack".equals(message.type()) && message.p2pSupported()) {
+            hostRoomId = message.roomId();
+            hostToken = message.p2pToken();
+            hostUdpHost = message.p2pUdpHost();
+            hostUdpPort = message.p2pUdpPort();
+            startHostProbeIfReady();
+        } else if ("p2p_ready".equals(message.type())) {
+            startHostBridge();
+        }
+    }
+
+    public void prepareHost(String roomId, int lanPort) {
+        this.hostRoomId = roomId;
+        this.hostLanPort = lanPort;
+    }
+
+    public void stopHost() {
+        if (hostBridge != null) {
+            hostBridge.stop();
+            hostBridge = null;
+        }
+        if (hostSessionId != null) {
+            stop(hostSessionId);
+        }
+        hostLanPort = -1;
+        hostRoomId = null;
+        hostSessionId = null;
+        hostToken = null;
+        hostUdpHost = null;
+        hostUdpPort = -1;
+    }
+
+    private void startHostProbeIfReady() {
+        if (hostRoomId == null || hostSessionId == null || hostToken == null || hostLanPort <= 0
+                || hostUdpHost == null || hostUdpHost.isBlank() || hostUdpPort <= 0) {
+            return;
+        }
+        try {
+            ReliableUdpChannel channel = new ReliableUdpChannel();
+            channels.put(hostSessionId, channel);
+            P2PJoinInfo info = new P2PJoinInfo(hostRoomId, hostSessionId, hostRoomId, hostToken, hostUdpHost, hostUdpPort, 10);
+            joinInfos.put(hostSessionId, info);
+                LOGGER.info("[FireflyMC] P2P Host 开始探测: room={}, session={}, udp={}:{}",
+                    hostRoomId, hostSessionId, hostUdpHost, hostUdpPort);
+            channel.probeAndPunch(info, candidates.get(hostSessionId), "host");
+        } catch (SocketException e) {
+            LOGGER.warn("[FireflyMC] P2P Host UDP channel create failed: {}", e.getMessage());
+        }
+    }
+
+    private void startHostBridge() {
+        ReliableUdpChannel channel = channels.get(hostSessionId);
+        if (channel != null && hostLanPort > 0 && hostBridge == null) {
+            hostBridge = new P2PHostBridge(hostLanPort, channel);
+            hostBridge.startDefaultStream();
+            LOGGER.info("[FireflyMC] P2P Host bridge started for LAN port {}", hostLanPort);
         }
     }
 
@@ -83,5 +161,6 @@ public final class P2PConnectionManager {
             channel.close();
         }
         candidates.remove(guestSessionId);
+        joinInfos.remove(guestSessionId);
     }
 }
