@@ -43,7 +43,7 @@ public class HUDRenderer
       return;
     }
 
-    if (mc.getSingleplayerServer() != null) {
+    if (mc.getSingleplayerServer() != null && !mc.getSingleplayerServer().isPublished()) {
       return;
     }
 

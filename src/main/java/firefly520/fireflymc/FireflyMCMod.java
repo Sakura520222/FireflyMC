@@ -82,17 +82,14 @@ public class FireflyMCMod {
 
   // 服务端启动完成后加载中文语言文件
   private void onServerStarted(ServerStartedEvent event) {
-    if (event.getServer().isSingleplayer()) {
-      return;
-    }
-
     ServerLanguageLoader.loadZhCnLanguage();
     // 设置服务器实例，用于WebSocket接收消息后广播
     firefly520.fireflymc.event.websocket.PlayerEventWebSocketClient.setServer(event.getServer());
-    // 启动掉落物自动清理
-    ItemCleanupManager.getInstance().start(event.getServer());
-    // 启动在线时长限制
-    PlaytimeManager.getInstance().start(event.getServer());
+    // 服务端型限制仅在专用多人服务器启用，单人/集成服/LAN大厅不启用
+    if (event.getServer().isDedicatedServer()) {
+      ItemCleanupManager.getInstance().start(event.getServer());
+      PlaytimeManager.getInstance().start(event.getServer());
+    }
   }
 
   // 服务端关闭时清理资源
@@ -106,9 +103,11 @@ public class FireflyMCMod {
     firefly520.fireflymc.event.websocket.PlayerEventWebSocketClient.clearServer();
     // 关闭成员验证管理器
     firefly520.fireflymc.event.websocket.MemberVerificationManager.getInstance().shutdown();
-    // 停止在线时长限制
-    PlaytimeManager.getInstance().stop();
-    // 停止掉落物自动清理
-    ItemCleanupManager.getInstance().stop();
+    if (event.getServer().isDedicatedServer()) {
+      // 停止在线时长限制
+      PlaytimeManager.getInstance().stop();
+      // 停止掉落物自动清理
+      ItemCleanupManager.getInstance().stop();
+    }
   }
 }
