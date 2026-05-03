@@ -106,6 +106,11 @@ public final class RelayLobbyMessage {
                 guestPlayerName, guestUuid, null, null, null);
     }
 
+    public static RelayLobbyMessage guestLeave(String roomId, String guestSessionId, String reason) {
+        return new RelayLobbyMessage("guest_leave", roomId, null, null, null, -1, -1,
+                null, null, guestSessionId, null, reason);
+    }
+
     public static RelayLobbyMessage streamOpen(String roomId, String guestSessionId, String streamId) {
         return new RelayLobbyMessage("stream_open", roomId, null, null, null, -1, -1,
                 null, null, guestSessionId, streamId, null);

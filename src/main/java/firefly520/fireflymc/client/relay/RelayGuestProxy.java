@@ -29,6 +29,7 @@ public class RelayGuestProxy {
 
     private final String roomId;
     private final String guestSessionId;
+    private final AtomicBoolean leaveSent = new AtomicBoolean(false);
     private final ExecutorService executor = Executors.newCachedThreadPool(r -> {
         Thread thread = new Thread(r, "FireflyMC-Guest-Proxy");
         thread.setDaemon(true);
@@ -61,6 +62,10 @@ public class RelayGuestProxy {
     }
 
     public void stop() {
+        stop("guest_stopped");
+    }
+
+    public void stop(String reason) {
         running.set(false);
         try {
             if (serverSocket != null) {
@@ -75,7 +80,17 @@ public class RelayGuestProxy {
             }
         });
         streamSockets.clear();
+        sendGuestLeave(reason);
+        RelayLobbyWebSocketClient.getInstance().clearGuestProxy(this);
         executor.shutdownNow();
+    }
+
+    public String guestSessionId() {
+        return guestSessionId;
+    }
+
+    public String roomId() {
+        return roomId;
     }
 
     public boolean handleBinary(byte[] bytes) {
@@ -154,6 +169,15 @@ public class RelayGuestProxy {
             } catch (IOException ignored) {
             }
             RelayLobbyWebSocketClient.getInstance().sendControl(RelayLobbyMessage.streamClose(roomId, streamId, reason));
+        }
+        if (streamSockets.isEmpty()) {
+            sendGuestLeave(reason);
+        }
+    }
+
+    private void sendGuestLeave(String reason) {
+        if (leaveSent.compareAndSet(false, true)) {
+            RelayLobbyWebSocketClient.getInstance().sendControl(RelayLobbyMessage.guestLeave(roomId, guestSessionId, reason));
         }
     }
 }

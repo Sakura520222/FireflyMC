@@ -15,6 +15,8 @@ import org.slf4j.LoggerFactory;
 public final class RelayGuestJoiner {
     private static final Logger LOGGER = LoggerFactory.getLogger(RelayGuestJoiner.class);
     private static RelayGuestProxy activeProxy;
+    private static String pendingRoomId;
+    private static String pendingGuestSessionId;
 
     private RelayGuestJoiner() {
     }
@@ -36,10 +38,30 @@ public final class RelayGuestJoiner {
                     try {
                         startProxyAndConnect(parent, room, guestSessionId);
                     } catch (Exception e) {
+                        RelayLobbyWebSocketClient.getInstance().sendControl(
+                                RelayLobbyMessage.guestLeave(room.roomId(), guestSessionId, "proxy_start_failed")
+                        );
                         RelayLobbyState.setStatusMessage("连接失败: " + e.getMessage());
                         LOGGER.warn("[FireflyMC] 启动本地代理失败: {}", e.getMessage());
                     }
                 }));
+    }
+
+    public static void stopActiveRelay(String reason) {
+        if (activeProxy != null) {
+            activeProxy.stop(reason);
+            activeProxy = null;
+            pendingRoomId = null;
+            pendingGuestSessionId = null;
+            return;
+        }
+        if (pendingRoomId != null && pendingGuestSessionId != null) {
+            RelayLobbyWebSocketClient.getInstance().sendControl(
+                    RelayLobbyMessage.guestLeave(pendingRoomId, pendingGuestSessionId, reason)
+            );
+            pendingRoomId = null;
+            pendingGuestSessionId = null;
+        }
     }
 
     private static void startProxyAndConnect(Screen parent, RelayLobbyRoom room, String guestSessionId) throws Exception {
@@ -50,6 +72,8 @@ public final class RelayGuestJoiner {
         activeProxy = new RelayGuestProxy(room.roomId(), guestSessionId);
         int port = activeProxy.start();
         RelayLobbyWebSocketClient.getInstance().setGuestProxy(activeProxy);
+        pendingRoomId = room.roomId();
+        pendingGuestSessionId = guestSessionId;
 
         String addressText = "127.0.0.1:" + port;
         ServerAddress address = ServerAddress.parseString(addressText);

@@ -13,8 +13,6 @@ import javax.annotation.Nonnull;
 
 /**
  * 单人世界公开联机确认弹窗。
- *
- * 阶段一仅负责用户确认、调用 openToLAN 并展示 LAN 端口；公开大厅和中继将在后续阶段接入。
  */
 public class SingleplayerSharePromptScreen extends Screen {
     private static final int ACCENT_PRIMARY = 0xFFFF69B4;
@@ -93,15 +91,16 @@ public class SingleplayerSharePromptScreen extends Screen {
 
         int textX = dialogX + 34;
         int textY = separatorY + 78;
-        guiGraphics.drawString(this.font, "开启后，其他安装 FireflyMC 的玩家将可在多人列表看到并加入。", textX, textY, TEXT_SECONDARY, false);
-        guiGraphics.drawString(this.font, "阶段一会先打开本机 LAN 端口并记录端口，暂不接入中继大厅。", textX, textY + 18, TEXT_SECONDARY, false);
-        guiGraphics.drawString(this.font, "请注意：公开房间后陌生玩家可能进入并影响你的存档。", textX, textY + 36, WARNING_COLOR, false);
+        guiGraphics.drawString(this.font, "开启后，房间会发布到 FireflyMC 联机大厅。", textX, textY, TEXT_SECONDARY, false);
+        guiGraphics.drawString(this.font, "其他安装 FireflyMC 的玩家可通过中继直接加入，无需密码。", textX, textY + 18, TEXT_SECONDARY, false);
+        guiGraphics.drawString(this.font, "你退出世界后房间会自动关闭，加入中的玩家也会断开。", textX, textY + 36, TEXT_SECONDARY, false);
+        guiGraphics.drawString(this.font, "请注意：公开房间后陌生玩家可能进入并影响你的存档。", textX, textY + 54, WARNING_COLOR, false);
 
         int port = ClientState.singleplayerRelayLanPort;
         if (ClientState.isSingleplayerRelayHosting && port > 0) {
-            drawCentered(guiGraphics, "LAN 已准备，端口：" + port, textY + 70, 0xFF228B22);
+            drawCentered(guiGraphics, "房间已发布到联机大厅，等待玩家加入", textY + 84, 0xFF228B22);
         } else if (ClientState.isSingleplayerRelayHosting) {
-            drawCentered(guiGraphics, "LAN 已请求开启，正在等待端口读取", textY + 70, 0xFF228B22);
+            drawCentered(guiGraphics, "正在发布到 FireflyMC 联机大厅...", textY + 84, 0xFF228B22);
         }
 
         super.render(guiGraphics, mouseX, mouseY, partialTick);

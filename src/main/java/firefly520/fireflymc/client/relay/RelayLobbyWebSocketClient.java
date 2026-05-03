@@ -20,9 +20,6 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * 单人世界公开大厅 WebSocket 客户端。
- *
- * 当前阶段只负责 host_open / host_close / heartbeat 控制消息；
- * 真实 Minecraft 字节流转发将在后续阶段接入。
  */
 public final class RelayLobbyWebSocketClient {
     private static final Logger LOGGER = LoggerFactory.getLogger(RelayLobbyWebSocketClient.class);
@@ -121,6 +118,12 @@ public final class RelayLobbyWebSocketClient {
 
     public void setGuestProxy(RelayGuestProxy proxy) {
         this.guestProxy = proxy;
+    }
+
+    public void clearGuestProxy(RelayGuestProxy proxy) {
+        if (this.guestProxy == proxy) {
+            this.guestProxy = null;
+        }
     }
 
     public void sendControl(RelayLobbyMessage message) {
@@ -338,7 +341,7 @@ public final class RelayLobbyWebSocketClient {
         webSocket.sendText(json, true).join();
         if ("heartbeat".equals(message.type())) {
             LOGGER.debug("[FireflyMC] 已发送公开大厅心跳: {}", json);
-        } else if ("stream_open".equals(message.type()) || "stream_close".equals(message.type())) {
+        } else if ("stream_open".equals(message.type()) || "stream_close".equals(message.type()) || "guest_leave".equals(message.type())) {
             LOGGER.debug("[FireflyMC] 已发送 relay 流控制消息: {}", json);
         } else {
             LOGGER.info("[FireflyMC] 已发送公开大厅消息: {}", json);

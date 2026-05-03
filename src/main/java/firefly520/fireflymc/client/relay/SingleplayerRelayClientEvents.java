@@ -14,7 +14,7 @@ import net.neoforged.neoforge.client.event.ScreenEvent;
 import net.minecraft.network.chat.Component;
 
 /**
- * 单人世界联机阶段一客户端事件。
+ * 单人世界公开联机客户端事件。
  */
 public final class SingleplayerRelayClientEvents {
     private static boolean promptPending = false;
@@ -37,6 +37,7 @@ public final class SingleplayerRelayClientEvents {
     public static void onClientLoggedOut(ClientPlayerNetworkEvent.LoggingOut event) {
         promptPending = false;
         ClientState.hasHandledSingleplayerRelayPrompt = false;
+        RelayGuestJoiner.stopActiveRelay("client_logged_out");
         SingleplayerRelayManager.getInstance().stopHosting();
     }
 

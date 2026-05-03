@@ -17,7 +17,7 @@ public class ClientState {
     public static boolean hasHandledSingleplayerRelayPrompt = false;
 
     /**
-     * 当前会话是否正在为单人世界联机进行 LAN 暴露准备
+     * 当前会话是否正在公开单人世界联机房间
      */
     public static boolean isSingleplayerRelayHosting = false;
 

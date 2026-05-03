@@ -13,9 +13,7 @@ import java.net.ServerSocket;
 import java.util.UUID;
 
 /**
- * 阶段一：单人世界联机的 LAN 暴露准备。
- *
- * 后续阶段会在获取到 LAN 端口后接入 WebSocket 中继和公开大厅。
+ * 单人世界公开大厅发布与中继桥接管理。
  */
 public final class SingleplayerRelayManager {
     private static final Logger LOGGER = LoggerFactory.getLogger(SingleplayerRelayManager.class);
@@ -31,7 +29,7 @@ public final class SingleplayerRelayManager {
     }
 
     /**
-     * 开始为当前单人世界做 LAN 暴露准备。
+        * 开始将当前单人世界发布到 FireflyMC 联机大厅。
      * 必须在客户端主线程调用。
      */
     public void startHosting() {
@@ -83,12 +81,9 @@ public final class SingleplayerRelayManager {
         }
     }
 
-    /**
-     * 阶段一仅清理本模组状态。原版 LAN 监听会随 IntegratedServer 退出自动关闭。
-     */
     public void stopHosting() {
         if (ClientState.isSingleplayerRelayHosting || ClientState.singleplayerRelayLanPort > 0) {
-            LOGGER.info("[FireflyMC] 停止单人世界联机准备状态");
+            LOGGER.info("[FireflyMC] 停止单人世界公开联机状态");
         }
         RelayLobbyWebSocketClient.getInstance().closeRoom();
         if (hostBridge != null) {

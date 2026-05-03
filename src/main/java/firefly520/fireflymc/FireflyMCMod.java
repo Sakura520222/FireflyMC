@@ -49,7 +49,7 @@ public class FireflyMCMod {
       NeoForge.EVENT_BUS.addListener(ClientHandler::onRenderGui);
       // 注册主菜单更新通知检测器
       NeoForge.EVENT_BUS.addListener(TitleScreenDetector::onScreenRender);
-      // 注册单人世界联机阶段一事件
+      // 注册单人世界公开联机事件
       NeoForge.EVENT_BUS.addListener(SingleplayerRelayClientEvents::onClientLoggedIn);
       NeoForge.EVENT_BUS.addListener(SingleplayerRelayClientEvents::onClientLoggedOut);
       NeoForge.EVENT_BUS.addListener(SingleplayerRelayClientEvents::onClientTick);

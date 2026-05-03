@@ -15,8 +15,6 @@ import java.util.List;
 
 /**
  * FireflyMC 单人世界公开大厅。
- *
- * 当前阶段展示房间列表；点击加入会提示后续实现 guest_join / 本地代理。
  */
 public class RelayLobbyScreen extends Screen {
     private static final int ACCENT_PRIMARY = 0xFFFF69B4;
