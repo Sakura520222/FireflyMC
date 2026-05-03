@@ -55,6 +55,8 @@ public class ReliableUdpChannel {
     private final AtomicInteger lastAck = new AtomicInteger(0);
     private final AtomicLong sentBytes = new AtomicLong(0);
     private final AtomicLong receivedBytes = new AtomicLong(0);
+    private final AtomicLong nextSentLogAt = new AtomicLong(64 * 1024);
+    private final AtomicLong nextReceivedLogAt = new AtomicLong(64 * 1024);
 
     public ReliableUdpChannel() throws SocketException {
         this.socket = createSocket();
@@ -154,10 +156,12 @@ public class ReliableUdpChannel {
             send(peer, packet);
             // Temporary redundancy until full retransmit queue is implemented.
             send(peer, packet);
-            sentBytes.addAndGet(payload.length);
-            if (sentBytes.get() <= 8192 || payload.length > 1000) {
-                LOGGER.info("[FireflyMC] P2P UDP 发送数据: stream={}, seq={}, bytes={}, total={} KB, peer={}",
-                        streamId, seq, payload.length, sentBytes.get() / 1024, peer);
+            long totalSent = sentBytes.addAndGet(payload.length);
+            long threshold = nextSentLogAt.get();
+            if (totalSent <= 8192 || totalSent >= threshold) {
+                nextSentLogAt.compareAndSet(threshold, threshold + 64 * 1024);
+                LOGGER.info("[FireflyMC] P2P UDP 发送进度: stream={}, seq={}, chunk={} bytes, total={} KB, peer={}",
+                        streamId, seq, payload.length, totalSent / 1024, peer);
             }
             offset += chunk;
         }
@@ -246,8 +250,13 @@ public class ReliableUdpChannel {
             reorder.accept(decoded.seq(), decoded.payload(), output);
             receivedBytes.addAndGet(decoded.payload().length);
             if (receivedBytes.get() <= 8192 || decoded.payload().length > 1000) {
-                LOGGER.info("[FireflyMC] P2P UDP 接收数据: stream={}, seq={}, bytes={}, total={} KB",
-                        decoded.streamId(), decoded.seq(), decoded.payload().length, receivedBytes.get() / 1024);
+                long totalReceived = receivedBytes.get();
+                long threshold = nextReceivedLogAt.get();
+                if (totalReceived <= 8192 || totalReceived >= threshold) {
+                    nextReceivedLogAt.compareAndSet(threshold, threshold + 64 * 1024);
+                    LOGGER.info("[FireflyMC] P2P UDP 接收进度: stream={}, seq={}, chunk={} bytes, total={} KB",
+                            decoded.streamId(), decoded.seq(), decoded.payload().length, totalReceived / 1024);
+                }
             }
         } catch (IOException e) {
             LOGGER.debug("[FireflyMC] P2P stream write failed: {}", e.getMessage());

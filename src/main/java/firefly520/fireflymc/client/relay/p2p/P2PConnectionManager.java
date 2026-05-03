@@ -159,7 +159,12 @@ public final class P2PConnectionManager {
             joinInfos.put(hostSessionId, info);
                 LOGGER.info("[FireflyMC] P2P Host 开始探测: room={}, session={}, udp={}:{}",
                     hostRoomId, hostSessionId, hostUdpHost, hostUdpPort);
-            channel.probeAndPunch(info, candidates.get(hostSessionId), "host");
+            channel.probeAndPunch(info, candidates.get(hostSessionId), "host").whenComplete((success, error) -> {
+                if (error != null || !Boolean.TRUE.equals(success)) {
+                    LOGGER.warn("[FireflyMC] P2P Host 探测失败，清理 session={}", info.guestSessionId());
+                    stop(info.guestSessionId());
+                }
+            });
         } catch (SocketException e) {
             LOGGER.warn("[FireflyMC] P2P Host UDP channel create failed: {}", e.getMessage());
         }
