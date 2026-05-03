@@ -18,6 +18,7 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.regex.Pattern;
 
 /**
  * 单人世界公开大厅 WebSocket 客户端。
@@ -25,6 +26,8 @@ import java.util.concurrent.atomic.AtomicBoolean;
 public final class RelayLobbyWebSocketClient {
     private static final Logger LOGGER = LoggerFactory.getLogger(RelayLobbyWebSocketClient.class);
     private static final RelayLobbyWebSocketClient INSTANCE = new RelayLobbyWebSocketClient();
+    private static final Pattern P2P_UDP_HOST_PATTERN = Pattern.compile("(\\\"p2pUdpHost\\\"\\s*:\\s*\\\")([^\\\"]*)(\\\")");
+    private static final Pattern P2P_CANDIDATE_ADDRESS_PATTERN = Pattern.compile("(\\\"address\\\"\\s*:\\s*\\\")([^\\\"]*)(\\\")");
 
     private final ScheduledExecutorService executor = Executors.newSingleThreadScheduledExecutor(r -> {
         Thread thread = new Thread(r, "FireflyMC-Relay-Lobby");
@@ -181,7 +184,7 @@ public final class RelayLobbyWebSocketClient {
                         if (last) {
                             String json = textAccumulator.toString();
                             textAccumulator.setLength(0);
-                            LOGGER.debug("[FireflyMC] 收到公开大厅文本消息: {}", json);
+                            LOGGER.debug("[FireflyMC] 收到公开大厅文本消息: {}", sanitizeRelayJsonForLog(json));
                             handleTextMessage(json);
                         }
                         webSocket.request(1);
@@ -223,7 +226,7 @@ public final class RelayLobbyWebSocketClient {
                         fullData.get(bytes);
                         String message = new String(bytes, StandardCharsets.UTF_8);
                         if (message.startsWith("{")) {
-                            LOGGER.debug("[FireflyMC] 收到公开大厅二进制JSON消息: {}", message);
+                            LOGGER.debug("[FireflyMC] 收到公开大厅二进制JSON消息: {}", sanitizeRelayJsonForLog(message));
                             handleTextMessage(message);
                         } else {
                             handleBinaryFrame(bytes);
@@ -271,7 +274,7 @@ public final class RelayLobbyWebSocketClient {
             LOGGER.info("[FireflyMC] 已收到公开大厅房间列表: {} 个房间", result.rooms().size());
             RelayLobbyState.updateRooms(result.rooms());
         } else if (result == null) {
-            LOGGER.warn("[FireflyMC] 公开大厅消息 JSON 解析失败: {}", json);
+            LOGGER.warn("[FireflyMC] 公开大厅消息 JSON 解析失败: {}", sanitizeRelayJsonForLog(json));
         } else {
             RelayControlMessage message = RelayControlMessage.fromJson(json);
             handleControlMessage(message, json);
@@ -280,7 +283,7 @@ public final class RelayLobbyWebSocketClient {
 
     private void handleControlMessage(RelayControlMessage message, String rawJson) {
         if (message == null || message.type() == null) {
-            LOGGER.debug("[FireflyMC] 收到未处理的公开大厅消息: {}", rawJson);
+            LOGGER.debug("[FireflyMC] 收到未处理的公开大厅消息: {}", sanitizeRelayJsonForLog(rawJson));
             return;
         }
 
@@ -310,7 +313,7 @@ public final class RelayLobbyWebSocketClient {
             }
                 case "host_open_ack", "guest_joined", "p2p_offer", "p2p_answer", "p2p_candidate", "p2p_udp_observed", "p2p_ready", "p2p_failed", "relay_fallback" ->
                     P2PConnectionManager.getInstance().handleControlMessage(message);
-            default -> LOGGER.debug("[FireflyMC] 收到未处理的公开大厅消息: {}", rawJson);
+            default -> LOGGER.debug("[FireflyMC] 收到未处理的公开大厅消息: {}", sanitizeRelayJsonForLog(rawJson));
         }
     }
 
@@ -347,8 +350,16 @@ public final class RelayLobbyWebSocketClient {
         } else if ("stream_open".equals(message.type()) || "stream_close".equals(message.type()) || "guest_leave".equals(message.type())) {
             LOGGER.debug("[FireflyMC] 已发送 relay 流控制消息: {}", json);
         } else {
-            LOGGER.info("[FireflyMC] 已发送公开大厅消息: {}", json);
+            LOGGER.info("[FireflyMC] 已发送公开大厅消息: {}", sanitizeRelayJsonForLog(json));
         }
+    }
+
+    private static String sanitizeRelayJsonForLog(String json) {
+        if (json == null) {
+            return null;
+        }
+        String sanitized = P2P_UDP_HOST_PATTERN.matcher(json).replaceAll("$1<hidden>$3");
+        return P2P_CANDIDATE_ADDRESS_PATTERN.matcher(sanitized).replaceAll("$1<hidden>$3");
     }
 
     private void startHeartbeat() {

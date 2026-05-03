@@ -81,7 +81,7 @@ public class ReliableUdpChannel {
         running.set(true);
         if (peerCandidate != null && peerCandidate.isValid()) {
             peerAddress = peerCandidate.toSocketAddress();
-            LOGGER.info("[FireflyMC] P2P 初始 peer candidate: {}", peerAddress);
+            LOGGER.info("[FireflyMC] P2P 初始 peer candidate: udpPort={}", peerAddress.getPort());
         }
         if (!receiverThread.isAlive()) {
             receiverThread.start();
@@ -92,8 +92,8 @@ public class ReliableUdpChannel {
                 : Config.CLIENT.SINGLEPLAYER_RELAY_P2P_CONNECT_TIMEOUT_SECONDS.get();
         byte[] probe = UdpPacketCodec.probe(info.roomId(), info.guestSessionId(), role, info.p2pToken());
         byte[] punch = UdpPacketCodec.punch(info.roomId(), info.guestSessionId(), role, info.p2pToken());
-        LOGGER.info("[FireflyMC] P2P {} 开始探测: server={}, localUdp={}, timeout={}s, rawUdpHost={}",
-            role, serverAddress, localPort(), timeout, info.udpHost());
+        LOGGER.info("[FireflyMC] P2P {} 开始探测: serverUdpPort={}, localUdp={}, timeout={}s",
+            role, serverAddress.getPort(), localPort(), timeout);
         ScheduledFuture<?> probeTask = executor.scheduleAtFixedRate(() -> {
             send(serverAddress, probe);
             InetSocketAddress peer = peerAddress;
@@ -101,7 +101,7 @@ public class ReliableUdpChannel {
                 send(peer, punch);
             }
             if (observedByServer && punchedPeer && !result.isDone()) {
-                LOGGER.info("[FireflyMC] P2P {} 打洞完成: peer={}", role, peerAddress);
+                LOGGER.info("[FireflyMC] P2P {} 打洞完成: peerUdpPort={}", role, peerAddress != null ? peerAddress.getPort() : -1);
                 sendWindow.start();
                 startIdleCheck();
                 result.complete(true);
@@ -109,8 +109,8 @@ public class ReliableUdpChannel {
         }, 0, 300, TimeUnit.MILLISECONDS);
         ScheduledFuture<?> timeoutTask = executor.schedule(() -> {
             if (!result.isDone()) {
-                LOGGER.warn("[FireflyMC] P2P {} 探测超时: observedByServer={}, punchedPeer={}, peer={}",
-                        role, observedByServer, punchedPeer, peerAddress);
+                LOGGER.warn("[FireflyMC] P2P {} 探测超时: observedByServer={}, punchedPeer={}, peerUdpPort={}",
+                        role, observedByServer, punchedPeer, peerAddress != null ? peerAddress.getPort() : -1);
                 result.complete(false);
             }
         }, timeout, TimeUnit.SECONDS);
@@ -127,7 +127,7 @@ public class ReliableUdpChannel {
     public void setPeerCandidate(P2PCandidate candidate) {
         if (candidate != null && candidate.isValid()) {
             this.peerAddress = candidate.toSocketAddress();
-            LOGGER.info("[FireflyMC] P2P 更新 peer candidate: {}", this.peerAddress);
+            LOGGER.info("[FireflyMC] P2P 更新 peer candidate: udpPort={}", this.peerAddress.getPort());
         }
     }
 
@@ -165,8 +165,8 @@ public class ReliableUdpChannel {
             long threshold = nextSentLogAt.get();
             if (totalSent <= 8192 || totalSent >= threshold) {
                 nextSentLogAt.compareAndSet(threshold, threshold + 64 * 1024);
-                LOGGER.info("[FireflyMC] P2P UDP 发送进度: stream={}, seq={}, chunk={} bytes, total={} KB, peer={}",
-                        streamId, seq, payload.length, totalSent / 1024, peer);
+                LOGGER.info("[FireflyMC] P2P UDP 发送进度: stream={}, seq={}, chunk={} bytes, total={} KB, peerUdpPort={}",
+                        streamId, seq, payload.length, totalSent / 1024, peer.getPort());
             }
             offset += chunk;
         }
@@ -229,7 +229,7 @@ public class ReliableUdpChannel {
                     peerAddress = new InetSocketAddress(packet.getAddress(), packet.getPort());
                     if (!loggedPunch) {
                         loggedPunch = true;
-                        LOGGER.info("[FireflyMC] P2P 收到对端 punch: {}", peerAddress);
+                        LOGGER.info("[FireflyMC] P2P 收到对端 punch: udpPort={}", peerAddress.getPort());
                     }
                 }
             } catch (IOException e) {
@@ -296,7 +296,7 @@ public class ReliableUdpChannel {
             DatagramPacket packet = new DatagramPacket(bytes, bytes.length, target);
             socket.send(packet);
         } catch (IOException e) {
-            LOGGER.warn("[FireflyMC] P2P UDP send failed: target={}, error={}", target, e.getMessage());
+            LOGGER.warn("[FireflyMC] P2P UDP send failed: targetPort={}, error={}", target.getPort(), e.getMessage());
         }
     }
 

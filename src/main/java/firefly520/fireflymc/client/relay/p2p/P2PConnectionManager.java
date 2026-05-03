@@ -38,8 +38,8 @@ public final class P2PConnectionManager {
     public CompletableFuture<P2PResult> tryGuestConnect(P2PJoinInfo info) {
         CompletableFuture<P2PResult> result = new CompletableFuture<>();
         if (!info.isUsable()) {
-            LOGGER.warn("[FireflyMC] P2P join info incomplete, fallback to relay: room={}, session={}, udp={}:{}",
-                    info.roomId(), info.guestSessionId(), info.udpHost(), info.udpPort());
+            LOGGER.warn("[FireflyMC] P2P join info incomplete, fallback to relay: room={}, session={}, udpPort={}",
+                    info.roomId(), info.guestSessionId(), info.udpPort());
             result.complete(P2PResult.failed("p2p_join_info_incomplete"));
             return result;
         }
@@ -47,8 +47,8 @@ public final class P2PConnectionManager {
             ReliableUdpChannel channel = new ReliableUdpChannel();
             channels.put(info.guestSessionId(), channel);
             joinInfos.put(info.guestSessionId(), info);
-                LOGGER.info("[FireflyMC] P2P Guest 开始连接: room={}, session={}, udp={}:{} (raw={})",
-                    info.roomId(), info.guestSessionId(), info.effectiveUdpHost(), info.udpPort(), info.udpHost());
+                LOGGER.info("[FireflyMC] P2P Guest 开始连接: room={}, session={}, udpPort={}",
+                    info.roomId(), info.guestSessionId(), info.udpPort());
             RelayLobbyWebSocketClient.getInstance().sendControl(
                     RelayLobbyMessage.p2pOffer(info.roomId(), info.guestSessionId(), info.p2pSessionId(), info.p2pToken())
             );
@@ -80,8 +80,8 @@ public final class P2PConnectionManager {
             return;
         }
         if ("p2p_udp_observed".equals(message.type()) && message.candidate() != null) {
-            LOGGER.info("[FireflyMC] P2P 服务端观测本端 UDP: role={}, candidate={}:{}",
-                    message.role(), message.candidate().address(), message.candidate().port());
+            LOGGER.info("[FireflyMC] P2P 服务端观测本端 UDP: role={}, udpPort={}",
+                    message.role(), message.candidate().port());
         } else if ("p2p_candidate".equals(message.type()) && message.candidate() != null) {
             if (message.guestSessionId() == null) {
                 return;
@@ -98,8 +98,8 @@ public final class P2PConnectionManager {
             }
             String candidateKey = raw.address() + ":" + raw.port();
             if (!candidateKey.equals(loggedCandidates.put(message.guestSessionId(), candidateKey))) {
-                LOGGER.info("[FireflyMC] P2P 收到对端候选: session={}, candidate={}:{}",
-                        message.guestSessionId(), raw.address(), raw.port());
+                LOGGER.info("[FireflyMC] P2P 收到对端候选: session={}, udpPort={}",
+                        message.guestSessionId(), raw.port());
             }
         } else if ("guest_joined".equals(message.type()) && message.p2pSupported()) {
             if (message.guestSessionId() == null) {
@@ -157,8 +157,8 @@ public final class P2PConnectionManager {
             channels.put(hostSessionId, channel);
             P2PJoinInfo info = new P2PJoinInfo(hostRoomId, hostSessionId, hostRoomId, hostToken, hostUdpHost, hostUdpPort, 10);
             joinInfos.put(hostSessionId, info);
-                LOGGER.info("[FireflyMC] P2P Host 开始探测: room={}, session={}, udp={}:{}",
-                    hostRoomId, hostSessionId, hostUdpHost, hostUdpPort);
+                LOGGER.info("[FireflyMC] P2P Host 开始探测: room={}, session={}, udpPort={}",
+                    hostRoomId, hostSessionId, hostUdpPort);
             channel.probeAndPunch(info, candidates.get(hostSessionId), "host").whenComplete((success, error) -> {
                 if (error != null || !Boolean.TRUE.equals(success)) {
                     LOGGER.warn("[FireflyMC] P2P Host 探测失败，清理 session={}", info.guestSessionId());
