@@ -15,6 +15,7 @@ import net.neoforged.neoforge.event.server.ServerStoppingEvent;
 import firefly520.fireflymc.client.ClientHandler;
 import firefly520.fireflymc.client.UpdateChecker;
 import firefly520.fireflymc.client.TitleScreenDetector;
+import firefly520.fireflymc.client.relay.SingleplayerRelayClientEvents;
 import firefly520.fireflymc.event.websocket.PlayerEventWebSocketClient;
 import firefly520.fireflymc.network.ModNetwork;
 import firefly520.fireflymc.playtime.PlaytimeManager;
@@ -23,7 +24,7 @@ import firefly520.fireflymc.util.ServerLanguageLoader;
 @Mod(FireflyMCMod.MODID)
 public class FireflyMCMod {
   public static final String MODID = "fireflymc";
-  public static final String VERSION = "2.4.1";
+  public static final String VERSION = "2.5.0";
 
   public FireflyMCMod(IEventBus modEventBus, ModContainer modContainer) {
     // 1. 注册客户端配置（官方标准写法）
@@ -48,6 +49,11 @@ public class FireflyMCMod {
       NeoForge.EVENT_BUS.addListener(ClientHandler::onRenderGui);
       // 注册主菜单更新通知检测器
       NeoForge.EVENT_BUS.addListener(TitleScreenDetector::onScreenRender);
+      // 注册单人世界公开联机事件
+      NeoForge.EVENT_BUS.addListener(SingleplayerRelayClientEvents::onClientLoggedIn);
+      NeoForge.EVENT_BUS.addListener(SingleplayerRelayClientEvents::onClientLoggedOut);
+      NeoForge.EVENT_BUS.addListener(SingleplayerRelayClientEvents::onClientTick);
+      NeoForge.EVENT_BUS.addListener(SingleplayerRelayClientEvents::onScreenInit);
     }
 
     // 4. 注册游戏事件处理（GAME 总线）
@@ -66,7 +72,7 @@ public class FireflyMCMod {
     // 5. 检查Mod更新
     UpdateChecker.checkForUpdate();
 
-    System.out.println("Loading FireflyMC 2.4.1");
+    System.out.println("Loading FireflyMC 2.5.0");
   }
 
   // 配置热重载时更新缓存
@@ -79,22 +85,29 @@ public class FireflyMCMod {
     ServerLanguageLoader.loadZhCnLanguage();
     // 设置服务器实例，用于WebSocket接收消息后广播
     firefly520.fireflymc.event.websocket.PlayerEventWebSocketClient.setServer(event.getServer());
-    // 启动掉落物自动清理
-    ItemCleanupManager.getInstance().start(event.getServer());
-    // 启动在线时长限制
-    PlaytimeManager.getInstance().start(event.getServer());
+    // 服务端型限制仅在专用多人服务器启用，单人/集成服/LAN大厅不启用
+    if (event.getServer().isDedicatedServer()) {
+      ItemCleanupManager.getInstance().start(event.getServer());
+      PlaytimeManager.getInstance().start(event.getServer());
+    }
   }
 
   // 服务端关闭时清理资源
   private void onServerStopping(ServerStoppingEvent event) {
+    if (event.getServer().isSingleplayer()) {
+      return;
+    }
+
     ServerLanguageLoader.clear();
     // 清理WebSocket服务器实例引用
     firefly520.fireflymc.event.websocket.PlayerEventWebSocketClient.clearServer();
     // 关闭成员验证管理器
     firefly520.fireflymc.event.websocket.MemberVerificationManager.getInstance().shutdown();
-    // 停止在线时长限制
-    PlaytimeManager.getInstance().stop();
-    // 停止掉落物自动清理
-    ItemCleanupManager.getInstance().stop();
+    if (event.getServer().isDedicatedServer()) {
+      // 停止在线时长限制
+      PlaytimeManager.getInstance().stop();
+      // 停止掉落物自动清理
+      ItemCleanupManager.getInstance().stop();
+    }
   }
 }

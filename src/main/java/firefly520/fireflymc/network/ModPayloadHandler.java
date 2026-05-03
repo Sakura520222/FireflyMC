@@ -28,6 +28,10 @@ public class ModPayloadHandler {
     public static void handleHandshakeReply(ModHandshakeReplyPayload payload, IPayloadContext context) {
         context.enqueueWork(() -> {
             if (context.player() instanceof ServerPlayer serverPlayer) {
+                if (serverPlayer.server.isSingleplayer()) {
+                    return;
+                }
+
                 if (payload.modVersion().equals(FireflyMCMod.VERSION)) {
                     VERIFIED_PLAYERS.put(serverPlayer.getUUID(), true);
                     // 取消验证超时任务
@@ -53,6 +57,10 @@ public class ModPayloadHandler {
     public static void handleConfirmRules(ConfirmRulesPayload payload, IPayloadContext context) {
         context.enqueueWork(() -> {
             if (context.player() instanceof ServerPlayer serverPlayer) {
+                if (serverPlayer.server.isSingleplayer()) {
+                    return;
+                }
+
                 UUID playerUuid = serverPlayer.getUUID();
                 // 取消超时任务
                 ModEventHandler.cancelInvulnerabilityTimeout(playerUuid);
