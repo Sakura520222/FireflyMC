@@ -16,6 +16,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * Guest 侧本地 TCP 代理。
@@ -23,6 +24,8 @@ import java.util.concurrent.atomic.AtomicBoolean;
 public class RelayGuestProxy {
     private static final Logger LOGGER = LoggerFactory.getLogger(RelayGuestProxy.class);
     private static final int STREAM_ID_LENGTH = 36;
+    private static final int RELAY_BUFFER_SIZE = 64 * 1024;
+    private static final int SOCKET_BUFFER_SIZE = 256 * 1024;
 
     private final String roomId;
     private final String guestSessionId;
@@ -33,6 +36,8 @@ public class RelayGuestProxy {
     });
     private final Map<String, Socket> streamSockets = new ConcurrentHashMap<>();
     private final AtomicBoolean running = new AtomicBoolean(false);
+    private final AtomicLong guestToRelayBytes = new AtomicLong(0);
+    private final AtomicLong relayToGuestBytes = new AtomicLong(0);
 
     private ServerSocket serverSocket;
     private int localPort = -1;
@@ -80,12 +85,18 @@ public class RelayGuestProxy {
         String streamId = new String(bytes, 0, STREAM_ID_LENGTH, StandardCharsets.UTF_8);
         Socket socket = streamSockets.get(streamId);
         if (socket == null || socket.isClosed()) {
+            LOGGER.debug("[FireflyMC] Guest 收到二进制但无对应流: streamId={}, bytes={}", streamId, bytes.length);
             return false;
         }
         try {
+            int payloadLen = bytes.length - STREAM_ID_LENGTH;
             OutputStream output = socket.getOutputStream();
-            output.write(bytes, STREAM_ID_LENGTH, bytes.length - STREAM_ID_LENGTH);
+            output.write(bytes, STREAM_ID_LENGTH, payloadLen);
             output.flush();
+            relayToGuestBytes.addAndGet(payloadLen);
+            if (payloadLen > 1000) {
+                LOGGER.debug("[FireflyMC] Guest relay→本地: {} bytes, total relay→guest: {} KB", payloadLen, relayToGuestBytes.get() / 1024);
+            }
             return true;
         } catch (IOException e) {
             closeStream(streamId, "write_failed");
@@ -98,6 +109,8 @@ public class RelayGuestProxy {
             try {
                 Socket socket = serverSocket.accept();
                 socket.setTcpNoDelay(true);
+                socket.setReceiveBufferSize(SOCKET_BUFFER_SIZE);
+                socket.setSendBufferSize(SOCKET_BUFFER_SIZE);
                 String streamId = UUID.randomUUID().toString();
                 streamSockets.put(streamId, socket);
                 RelayLobbyWebSocketClient.getInstance().sendControl(RelayLobbyMessage.streamOpen(roomId, guestSessionId, streamId));
@@ -111,7 +124,7 @@ public class RelayGuestProxy {
     }
 
     private void pipeLocalToRelay(String streamId, Socket socket) {
-        byte[] buffer = new byte[8192];
+        byte[] buffer = new byte[RELAY_BUFFER_SIZE];
         try (InputStream input = socket.getInputStream()) {
             int read;
             while (running.get() && (read = input.read(buffer)) != -1) {
@@ -120,10 +133,15 @@ public class RelayGuestProxy {
                 System.arraycopy(streamBytes, 0, frame, 0, STREAM_ID_LENGTH);
                 System.arraycopy(buffer, 0, frame, STREAM_ID_LENGTH, read);
                 RelayLobbyWebSocketClient.getInstance().sendBinary(ByteBuffer.wrap(frame));
+                guestToRelayBytes.addAndGet(read);
+                if (read > 1000) {
+                    LOGGER.debug("[FireflyMC] Guest 本地→relay: {} bytes, total guest→relay: {} KB", read, guestToRelayBytes.get() / 1024);
+                }
             }
         } catch (IOException e) {
             LOGGER.debug("[FireflyMC] Guest 本地代理流关闭: {}", e.getMessage());
         } finally {
+            LOGGER.info("[FireflyMC] Guest 流结束: streamId={}, sent {} KB, recv {} KB", streamId, guestToRelayBytes.get() / 1024, relayToGuestBytes.get() / 1024);
             closeStream(streamId, "local_closed");
         }
     }

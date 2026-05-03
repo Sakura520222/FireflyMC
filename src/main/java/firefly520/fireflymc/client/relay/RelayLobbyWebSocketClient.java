@@ -42,6 +42,7 @@ public final class RelayLobbyWebSocketClient {
     private RelayHostBridge hostBridge;
     private CompletableFuture<String> pendingJoin;
     private final StringBuilder textAccumulator = new StringBuilder();
+    private ByteBuffer binaryAccumulator = null;
     private long lastLobbyListRequestAt = 0L;
 
     private RelayLobbyWebSocketClient() {
@@ -133,15 +134,19 @@ public final class RelayLobbyWebSocketClient {
         });
     }
 
+    /**
+     * 异步发送二进制帧。不使用 executor 以避免阻塞单线程调度器。
+     * 二进制数据量大且频繁，不能排队到单线程 executor 中。
+     */
     public void sendBinary(ByteBuffer buffer) {
-        executor.execute(() -> {
-            try {
-                ensureConnected();
-                webSocket.sendBinary(buffer, true).join();
-            } catch (Exception e) {
-                LOGGER.debug("[FireflyMC] 发送 relay 二进制数据失败: {}", e.getMessage());
+        try {
+            if (webSocket != null && connected.get()) {
+                // 异步发送，不阻塞，不使用 executor
+                webSocket.sendBinary(buffer, true);
             }
-        });
+        } catch (Exception e) {
+            LOGGER.debug("[FireflyMC] 发送 relay 二进制数据失败: {}", e.getMessage());
+        }
     }
 
     private void ensureConnected() {
@@ -172,7 +177,7 @@ public final class RelayLobbyWebSocketClient {
                         if (last) {
                             String json = textAccumulator.toString();
                             textAccumulator.setLength(0);
-                            LOGGER.info("[FireflyMC] 收到公开大厅文本消息: {}", json);
+                            LOGGER.debug("[FireflyMC] 收到公开大厅文本消息: {}", json);
                             handleTextMessage(json);
                         }
                         webSocket.request(1);
@@ -181,19 +186,43 @@ public final class RelayLobbyWebSocketClient {
 
                     @Override
                     public CompletionStage<?> onBinary(WebSocket webSocket, ByteBuffer data, boolean last) {
-                        if (last) {
-                            ByteBuffer copy = data.slice();
-                            byte[] bytes = new byte[copy.remaining()];
-                            copy.get(bytes);
-                            String message = new String(bytes, StandardCharsets.UTF_8);
-                            if (message.startsWith("{")) {
-                                LOGGER.info("[FireflyMC] 收到公开大厅二进制JSON消息: {}", message);
-                                handleTextMessage(message);
-                            } else {
-                                handleBinaryFrame(bytes);
+                        ByteBuffer slice = data.slice();
+                        if (!last) {
+                            // 累积分片
+                            if (binaryAccumulator == null) {
+                                binaryAccumulator = ByteBuffer.allocate(slice.remaining() * 4);
                             }
+                            // 如果空间不够，扩容
+                            if (binaryAccumulator.remaining() < slice.remaining()) {
+                                int newCapacity = (binaryAccumulator.position() + slice.remaining()) * 2;
+                                ByteBuffer newBuf = ByteBuffer.allocate(newCapacity);
+                                binaryAccumulator.flip();
+                                newBuf.put(binaryAccumulator);
+                                binaryAccumulator = newBuf;
+                            }
+                            binaryAccumulator.put(slice);
+                            webSocket.request(1);
+                            return CompletableFuture.completedFuture(null);
+                        }
+                        // last=true: 合并累积数据（如果有）
+                        ByteBuffer fullData;
+                        if (binaryAccumulator != null && binaryAccumulator.position() > 0) {
+                            binaryAccumulator.put(slice);
+                            binaryAccumulator.flip();
+                            fullData = binaryAccumulator;
+                            binaryAccumulator = null;
                         } else {
-                            LOGGER.debug("[FireflyMC] 收到公开大厅二进制分片，等待后续阶段处理");
+                            fullData = slice;
+                            binaryAccumulator = null;
+                        }
+                        byte[] bytes = new byte[fullData.remaining()];
+                        fullData.get(bytes);
+                        String message = new String(bytes, StandardCharsets.UTF_8);
+                        if (message.startsWith("{")) {
+                            LOGGER.debug("[FireflyMC] 收到公开大厅二进制JSON消息: {}", message);
+                            handleTextMessage(message);
+                        } else {
+                            handleBinaryFrame(bytes);
                         }
                         webSocket.request(1);
                         return CompletableFuture.completedFuture(null);
@@ -247,7 +276,7 @@ public final class RelayLobbyWebSocketClient {
 
     private void handleControlMessage(RelayControlMessage message, String rawJson) {
         if (message == null || message.type() == null) {
-            LOGGER.info("[FireflyMC] 收到未处理的公开大厅消息: {}", rawJson);
+            LOGGER.debug("[FireflyMC] 收到未处理的公开大厅消息: {}", rawJson);
             return;
         }
 
@@ -275,7 +304,7 @@ public final class RelayLobbyWebSocketClient {
                 }
                 RelayLobbyState.setStatusMessage("Relay 错误: " + message.message());
             }
-            default -> LOGGER.info("[FireflyMC] 收到未处理的公开大厅消息: {}", rawJson);
+            default -> LOGGER.debug("[FireflyMC] 收到未处理的公开大厅消息: {}", rawJson);
         }
     }
 
@@ -309,6 +338,8 @@ public final class RelayLobbyWebSocketClient {
         webSocket.sendText(json, true).join();
         if ("heartbeat".equals(message.type())) {
             LOGGER.debug("[FireflyMC] 已发送公开大厅心跳: {}", json);
+        } else if ("stream_open".equals(message.type()) || "stream_close".equals(message.type())) {
+            LOGGER.debug("[FireflyMC] 已发送 relay 流控制消息: {}", json);
         } else {
             LOGGER.info("[FireflyMC] 已发送公开大厅消息: {}", json);
         }
