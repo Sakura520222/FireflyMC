@@ -37,6 +37,7 @@ public class RelayGuestProxy {
     });
     private final Map<String, Socket> streamSockets = new ConcurrentHashMap<>();
     private final AtomicBoolean running = new AtomicBoolean(false);
+    private final AtomicBoolean acceptedClientConnection = new AtomicBoolean(false);
     private final AtomicLong guestToRelayBytes = new AtomicLong(0);
     private final AtomicLong relayToGuestBytes = new AtomicLong(0);
 
@@ -93,6 +94,10 @@ public class RelayGuestProxy {
         return roomId;
     }
 
+    public boolean hasAcceptedClientConnection() {
+        return acceptedClientConnection.get();
+    }
+
     public boolean handleBinary(byte[] bytes) {
         if (bytes.length <= STREAM_ID_LENGTH) {
             return false;
@@ -126,6 +131,8 @@ public class RelayGuestProxy {
                 socket.setTcpNoDelay(true);
                 socket.setReceiveBufferSize(SOCKET_BUFFER_SIZE);
                 socket.setSendBufferSize(SOCKET_BUFFER_SIZE);
+                acceptedClientConnection.set(true);
+                RelayGuestJoiner.markProxyAcceptedConnection(this);
                 String streamId = UUID.randomUUID().toString();
                 streamSockets.put(streamId, socket);
                 RelayLobbyWebSocketClient.getInstance().sendControl(RelayLobbyMessage.streamOpen(roomId, guestSessionId, streamId));

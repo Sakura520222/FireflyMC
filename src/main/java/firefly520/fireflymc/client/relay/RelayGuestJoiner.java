@@ -9,14 +9,29 @@ import net.minecraft.network.chat.Component;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
+
 /**
  * Guest 加入公开房间流程。
  */
 public final class RelayGuestJoiner {
     private static final Logger LOGGER = LoggerFactory.getLogger(RelayGuestJoiner.class);
+    private static final ScheduledExecutorService EXECUTOR = Executors.newSingleThreadScheduledExecutor(r -> {
+        Thread thread = new Thread(r, "FireflyMC-Guest-Joiner");
+        thread.setDaemon(true);
+        return thread;
+    });
+    private static final long CONNECT_TIMEOUT_SECONDS = 20;
+
     private static RelayGuestProxy activeProxy;
     private static String pendingRoomId;
     private static String pendingGuestSessionId;
+    private static final AtomicBoolean connectingToRelayRoom = new AtomicBoolean(false);
+    private static ScheduledFuture<?> connectTimeoutTask;
 
     private RelayGuestJoiner() {
     }
@@ -48,11 +63,17 @@ public final class RelayGuestJoiner {
     }
 
     public static void stopActiveRelay(String reason) {
+        if (connectingToRelayRoom.get() && activeProxy != null && !activeProxy.hasAcceptedClientConnection()) {
+            LOGGER.debug("[FireflyMC] 忽略连接阶段的断开事件，等待本地代理连接或超时: {}", reason);
+            return;
+        }
         if (activeProxy != null) {
             activeProxy.stop(reason);
             activeProxy = null;
             pendingRoomId = null;
             pendingGuestSessionId = null;
+            connectingToRelayRoom.set(false);
+            cancelConnectTimeout();
             return;
         }
         if (pendingRoomId != null && pendingGuestSessionId != null) {
@@ -61,6 +82,15 @@ public final class RelayGuestJoiner {
             );
             pendingRoomId = null;
             pendingGuestSessionId = null;
+            connectingToRelayRoom.set(false);
+            cancelConnectTimeout();
+        }
+    }
+
+    public static void markProxyAcceptedConnection(RelayGuestProxy proxy) {
+        if (activeProxy == proxy) {
+            connectingToRelayRoom.set(false);
+            cancelConnectTimeout();
         }
     }
 
@@ -74,6 +104,8 @@ public final class RelayGuestJoiner {
         RelayLobbyWebSocketClient.getInstance().setGuestProxy(activeProxy);
         pendingRoomId = room.roomId();
         pendingGuestSessionId = guestSessionId;
+        connectingToRelayRoom.set(true);
+        scheduleConnectTimeout(activeProxy);
 
         String addressText = "127.0.0.1:" + port;
         ServerAddress address = ServerAddress.parseString(addressText);
@@ -89,5 +121,38 @@ public final class RelayGuestJoiner {
                 false,
                 null
         );
+    }
+
+    private static void scheduleConnectTimeout(RelayGuestProxy proxy) {
+        cancelConnectTimeout();
+        connectTimeoutTask = EXECUTOR.schedule(() -> Minecraft.getInstance().execute(() -> {
+            if (activeProxy == proxy && connectingToRelayRoom.get() && !proxy.hasAcceptedClientConnection()) {
+                LOGGER.warn("[FireflyMC] 加入公开房间超时，本地客户端未连接代理，释放房间名额");
+                forceStopActiveRelay("connect_timeout");
+                RelayLobbyState.setStatusMessage("连接超时，已释放房间名额");
+            }
+        }), CONNECT_TIMEOUT_SECONDS, TimeUnit.SECONDS);
+    }
+
+    private static void forceStopActiveRelay(String reason) {
+        if (activeProxy != null) {
+            activeProxy.stop(reason);
+            activeProxy = null;
+        } else if (pendingRoomId != null && pendingGuestSessionId != null) {
+            RelayLobbyWebSocketClient.getInstance().sendControl(
+                    RelayLobbyMessage.guestLeave(pendingRoomId, pendingGuestSessionId, reason)
+            );
+        }
+        pendingRoomId = null;
+        pendingGuestSessionId = null;
+        connectingToRelayRoom.set(false);
+        cancelConnectTimeout();
+    }
+
+    private static void cancelConnectTimeout() {
+        if (connectTimeoutTask != null) {
+            connectTimeoutTask.cancel(false);
+            connectTimeoutTask = null;
+        }
     }
 }
