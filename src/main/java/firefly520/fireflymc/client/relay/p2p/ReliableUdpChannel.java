@@ -42,6 +42,8 @@ public class ReliableUdpChannel {
     private volatile InetSocketAddress peerAddress;
     private volatile boolean observedByServer;
     private volatile boolean punchedPeer;
+    private volatile boolean loggedObserved;
+    private volatile boolean loggedPunch;
     private final Map<Integer, OutputStream> outputs = new ConcurrentHashMap<>();
     private final Map<Integer, ReorderBuffer> reorderBuffers = new ConcurrentHashMap<>();
     private final AtomicInteger nextSeq = new AtomicInteger(1);
@@ -71,14 +73,14 @@ public class ReliableUdpChannel {
         if (!receiverThread.isAlive()) {
             receiverThread.start();
         }
-        InetSocketAddress serverAddress = new InetSocketAddress(info.udpHost(), info.udpPort());
+        InetSocketAddress serverAddress = new InetSocketAddress(info.effectiveUdpHost(), info.udpPort());
         int timeout = info.timeoutSeconds() > 0
                 ? info.timeoutSeconds()
                 : Config.CLIENT.SINGLEPLAYER_RELAY_P2P_CONNECT_TIMEOUT_SECONDS.get();
         byte[] probe = UdpPacketCodec.probe(info.roomId(), info.guestSessionId(), role, info.p2pToken());
         byte[] punch = UdpPacketCodec.punch(info.roomId(), info.guestSessionId(), role, info.p2pToken());
-        LOGGER.info("[FireflyMC] P2P {} 开始探测: server={}, localUdp={}, timeout={}s",
-            role, serverAddress, localPort(), timeout);
+        LOGGER.info("[FireflyMC] P2P {} 开始探测: server={}, localUdp={}, timeout={}s, rawUdpHost={}",
+            role, serverAddress, localPort(), timeout, info.udpHost());
         ScheduledFuture<?> probeTask = executor.scheduleAtFixedRate(() -> {
             send(serverAddress, probe);
             InetSocketAddress peer = peerAddress;
@@ -166,11 +168,17 @@ public class ReliableUdpChannel {
                 String text = new String(packet.getData(), packet.getOffset(), packet.getLength());
                 if (text.contains("probe_ack")) {
                     observedByServer = true;
-                    LOGGER.info("[FireflyMC] P2P 已被服务端观测到: {}", text);
+                    if (!loggedObserved) {
+                        loggedObserved = true;
+                        LOGGER.info("[FireflyMC] P2P 已被服务端观测到: {}", text);
+                    }
                 } else if (text.contains("punch")) {
                     punchedPeer = true;
                     peerAddress = new InetSocketAddress(packet.getAddress(), packet.getPort());
-                    LOGGER.info("[FireflyMC] P2P 收到对端 punch: {}", peerAddress);
+                    if (!loggedPunch) {
+                        loggedPunch = true;
+                        LOGGER.info("[FireflyMC] P2P 收到对端 punch: {}", peerAddress);
+                    }
                 }
             } catch (IOException e) {
                 if (running.get()) {

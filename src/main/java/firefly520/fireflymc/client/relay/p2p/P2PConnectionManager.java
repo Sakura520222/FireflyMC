@@ -19,6 +19,7 @@ public final class P2PConnectionManager {
     private final Map<String, ReliableUdpChannel> channels = new ConcurrentHashMap<>();
     private final Map<String, P2PCandidate> candidates = new ConcurrentHashMap<>();
     private final Map<String, P2PJoinInfo> joinInfos = new ConcurrentHashMap<>();
+    private final Map<String, String> loggedCandidates = new ConcurrentHashMap<>();
     private volatile P2PHostBridge hostBridge;
     private volatile int hostLanPort = -1;
     private volatile String hostRoomId;
@@ -46,8 +47,8 @@ public final class P2PConnectionManager {
             ReliableUdpChannel channel = new ReliableUdpChannel();
             channels.put(info.guestSessionId(), channel);
             joinInfos.put(info.guestSessionId(), info);
-            LOGGER.info("[FireflyMC] P2P Guest 开始连接: room={}, session={}, udp={}:{}",
-                    info.roomId(), info.guestSessionId(), info.udpHost(), info.udpPort());
+                LOGGER.info("[FireflyMC] P2P Guest 开始连接: room={}, session={}, udp={}:{} (raw={})",
+                    info.roomId(), info.guestSessionId(), info.effectiveUdpHost(), info.udpPort(), info.udpHost());
             RelayLobbyWebSocketClient.getInstance().sendControl(
                     RelayLobbyMessage.p2pOffer(info.roomId(), info.guestSessionId(), info.p2pSessionId(), info.p2pToken())
             );
@@ -75,13 +76,16 @@ public final class P2PConnectionManager {
     }
 
     public void handleControlMessage(RelayControlMessage message) {
-        if (message == null || message.guestSessionId() == null) {
+        if (message == null || message.type() == null) {
             return;
         }
         if ("p2p_udp_observed".equals(message.type()) && message.candidate() != null) {
             LOGGER.info("[FireflyMC] P2P 服务端观测本端 UDP: role={}, candidate={}:{}",
                     message.role(), message.candidate().address(), message.candidate().port());
         } else if ("p2p_candidate".equals(message.type()) && message.candidate() != null) {
+            if (message.guestSessionId() == null) {
+                return;
+            }
             RelayControlMessage.P2PCandidate raw = message.candidate();
             P2PCandidate candidate = new P2PCandidate(raw.address(), raw.port());
             candidates.put(message.guestSessionId(), candidate);
@@ -89,9 +93,18 @@ public final class P2PConnectionManager {
             if (channel != null) {
                 channel.setPeerCandidate(candidate);
             }
-            LOGGER.info("[FireflyMC] P2P 收到对端候选: session={}, candidate={}:{}",
-                    message.guestSessionId(), raw.address(), raw.port());
+            if (message.guestSessionId().equals(hostSessionId)) {
+                startHostProbeIfReady();
+            }
+            String candidateKey = raw.address() + ":" + raw.port();
+            if (!candidateKey.equals(loggedCandidates.put(message.guestSessionId(), candidateKey))) {
+                LOGGER.info("[FireflyMC] P2P 收到对端候选: session={}, candidate={}:{}",
+                        message.guestSessionId(), raw.address(), raw.port());
+            }
         } else if ("guest_joined".equals(message.type()) && message.p2pSupported()) {
+            if (message.guestSessionId() == null) {
+                return;
+            }
             hostSessionId = message.guestSessionId();
             hostRoomId = message.roomId();
             hostToken = message.p2pToken();
@@ -134,6 +147,14 @@ public final class P2PConnectionManager {
             return;
         }
         try {
+            if (channels.containsKey(hostSessionId)) {
+                ReliableUdpChannel channel = channels.get(hostSessionId);
+                P2PCandidate candidate = candidates.get(hostSessionId);
+                if (channel != null && candidate != null) {
+                    channel.setPeerCandidate(candidate);
+                }
+                return;
+            }
             ReliableUdpChannel channel = new ReliableUdpChannel();
             channels.put(hostSessionId, channel);
             P2PJoinInfo info = new P2PJoinInfo(hostRoomId, hostSessionId, hostRoomId, hostToken, hostUdpHost, hostUdpPort, 10);
