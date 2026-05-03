@@ -21,8 +21,8 @@ import java.util.concurrent.atomic.AtomicLong;
 public class RelayHostBridge {
     private static final Logger LOGGER = LoggerFactory.getLogger(RelayHostBridge.class);
     private static final int STREAM_ID_LENGTH = 36;
-    private static final int RELAY_BUFFER_SIZE = 64 * 1024;
-    private static final int SOCKET_BUFFER_SIZE = 256 * 1024;
+    private static final int RELAY_BUFFER_SIZE = 512 * 1024;
+    private static final int SOCKET_BUFFER_SIZE = 2 * 1024 * 1024;
 
     private final int lanPort;
     private final AtomicLong hostToRelayBytes = new AtomicLong(0);

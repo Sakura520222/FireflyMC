@@ -1,6 +1,7 @@
 package firefly520.fireflymc.client.relay;
 
 import firefly520.fireflymc.Config;
+import firefly520.fireflymc.client.relay.p2p.P2PConnectionManager;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -37,7 +38,7 @@ public final class RelayLobbyWebSocketClient {
     private String currentRoomId;
     private RelayGuestProxy guestProxy;
     private RelayHostBridge hostBridge;
-    private CompletableFuture<String> pendingJoin;
+    private CompletableFuture<RelayControlMessage> pendingJoin;
     private final StringBuilder textAccumulator = new StringBuilder();
     private ByteBuffer binaryAccumulator = null;
     private long lastLobbyListRequestAt = 0L;
@@ -102,8 +103,8 @@ public final class RelayLobbyWebSocketClient {
         });
     }
 
-    public CompletableFuture<String> joinRoom(RelayLobbyRoom room, String guestPlayerName, String guestUuid) {
-        CompletableFuture<String> future = new CompletableFuture<>();
+    public CompletableFuture<RelayControlMessage> joinRoom(RelayLobbyRoom room, String guestPlayerName, String guestUuid) {
+        CompletableFuture<RelayControlMessage> future = new CompletableFuture<>();
         pendingJoin = future;
         executor.execute(() -> {
             try {
@@ -286,7 +287,7 @@ public final class RelayLobbyWebSocketClient {
         switch (message.type()) {
             case "join_accepted" -> {
                 if (pendingJoin != null) {
-                    pendingJoin.complete(message.guestSessionId());
+                    pendingJoin.complete(message);
                     pendingJoin = null;
                 }
             }
@@ -307,6 +308,8 @@ public final class RelayLobbyWebSocketClient {
                 }
                 RelayLobbyState.setStatusMessage("Relay 错误: " + message.message());
             }
+            case "p2p_offer", "p2p_answer", "p2p_candidate", "p2p_udp_observed", "p2p_ready", "p2p_failed", "relay_fallback" ->
+                    P2PConnectionManager.getInstance().handleControlMessage(message);
             default -> LOGGER.debug("[FireflyMC] 收到未处理的公开大厅消息: {}", rawJson);
         }
     }

@@ -147,7 +147,7 @@ public class RelayLobbyScreen extends Screen {
         guiGraphics.drawString(this.font, room.worldName(), x + 14, y + 8, TEXT_PRIMARY, false);
         guiGraphics.drawString(this.font, "房主: " + room.hostPlayerName(), x + 14, y + 26, TEXT_SECONDARY, false);
 
-        String players = room.currentPlayers() + "/" + room.maxPlayers();
+        String players = (room.p2pSupported() ? "P2P优先  " : "中继  ") + room.currentPlayers() + "/" + room.maxPlayers();
         guiGraphics.drawString(this.font, players, x + width - this.font.width(players) - 14, y + 8, ACCENT_SECONDARY, false);
 
         String version = "MC " + room.minecraftVersion() + " / Mod " + room.modVersion();

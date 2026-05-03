@@ -36,6 +36,15 @@ public class RelayLobbyRoom {
     @SerializedName("lastHeartbeat")
     private double lastHeartbeat;
 
+    @SerializedName("p2pSupported")
+    private boolean p2pSupported;
+
+    @SerializedName("p2pTransport")
+    private String p2pTransport;
+
+    @SerializedName("p2pProtocolVersion")
+    private int p2pProtocolVersion;
+
     public String roomId() {
         return roomId;
     }
@@ -74,5 +83,17 @@ public class RelayLobbyRoom {
 
     public double lastHeartbeat() {
         return lastHeartbeat;
+    }
+
+    public boolean p2pSupported() {
+        return p2pSupported;
+    }
+
+    public String p2pTransport() {
+        return p2pTransport == null ? "" : p2pTransport;
+    }
+
+    public int p2pProtocolVersion() {
+        return p2pProtocolVersion;
     }
 }

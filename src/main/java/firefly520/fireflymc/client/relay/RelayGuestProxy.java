@@ -24,8 +24,8 @@ import java.util.concurrent.atomic.AtomicLong;
 public class RelayGuestProxy {
     private static final Logger LOGGER = LoggerFactory.getLogger(RelayGuestProxy.class);
     private static final int STREAM_ID_LENGTH = 36;
-    private static final int RELAY_BUFFER_SIZE = 64 * 1024;
-    private static final int SOCKET_BUFFER_SIZE = 256 * 1024;
+    private static final int RELAY_BUFFER_SIZE = 512 * 1024;
+    private static final int SOCKET_BUFFER_SIZE = 2 * 1024 * 1024;
 
     private final String roomId;
     private final String guestSessionId;

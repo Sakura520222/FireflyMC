@@ -106,14 +106,24 @@ public final class SingleplayerRelayManager {
         String playerUuid = mc.getUser().getProfileId().toString();
         int maxPlayers = Config.CLIENT.SINGLEPLAYER_RELAY_MAX_PLAYERS.get();
 
-        RelayLobbyMessage message = RelayLobbyMessage.hostOpen(
+        RelayLobbyMessage message = Config.CLIENT.SINGLEPLAYER_RELAY_P2P_ENABLED.get()
+            ? RelayLobbyMessage.hostOpenP2P(
+                currentRoomId,
+                worldName,
+                playerName,
+                playerUuid,
+                port,
+                maxPlayers,
+                currentRoomId
+            )
+            : RelayLobbyMessage.hostOpen(
                 currentRoomId,
                 worldName,
                 playerName,
                 playerUuid,
                 port,
                 maxPlayers
-        );
+            );
             if (hostBridge != null) {
                 hostBridge.stop();
             }
