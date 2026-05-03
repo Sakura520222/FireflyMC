@@ -10,6 +10,7 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicLong;
 
 /** Host-side bridge from P2P UDP streams to local integrated-server LAN TCP. */
 public class P2PHostBridge {
@@ -26,6 +27,7 @@ public class P2PHostBridge {
         return thread;
     });
     private final Map<Integer, Socket> sockets = new ConcurrentHashMap<>();
+    private final AtomicLong lanToP2pBytes = new AtomicLong(0);
 
     public P2PHostBridge(int lanPort, ReliableUdpChannel channel) {
         this.lanPort = lanPort;
@@ -33,6 +35,7 @@ public class P2PHostBridge {
     }
 
     public void startDefaultStream() {
+        LOGGER.info("[FireflyMC] P2P Host 正在打开默认 stream 到本地 LAN: port={}", lanPort);
         openStream(STREAM_ID);
     }
 
@@ -60,6 +63,7 @@ public class P2PHostBridge {
                 socket.setSendBufferSize(SOCKET_BUFFER_SIZE);
                 sockets.put(streamId, socket);
                 channel.registerStream(streamId, socket.getOutputStream());
+                LOGGER.info("[FireflyMC] P2P Host 已连接本地 LAN: streamId={}, port={}", streamId, lanPort);
                 pipeLanToP2P(streamId, socket);
             } catch (IOException e) {
                 LOGGER.warn("[FireflyMC] P2P Host 连接本地 LAN 失败: {}", e.getMessage());
@@ -73,6 +77,10 @@ public class P2PHostBridge {
             int read;
             while ((read = input.read(buffer)) != -1) {
                 channel.sendData(streamId, buffer, read);
+                lanToP2pBytes.addAndGet(read);
+                if (lanToP2pBytes.get() <= 8192 || read > 1000) {
+                    LOGGER.info("[FireflyMC] P2P Host LAN→UDP: {} bytes, total={} KB", read, lanToP2pBytes.get() / 1024);
+                }
             }
         } catch (IOException e) {
             LOGGER.debug("[FireflyMC] P2P Host LAN 流关闭: {}", e.getMessage());

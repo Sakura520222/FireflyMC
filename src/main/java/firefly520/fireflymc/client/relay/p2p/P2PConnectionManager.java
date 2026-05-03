@@ -20,7 +20,7 @@ public final class P2PConnectionManager {
     private final Map<String, P2PCandidate> candidates = new ConcurrentHashMap<>();
     private final Map<String, P2PJoinInfo> joinInfos = new ConcurrentHashMap<>();
     private final Map<String, String> loggedCandidates = new ConcurrentHashMap<>();
-    private volatile P2PHostBridge hostBridge;
+    private final Map<String, P2PHostBridge> hostBridges = new ConcurrentHashMap<>();
     private volatile int hostLanPort = -1;
     private volatile String hostRoomId;
     private volatile String hostSessionId;
@@ -126,10 +126,8 @@ public final class P2PConnectionManager {
     }
 
     public void stopHost() {
-        if (hostBridge != null) {
-            hostBridge.stop();
-            hostBridge = null;
-        }
+        hostBridges.values().forEach(P2PHostBridge::stop);
+        hostBridges.clear();
         if (hostSessionId != null) {
             stop(hostSessionId);
         }
@@ -169,8 +167,9 @@ public final class P2PConnectionManager {
 
     private void startHostBridge() {
         ReliableUdpChannel channel = channels.get(hostSessionId);
-        if (channel != null && hostLanPort > 0 && hostBridge == null) {
-            hostBridge = new P2PHostBridge(hostLanPort, channel);
+        if (channel != null && hostLanPort > 0 && !hostBridges.containsKey(hostSessionId)) {
+            P2PHostBridge hostBridge = new P2PHostBridge(hostLanPort, channel);
+            hostBridges.put(hostSessionId, hostBridge);
             hostBridge.startDefaultStream();
             LOGGER.info("[FireflyMC] P2P Host bridge started for LAN port {}", hostLanPort);
         }
@@ -183,5 +182,9 @@ public final class P2PConnectionManager {
         }
         candidates.remove(guestSessionId);
         joinInfos.remove(guestSessionId);
+        P2PHostBridge bridge = hostBridges.remove(guestSessionId);
+        if (bridge != null) {
+            bridge.stop();
+        }
     }
 }

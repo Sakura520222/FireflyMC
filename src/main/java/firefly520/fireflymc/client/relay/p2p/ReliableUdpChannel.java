@@ -11,6 +11,9 @@ import java.net.DatagramSocket;
 import java.net.InetSocketAddress;
 import java.net.SocketException;
 import java.util.Arrays;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
@@ -20,6 +23,7 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * MVP reliable UDP channel shell.
@@ -46,8 +50,11 @@ public class ReliableUdpChannel {
     private volatile boolean loggedPunch;
     private final Map<Integer, OutputStream> outputs = new ConcurrentHashMap<>();
     private final Map<Integer, ReorderBuffer> reorderBuffers = new ConcurrentHashMap<>();
+    private final Map<Integer, List<UdpPacketCodec.DecodedData>> pendingBeforeRegister = new ConcurrentHashMap<>();
     private final AtomicInteger nextSeq = new AtomicInteger(1);
     private final AtomicInteger lastAck = new AtomicInteger(0);
+    private final AtomicLong sentBytes = new AtomicLong(0);
+    private final AtomicLong receivedBytes = new AtomicLong(0);
 
     public ReliableUdpChannel() throws SocketException {
         this.socket = createSocket();
@@ -119,6 +126,13 @@ public class ReliableUdpChannel {
     public void registerStream(int streamId, OutputStream output) {
         outputs.put(streamId, output);
         reorderBuffers.computeIfAbsent(streamId, ignored -> new ReorderBuffer());
+        List<UdpPacketCodec.DecodedData> pending = pendingBeforeRegister.remove(streamId);
+        if (pending != null && !pending.isEmpty()) {
+            LOGGER.info("[FireflyMC] P2P 回放早到数据: stream={}, packets={}", streamId, pending.size());
+            pending.stream()
+                    .sorted(java.util.Comparator.comparingInt(UdpPacketCodec.DecodedData::seq))
+                    .forEach(decoded -> writeDecodedPayload(decoded, output));
+        }
     }
 
     public void unregisterStream(int streamId) {
@@ -136,7 +150,15 @@ public class ReliableUdpChannel {
             int chunk = Math.min(UdpPacketCodec.MAX_PAYLOAD_SIZE, length - offset);
             byte[] payload = Arrays.copyOfRange(bytes, offset, offset + chunk);
             int seq = nextSeq.getAndIncrement();
-            send(peer, UdpPacketCodec.data(streamId, seq, lastAck.get(), (byte) 0, payload, payload.length));
+            byte[] packet = UdpPacketCodec.data(streamId, seq, lastAck.get(), (byte) 0, payload, payload.length);
+            send(peer, packet);
+            // Temporary redundancy until full retransmit queue is implemented.
+            send(peer, packet);
+            sentBytes.addAndGet(payload.length);
+            if (sentBytes.get() <= 8192 || payload.length > 1000) {
+                LOGGER.info("[FireflyMC] P2P UDP 发送数据: stream={}, seq={}, bytes={}, total={} KB, peer={}",
+                        streamId, seq, payload.length, sentBytes.get() / 1024, peer);
+            }
             offset += chunk;
         }
     }
@@ -200,16 +222,35 @@ public class ReliableUdpChannel {
         lastAck.set(Math.max(lastAck.get(), decoded.seq()));
         OutputStream output = outputs.get(decoded.streamId());
         if (output != null && decoded.payload().length > 0) {
-            try {
+            writeDecodedPayload(decoded, output);
+            InetSocketAddress peer = peerAddress;
+            if (peer != null) {
                 ReorderBuffer reorder = reorderBuffers.computeIfAbsent(decoded.streamId(), ignored -> new ReorderBuffer());
-                reorder.accept(decoded.seq(), decoded.payload(), output);
-                InetSocketAddress peer = peerAddress;
-                if (peer != null) {
-                    send(peer, UdpPacketCodec.ack(decoded.streamId(), reorder.ackSeq()));
-                }
-            } catch (IOException e) {
-                LOGGER.debug("[FireflyMC] P2P stream write failed: {}", e.getMessage());
+                send(peer, UdpPacketCodec.ack(decoded.streamId(), reorder.ackSeq()));
             }
+        } else if (decoded.payload().length > 0) {
+            List<UdpPacketCodec.DecodedData> pending = pendingBeforeRegister.computeIfAbsent(
+                    decoded.streamId(), ignored -> Collections.synchronizedList(new ArrayList<>())
+            );
+            if (pending.size() < 256) {
+                pending.add(decoded);
+                LOGGER.info("[FireflyMC] P2P 缓存早到数据: stream={}, seq={}, bytes={}, pending={}",
+                        decoded.streamId(), decoded.seq(), decoded.payload().length, pending.size());
+            }
+        }
+    }
+
+    private void writeDecodedPayload(UdpPacketCodec.DecodedData decoded, OutputStream output) {
+        try {
+            ReorderBuffer reorder = reorderBuffers.computeIfAbsent(decoded.streamId(), ignored -> new ReorderBuffer());
+            reorder.accept(decoded.seq(), decoded.payload(), output);
+            receivedBytes.addAndGet(decoded.payload().length);
+            if (receivedBytes.get() <= 8192 || decoded.payload().length > 1000) {
+                LOGGER.info("[FireflyMC] P2P UDP 接收数据: stream={}, seq={}, bytes={}, total={} KB",
+                        decoded.streamId(), decoded.seq(), decoded.payload().length, receivedBytes.get() / 1024);
+            }
+        } catch (IOException e) {
+            LOGGER.debug("[FireflyMC] P2P stream write failed: {}", e.getMessage());
         }
     }
 

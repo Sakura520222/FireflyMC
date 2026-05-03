@@ -15,6 +15,7 @@ import java.net.Socket;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicLong;
 
 /** Guest-side local TCP proxy backed by a P2P UDP channel. */
 public class P2PGuestProxy {
@@ -30,6 +31,7 @@ public class P2PGuestProxy {
         return thread;
     });
     private final AtomicBoolean running = new AtomicBoolean(false);
+    private final AtomicLong localToP2pBytes = new AtomicLong(0);
     private ServerSocket serverSocket;
     private int localPort = -1;
 
@@ -76,6 +78,7 @@ public class P2PGuestProxy {
                 socket.setReceiveBufferSize(SOCKET_BUFFER_SIZE);
                 socket.setSendBufferSize(SOCKET_BUFFER_SIZE);
                 channel.registerStream(STREAM_ID, socket.getOutputStream());
+                LOGGER.info("[FireflyMC] P2P Guest 本地 Minecraft 已连接代理: streamId={}", STREAM_ID);
                 executor.execute(() -> pipeLocalToP2P(socket));
             } catch (IOException e) {
                 if (running.get()) {
@@ -91,6 +94,10 @@ public class P2PGuestProxy {
             int read;
             while (running.get() && (read = input.read(buffer)) != -1) {
                 channel.sendData(STREAM_ID, buffer, read);
+                localToP2pBytes.addAndGet(read);
+                if (localToP2pBytes.get() <= 8192 || read > 1000) {
+                    LOGGER.info("[FireflyMC] P2P Guest 本地→UDP: {} bytes, total={} KB", read, localToP2pBytes.get() / 1024);
+                }
             }
         } catch (IOException e) {
             LOGGER.debug("[FireflyMC] P2P Guest 本地流关闭: {}", e.getMessage());
