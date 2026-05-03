@@ -346,9 +346,9 @@ public final class RelayLobbyWebSocketClient {
         String json = message.toJson();
         webSocket.sendText(json, true).join();
         if ("heartbeat".equals(message.type())) {
-            LOGGER.debug("[FireflyMC] 已发送公开大厅心跳: {}", json);
+            LOGGER.debug("[FireflyMC] 已发送公开大厅心跳: {}", sanitizeRelayJsonForLog(json));
         } else if ("stream_open".equals(message.type()) || "stream_close".equals(message.type()) || "guest_leave".equals(message.type())) {
-            LOGGER.debug("[FireflyMC] 已发送 relay 流控制消息: {}", json);
+            LOGGER.debug("[FireflyMC] 已发送 relay 流控制消息: {}", sanitizeRelayJsonForLog(json));
         } else {
             LOGGER.info("[FireflyMC] 已发送公开大厅消息: {}", sanitizeRelayJsonForLog(json));
         }
