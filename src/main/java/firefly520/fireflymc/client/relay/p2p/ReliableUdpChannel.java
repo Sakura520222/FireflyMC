@@ -57,11 +57,13 @@ public class ReliableUdpChannel {
     private final AtomicLong receivedBytes = new AtomicLong(0);
     private final AtomicLong nextSentLogAt = new AtomicLong(64 * 1024);
     private final AtomicLong nextReceivedLogAt = new AtomicLong(64 * 1024);
+    private final SendWindow sendWindow;
 
     public ReliableUdpChannel() throws SocketException {
         this.socket = createSocket();
         this.receiverThread = new Thread(this::receiveLoop, "FireflyMC-P2P-UDP-Receiver");
         this.receiverThread.setDaemon(true);
+        this.sendWindow = new SendWindow(executor, this::send);
     }
 
     public int localPort() {
@@ -98,6 +100,7 @@ public class ReliableUdpChannel {
             }
             if (observedByServer && punchedPeer && !result.isDone()) {
                 LOGGER.info("[FireflyMC] P2P {} 打洞完成: peer={}", role, peerAddress);
+                sendWindow.start();
                 result.complete(true);
             }
         }, 0, 300, TimeUnit.MILLISECONDS);
@@ -154,8 +157,7 @@ public class ReliableUdpChannel {
             int seq = nextSeq.getAndIncrement();
             byte[] packet = UdpPacketCodec.data(streamId, seq, lastAck.get(), (byte) 0, payload, payload.length);
             send(peer, packet);
-            // Temporary redundancy until full retransmit queue is implemented.
-            send(peer, packet);
+            sendWindow.record(seq, packet, peer);
             long totalSent = sentBytes.addAndGet(payload.length);
             long threshold = nextSentLogAt.get();
             if (totalSent <= 8192 || totalSent >= threshold) {
@@ -176,6 +178,7 @@ public class ReliableUdpChannel {
 
     public void close() {
         running.set(false);
+        sendWindow.close();
         socket.close();
         executor.shutdownNow();
     }
@@ -221,17 +224,19 @@ public class ReliableUdpChannel {
         }
         peerAddress = new InetSocketAddress(source.getAddress(), source.getPort());
         if ((decoded.flags() & UdpPacketCodec.FLAG_ACK) != 0) {
+            sendWindow.acknowledge(decoded.ack());
             return;
         }
         lastAck.set(Math.max(lastAck.get(), decoded.seq()));
+        // Send ACK back to peer
+        InetSocketAddress peer = peerAddress;
+        if (peer != null) {
+            ReorderBuffer reorder = reorderBuffers.computeIfAbsent(decoded.streamId(), ignored -> new ReorderBuffer());
+            send(peer, UdpPacketCodec.ack(decoded.streamId(), reorder.ackSeq()));
+        }
         OutputStream output = outputs.get(decoded.streamId());
         if (output != null && decoded.payload().length > 0) {
             writeDecodedPayload(decoded, output);
-            InetSocketAddress peer = peerAddress;
-            if (peer != null) {
-                ReorderBuffer reorder = reorderBuffers.computeIfAbsent(decoded.streamId(), ignored -> new ReorderBuffer());
-                send(peer, UdpPacketCodec.ack(decoded.streamId(), reorder.ackSeq()));
-            }
         } else if (decoded.payload().length > 0) {
             List<UdpPacketCodec.DecodedData> pending = pendingBeforeRegister.computeIfAbsent(
                     decoded.streamId(), ignored -> Collections.synchronizedList(new ArrayList<>())

@@ -116,7 +116,7 @@ public final class P2PConnectionManager {
             hostUdpPort = message.p2pUdpPort();
             startHostProbeIfReady();
         } else if ("p2p_ready".equals(message.type())) {
-            startHostBridge();
+            startHostBridge(message.guestSessionId());
         }
     }
 
@@ -170,13 +170,16 @@ public final class P2PConnectionManager {
         }
     }
 
-    private void startHostBridge() {
-        ReliableUdpChannel channel = channels.get(hostSessionId);
-        if (channel != null && hostLanPort > 0 && !hostBridges.containsKey(hostSessionId)) {
+    private void startHostBridge(String sessionId) {
+        if (sessionId == null) {
+            sessionId = hostSessionId;
+        }
+        ReliableUdpChannel channel = channels.get(sessionId);
+        if (channel != null && hostLanPort > 0 && !hostBridges.containsKey(sessionId)) {
             P2PHostBridge hostBridge = new P2PHostBridge(hostLanPort, channel);
-            hostBridges.put(hostSessionId, hostBridge);
+            hostBridges.put(sessionId, hostBridge);
             hostBridge.startDefaultStream();
-            LOGGER.info("[FireflyMC] P2P Host bridge started for LAN port {}", hostLanPort);
+            LOGGER.info("[FireflyMC] P2P Host bridge started for LAN port {}, session={}", hostLanPort, sessionId);
         }
     }
 
