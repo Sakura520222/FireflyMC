@@ -1,6 +1,6 @@
 package firefly520.fireflymc.client.relay;
 
-import firefly520.fireflymc.Config;
+import firefly520.fireflymc.client.relay.RelayConfig;
 import firefly520.fireflymc.client.relay.p2p.P2PConnectionManager;
 import firefly520.fireflymc.client.relay.p2p.P2PGuestProxy;
 import firefly520.fireflymc.client.relay.p2p.P2PJoinInfo;
@@ -56,7 +56,7 @@ public final class RelayGuestJoiner {
                     }
                     String guestSessionId = joinAccepted.guestSessionId();
                     try {
-                        if (Config.CLIENT.SINGLEPLAYER_RELAY_P2P_ENABLED.get()
+                        if (RelayConfig.RELAY.SINGLEPLAYER_RELAY_P2P_ENABLED.get()
                                 && joinAccepted.p2pSupported()
                             && "udp_reliable_v1".equals(joinAccepted.p2pTransport())) {
                             RelayLobbyState.setStatusMessage("正在尝试 P2P 连接...");
@@ -69,7 +69,7 @@ public final class RelayGuestJoiner {
                                     joinAccepted.p2pUdpPort(),
                                     joinAccepted.p2pConnectTimeoutSeconds() > 0
                                             ? joinAccepted.p2pConnectTimeoutSeconds()
-                                            : Config.CLIENT.SINGLEPLAYER_RELAY_P2P_CONNECT_TIMEOUT_SECONDS.get()
+                                            : RelayConfig.RELAY.SINGLEPLAYER_RELAY_P2P_CONNECT_TIMEOUT_SECONDS.get()
                             );
                             P2PConnectionManager.getInstance().tryGuestConnect(info)
                                     .whenComplete((result, p2pError) -> mc.execute(() -> {

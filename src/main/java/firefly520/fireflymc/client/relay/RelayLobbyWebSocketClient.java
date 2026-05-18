@@ -1,6 +1,6 @@
 package firefly520.fireflymc.client.relay;
 
-import firefly520.fireflymc.Config;
+import firefly520.fireflymc.client.relay.RelayConfig;
 import firefly520.fireflymc.client.relay.p2p.P2PConnectionManager;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -161,7 +161,7 @@ public final class RelayLobbyWebSocketClient {
             return;
         }
 
-        URI uri = URI.create(Config.CLIENT.SINGLEPLAYER_RELAY_URL.get());
+        URI uri = URI.create(RelayConfig.RELAY.SINGLEPLAYER_RELAY_URL.get());
         LOGGER.info("[FireflyMC] 正在连接单人世界公开大厅: {}", uri);
 
         HttpClient client = HttpClient.newBuilder()

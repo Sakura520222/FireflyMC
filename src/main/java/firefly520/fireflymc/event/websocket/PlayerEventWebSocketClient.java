@@ -164,7 +164,7 @@ public class PlayerEventWebSocketClient {
                     }
 
                     // 检查是否是验证响应
-                    if (!handled && WebSocketConfig.ENABLE_MEMBER_VERIFICATION) {
+                    if (!handled && ServerConfig.SERVER.enableMemberVerification.get()) {
                         VerificationResponseMessage verifyResp = VerificationResponseMessage.fromJson(json);
                         if (verifyResp != null && verifyResp.isValid()) {
                             if (MessageAuthenticator.validateKey(verifyResp.getKey())) {
@@ -375,7 +375,7 @@ public class PlayerEventWebSocketClient {
      * @param playerId 玩家ID（用户名）
      */
     public static void sendVerificationRequest(String playerId) {
-        if (!WebSocketConfig.ENABLE_MEMBER_VERIFICATION) {
+        if (!ServerConfig.SERVER.enableMemberVerification.get()) {
             return;
         }
 

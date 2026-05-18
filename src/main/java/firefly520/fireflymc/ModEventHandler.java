@@ -2,7 +2,6 @@ package firefly520.fireflymc;
 
 import firefly520.fireflymc.playtime.PlaytimeManager;
 import firefly520.fireflymc.event.websocket.MemberVerificationManager;
-import firefly520.fireflymc.event.websocket.WebSocketConfig;
 import firefly520.fireflymc.network.ModHandshakePayload;
 import firefly520.fireflymc.network.ModPayloadHandler;
 import firefly520.fireflymc.network.ShowRulesPayload;
@@ -55,8 +54,7 @@ public class ModEventHandler {
             }
 
             // 检查成员验证状态（仅多人/专用服务器需要；单人世界的集成服务器不走验证服务器流程）
-            if (WebSocketConfig.ENABLE_MEMBER_VERIFICATION &&
-                ServerConfig.SERVER.enableMemberVerification.get()) {
+            if (ServerConfig.SERVER.enableMemberVerification.get()) {
                 MemberVerificationManager.getInstance().requestVerification(serverPlayer);
                 // 注意：不直接返回，等待WebSocket响应后再决定是否踢出
                 // 玩家暂时进入"待验证"状态
@@ -127,7 +125,7 @@ public class ModEventHandler {
             cancelInvulnerabilityTimeout(playerUuid);
             cancelVerifyTimeout(playerUuid);
             // 清理成员验证状态
-            if (WebSocketConfig.ENABLE_MEMBER_VERIFICATION) {
+            if (ServerConfig.SERVER.enableMemberVerification.get()) {
                 MemberVerificationManager.getInstance().cleanupPlayer(playerId);
             }
             // 通知在线时长管理器

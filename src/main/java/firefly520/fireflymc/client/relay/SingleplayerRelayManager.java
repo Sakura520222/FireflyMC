@@ -1,6 +1,6 @@
 package firefly520.fireflymc.client.relay;
 
-import firefly520.fireflymc.Config;
+import firefly520.fireflymc.client.relay.RelayConfig;
 import firefly520.fireflymc.client.ClientState;
 import firefly520.fireflymc.client.relay.p2p.P2PConnectionManager;
 import net.minecraft.client.Minecraft;
@@ -40,7 +40,7 @@ public final class SingleplayerRelayManager {
             return;
         }
 
-        if (!Config.CLIENT.SINGLEPLAYER_RELAY_ENABLED.get()) {
+        if (!RelayConfig.RELAY.SINGLEPLAYER_RELAY_ENABLED.get()) {
             LOGGER.info("[FireflyMC] 单人世界联机功能未启用");
             return;
         }
@@ -53,7 +53,7 @@ public final class SingleplayerRelayManager {
 
         try {
             if (!server.isPublished()) {
-                boolean allowCommands = Config.CLIENT.SINGLEPLAYER_RELAY_ALLOW_COMMANDS.get();
+                boolean allowCommands = RelayConfig.RELAY.SINGLEPLAYER_RELAY_ALLOW_COMMANDS.get();
                 int requestedPort = findAvailablePort();
                 boolean published = server.publishServer(GameType.SURVIVAL, allowCommands, requestedPort);
                 server.setUsesAuthentication(false);
@@ -106,9 +106,9 @@ public final class SingleplayerRelayManager {
         String worldName = resolveWorldName(server);
         String playerName = mc.getUser().getName();
         String playerUuid = mc.getUser().getProfileId().toString();
-        int maxPlayers = Config.CLIENT.SINGLEPLAYER_RELAY_MAX_PLAYERS.get();
+        int maxPlayers = RelayConfig.RELAY.SINGLEPLAYER_RELAY_MAX_PLAYERS.get();
 
-        RelayLobbyMessage message = Config.CLIENT.SINGLEPLAYER_RELAY_P2P_ENABLED.get()
+        RelayLobbyMessage message = RelayConfig.RELAY.SINGLEPLAYER_RELAY_P2P_ENABLED.get()
             ? RelayLobbyMessage.hostOpenP2P(
                 currentRoomId,
                 worldName,

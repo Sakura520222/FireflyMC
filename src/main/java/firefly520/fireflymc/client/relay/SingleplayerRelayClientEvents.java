@@ -1,6 +1,6 @@
 package firefly520.fireflymc.client.relay;
 
-import firefly520.fireflymc.Config;
+import firefly520.fireflymc.client.relay.RelayConfig;
 import firefly520.fireflymc.client.ClientState;
 import firefly520.fireflymc.client.screen.RelayLobbyScreen;
 import firefly520.fireflymc.client.screen.SingleplayerSharePromptScreen;
@@ -24,7 +24,7 @@ public final class SingleplayerRelayClientEvents {
 
     public static void onClientLoggedIn(ClientPlayerNetworkEvent.LoggingIn event) {
         Minecraft mc = Minecraft.getInstance();
-        if (!Config.CLIENT.SINGLEPLAYER_RELAY_ENABLED.get() || !Config.CLIENT.SINGLEPLAYER_RELAY_PROMPT_ON_JOIN.get()) {
+        if (!RelayConfig.RELAY.SINGLEPLAYER_RELAY_ENABLED.get() || !RelayConfig.RELAY.SINGLEPLAYER_RELAY_PROMPT_ON_JOIN.get()) {
             return;
         }
 
