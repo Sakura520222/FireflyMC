@@ -5,7 +5,10 @@
   "mixins": [
     "ServerChatMixin"
   ],
-  "client": [],
+  "client": [
+    "ServerSelectionListMixin",
+    "JoinMultiplayerScreenMixin"
+  ],
   "server": ["ServerChatMixin"],
   "injectors": {
     "defaultRequire": 1
