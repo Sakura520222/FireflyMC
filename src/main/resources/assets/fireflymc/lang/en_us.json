@@ -41,5 +41,13 @@
   "fireflymc.config.singleplayer_relay.p2p_window_size": "P2P Sliding Window Size",
   "fireflymc.config.singleplayer_relay.p2p_window_size.tooltip": "Reliable UDP sliding window size in packets",
 
-  "fireflymc.configuration.section.fireflymc-client.toml": "Client Settings"
+  "fireflymc.config.player_auth": "Player Password Auth",
+  "fireflymc.config.player_auth.enabled": "Enable Password Auth",
+  "fireflymc.config.player_auth.enabled.tooltip": "Set password on first join, verify on subsequent joins",
+  "fireflymc.config.player_auth.timeout_seconds": "Auth Timeout (seconds)",
+  "fireflymc.config.player_auth.timeout_seconds.tooltip": "Kick player after timeout",
+  "fireflymc.config.player_auth.max_attempts": "Max Attempts",
+  "fireflymc.config.player_auth.max_attempts.tooltip": "Kick after exceeding",
+  "fireflymc.config.player_auth.kick_message_timeout": "Timeout Kick Message",
+  "fireflymc.config.player_auth.kick_message_failed": "Failed Kick Message"
 }

@@ -1,9 +1,11 @@
 package firefly520.fireflymc.client;
 
 import firefly520.fireflymc.FireflyMCMod;
+import firefly520.fireflymc.client.screen.PasswordAuthScreen;
 import firefly520.fireflymc.client.screen.RulesScreen;
 import firefly520.fireflymc.network.ModHandshakePayload;
 import firefly520.fireflymc.network.ModHandshakeReplyPayload;
+import firefly520.fireflymc.network.PasswordPromptPayload;
 import firefly520.fireflymc.network.ShowRulesPayload;
 import net.minecraft.client.Minecraft;
 import net.neoforged.neoforge.network.handling.IPayloadContext;
@@ -16,7 +18,6 @@ public class ClientPayloadHandler {
 
     /**
      * 客户端处理服务端发来的握手包，回复版本号
-     * 通过反射从 ModNetwork 调用
      */
     public static void handleHandshake(ModHandshakePayload payload, IPayloadContext context) {
         context.reply(new ModHandshakeReplyPayload(FireflyMCMod.VERSION));
@@ -24,8 +25,6 @@ public class ClientPayloadHandler {
 
     /**
      * 客户端处理服务端发来的显示准则弹窗包
-     * 打开 RulesScreen 显示服务器准则
-     * 通过反射从 ModNetwork 调用
      */
     public static void handleShowRules(ShowRulesPayload payload, IPayloadContext context) {
         context.enqueueWork(() -> {
@@ -35,6 +34,19 @@ public class ClientPayloadHandler {
             ClientState.hasSeenRulesThisSession = true;
             // 打开准则弹窗
             Minecraft.getInstance().setScreen(new RulesScreen(isFirstJoin));
+        });
+    }
+
+    /**
+     * 客户端处理服务端发来的密码验证提示包，打开密码弹窗
+     */
+    public static void handlePasswordPrompt(PasswordPromptPayload payload, IPayloadContext context) {
+        context.enqueueWork(() -> {
+            Minecraft.getInstance().setScreen(new PasswordAuthScreen(
+                    payload.firstTime(),
+                    payload.message(),
+                    payload.remainingAttempts()
+            ));
         });
     }
 }

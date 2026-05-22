@@ -1,7 +1,7 @@
 package firefly520.fireflymc;
 
+import firefly520.fireflymc.auth.PlayerPasswordManager;
 import firefly520.fireflymc.playtime.PlaytimeManager;
-import firefly520.fireflymc.event.websocket.MemberVerificationManager;
 import firefly520.fireflymc.network.ModHandshakePayload;
 import firefly520.fireflymc.network.ModPayloadHandler;
 import firefly520.fireflymc.network.ShowRulesPayload;
@@ -19,29 +19,15 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 
-/**
- * 全局事件处理器
- */
 public class ModEventHandler {
 
-    /**
-     * 超时任务调度器（单线程守护线程池）
-     * 用于处理玩家无敌状态的超时取消
-     */
     private static final ScheduledExecutorService TIMEOUT_EXECUTOR = Executors.newSingleThreadScheduledExecutor(r -> {
         Thread t = new Thread(r, "FireflyMC-Invulnerability-Timeout");
         t.setDaemon(true);
         return t;
     });
 
-    /**
-     * 跟踪玩家的无敌超时任务（UUID -> ScheduledFuture）
-     */
     private static final Map<UUID, ScheduledFuture<?>> TIMEOUT_TASKS = new ConcurrentHashMap<>();
-
-    /**
-     * 跟踪玩家的验证超时任务（UUID -> ScheduledFuture）
-     */
     private static final Map<UUID, ScheduledFuture<?>> VERIFY_TASKS = new ConcurrentHashMap<>();
 
     public static void onPlayerLoggedIn(PlayerEvent.PlayerLoggedInEvent event) {
@@ -53,15 +39,9 @@ public class ModEventHandler {
                 return;
             }
 
-            // 检查成员验证状态（仅多人/专用服务器需要；单人世界的集成服务器不走验证服务器流程）
-            if (ServerConfig.SERVER.enableMemberVerification.get()) {
-                MemberVerificationManager.getInstance().requestVerification(serverPlayer);
-                // 注意：不直接返回，等待WebSocket响应后再决定是否踢出
-                // 玩家暂时进入"待验证"状态
-            }
-
             ModPayloadHandler.VERIFIED_PLAYERS.remove(playerUuid);
             ModPayloadHandler.CONFIRMED_PLAYERS.remove(playerUuid);
+            ModPayloadHandler.PASSWORD_VERIFIED_PLAYERS.remove(playerUuid);
 
             // 发送握手检测包
             PacketDistributor.sendToPlayer(serverPlayer, new ModHandshakePayload());
@@ -72,11 +52,15 @@ public class ModEventHandler {
             // 发送显示准则弹窗包
             PacketDistributor.sendToPlayer(serverPlayer, new ShowRulesPayload(isFirstJoin));
 
-            // 设置玩家无敌（客户端确认后会取消）
+            // 设置玩家无敌（密码验证和规则确认都通过后取消）
             serverPlayer.setInvulnerable(true);
 
-            // 添加超时保护：10秒后强制取消无敌状态
-            // 防止从单人游戏切换到多人游戏时，网络状态异常导致确认包丢失
+            // 开始密码验证流程（多人服务器启用时）
+            if (ServerConfig.SERVER.playerAuthEnabled.get()) {
+                PlayerPasswordManager.getInstance().startVerification(serverPlayer);
+            }
+
+            // 超时保护：60秒后强制取消无敌状态
             ScheduledFuture<?> timeoutTask = TIMEOUT_EXECUTOR.schedule(() -> {
                 server.execute(() -> {
                     ServerPlayer player = server.getPlayerList().getPlayer(playerUuid);
@@ -85,10 +69,10 @@ public class ModEventHandler {
                     }
                     TIMEOUT_TASKS.remove(playerUuid);
                 });
-            }, 10, TimeUnit.SECONDS);
+            }, 60, TimeUnit.SECONDS);
             TIMEOUT_TASKS.put(playerUuid, timeoutTask);
 
-            // 5秒后检查验证状态
+            // 5秒后检查 Mod 握手验证状态
             ScheduledFuture<?> verifyTask = TIMEOUT_EXECUTOR.schedule(() -> {
                 server.execute(() -> {
                     if (!ModPayloadHandler.VERIFIED_PLAYERS.getOrDefault(playerUuid, false)) {
@@ -114,20 +98,18 @@ public class ModEventHandler {
     public static void onPlayerLoggedOut(PlayerEvent.PlayerLoggedOutEvent event) {
         if (event.getEntity() instanceof ServerPlayer serverPlayer) {
             UUID playerUuid = serverPlayer.getUUID();
-            String playerId = serverPlayer.getGameProfile().getName();
             if (serverPlayer.server.isSingleplayer()) {
                 return;
             }
 
             ModPayloadHandler.VERIFIED_PLAYERS.remove(playerUuid);
             ModPayloadHandler.CONFIRMED_PLAYERS.remove(playerUuid);
+            ModPayloadHandler.PASSWORD_VERIFIED_PLAYERS.remove(playerUuid);
             // 清理超时任务
             cancelInvulnerabilityTimeout(playerUuid);
             cancelVerifyTimeout(playerUuid);
-            // 清理成员验证状态
-            if (ServerConfig.SERVER.enableMemberVerification.get()) {
-                MemberVerificationManager.getInstance().cleanupPlayer(playerId);
-            }
+            // 清理密码验证会话
+            PlayerPasswordManager.getInstance().cleanupPlayer(playerUuid);
             // 通知在线时长管理器
             PlaytimeManager.getInstance().onPlayerLogout(playerUuid);
         }

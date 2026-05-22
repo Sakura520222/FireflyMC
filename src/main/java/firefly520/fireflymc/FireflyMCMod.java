@@ -16,7 +16,7 @@ import firefly520.fireflymc.client.ClientHandler;
 import firefly520.fireflymc.client.UpdateChecker;
 import firefly520.fireflymc.client.TitleScreenDetector;
 import firefly520.fireflymc.client.relay.SingleplayerRelayClientEvents;
-import firefly520.fireflymc.event.websocket.PlayerEventWebSocketClient;
+import firefly520.fireflymc.auth.PlayerPasswordManager;
 import firefly520.fireflymc.network.ModNetwork;
 import firefly520.fireflymc.playtime.PlaytimeManager;
 import firefly520.fireflymc.util.ServerLanguageLoader;
@@ -24,7 +24,7 @@ import firefly520.fireflymc.util.ServerLanguageLoader;
 @Mod(FireflyMCMod.MODID)
 public class FireflyMCMod {
   public static final String MODID = "fireflymc";
-  public static final String VERSION = "2.5.0";
+  public static final String VERSION = "2.5.1";
 
   public FireflyMCMod(IEventBus modEventBus, ModContainer modContainer) {
     // 1. 注册客户端配置（官方标准写法）
@@ -60,9 +60,9 @@ public class FireflyMCMod {
     NeoForge.EVENT_BUS.addListener(ModEventHandler::onPlayerLoggedIn);
     NeoForge.EVENT_BUS.addListener(ModEventHandler::onPlayerLoggedOut);
 
-    // 4.5. 初始化WebSocket事件广播（仅服务端）
+    // 4.5. 初始化本地密码验证（仅服务端）
     if (FMLEnvironment.dist == Dist.DEDICATED_SERVER) {
-      PlayerEventWebSocketClient.init();
+      // 密码管理器在服务器启动后加载
     }
 
     // 4.6. 注册服务器生命周期事件（加载中文语言文件）
@@ -72,7 +72,7 @@ public class FireflyMCMod {
     // 5. 检查Mod更新
     UpdateChecker.checkForUpdate();
 
-    System.out.println("Loading FireflyMC 2.5.0");
+    System.out.println("Loading FireflyMC 2.5.1");
   }
 
   // 配置热重载时更新缓存
@@ -83,9 +83,10 @@ public class FireflyMCMod {
   // 服务端启动完成后加载中文语言文件
   private void onServerStarted(ServerStartedEvent event) {
     ServerLanguageLoader.loadZhCnLanguage();
-    // 设置服务器实例，用于WebSocket接收消息后广播
-    firefly520.fireflymc.event.websocket.PlayerEventWebSocketClient.setServer(event.getServer());
-    // 服务端型限制仅在专用多人服务器启用，单人/集成服/LAN大厅不启用
+    // 加载本地密码记录
+    if (event.getServer().isDedicatedServer()) {
+      PlayerPasswordManager.getInstance().load(event.getServer());
+    }
     if (event.getServer().isDedicatedServer()) {
       ItemCleanupManager.getInstance().start(event.getServer());
       PlaytimeManager.getInstance().start(event.getServer());
@@ -99,10 +100,8 @@ public class FireflyMCMod {
     }
 
     ServerLanguageLoader.clear();
-    // 清理WebSocket服务器实例引用
-    firefly520.fireflymc.event.websocket.PlayerEventWebSocketClient.clearServer();
-    // 关闭成员验证管理器
-    firefly520.fireflymc.event.websocket.MemberVerificationManager.getInstance().shutdown();
+    // 关闭密码验证管理器
+    PlayerPasswordManager.getInstance().shutdown();
     if (event.getServer().isDedicatedServer()) {
       // 停止在线时长限制
       PlaytimeManager.getInstance().stop();
