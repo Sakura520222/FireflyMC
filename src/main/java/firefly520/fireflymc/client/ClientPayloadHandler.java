@@ -42,11 +42,16 @@ public class ClientPayloadHandler {
      */
     public static void handlePasswordPrompt(PasswordPromptPayload payload, IPayloadContext context) {
         context.enqueueWork(() -> {
-            Minecraft.getInstance().setScreen(new PasswordAuthScreen(
-                    payload.firstTime(),
-                    payload.message(),
-                    payload.remainingAttempts()
-            ));
+            if (payload.remainingAttempts() == -1) {
+                // 验证成功信号，关闭密码弹窗
+                Minecraft.getInstance().setScreen(null);
+            } else {
+                Minecraft.getInstance().setScreen(new PasswordAuthScreen(
+                        payload.firstTime(),
+                        payload.message(),
+                        payload.remainingAttempts()
+                ));
+            }
         });
     }
 }

@@ -213,11 +213,15 @@ public class PlayerPasswordManager {
             setPassword(player, rawPassword);
             completeVerification(player);
             player.sendSystemMessage(Component.literal("§a[FireflyMC] 密码设置成功！"));
+            // 通知客户端关闭密码弹窗
+            PacketDistributor.sendToPlayer(player, new PasswordPromptPayload(false, "", -1));
             return true;
         } else {
             // 验证密码
             if (verifyPassword(player, rawPassword)) {
                 completeVerification(player);
+                // 通知客户端关闭密码弹窗
+                PacketDistributor.sendToPlayer(player, new PasswordPromptPayload(false, "", -1));
                 return true;
             } else {
                 session.remainingAttempts--;

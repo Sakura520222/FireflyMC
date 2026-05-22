@@ -84,15 +84,17 @@ public class PasswordAuthScreen extends Screen {
     }
 
     @Override
+    public void renderBackground(@Nonnull GuiGraphics guiGraphics, int mouseX, int mouseY, float partialTick) {
+        // 不调用 super，去掉默认黑色遮罩
+    }
+
+    @Override
     public void render(@Nonnull GuiGraphics guiGraphics, int mouseX, int mouseY, float partialTick) {
         // 计算弹窗尺寸
         int dialogWidth = Math.min(360, this.width - 40);
         int dialogHeight = 180;
         int dialogX = (this.width - dialogWidth) / 2;
         int dialogY = (this.height - dialogHeight) / 2;
-
-        // 绘制背景
-        this.renderBackground(guiGraphics, mouseX, mouseY, partialTick);
 
         // 绘制阴影
         drawRoundedRect(guiGraphics, dialogX + 6, dialogY + 6, dialogWidth, dialogHeight, 10, SHADOW_DARK);
