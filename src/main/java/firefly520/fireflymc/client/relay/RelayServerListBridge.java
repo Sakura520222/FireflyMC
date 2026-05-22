@@ -1,6 +1,5 @@
 package firefly520.fireflymc.client.relay;
 
-import firefly520.fireflymc.Config;
 import net.minecraft.client.gui.screens.multiplayer.JoinMultiplayerScreen;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.api.distmarker.OnlyIn;
@@ -40,7 +39,7 @@ public final class RelayServerListBridge {
      * @return 需要注入的条目列表（不可变）
      */
     public static List<RelayServerEntry> getEntriesToInject(JoinMultiplayerScreen screen) {
-        if (!Config.CLIENT.SINGLEPLAYER_RELAY_ENABLED.get()) {
+        if (!RelayConfig.RELAY.SINGLEPLAYER_RELAY_ENABLED.get()) {
             return Collections.emptyList();
         }
 
@@ -71,7 +70,7 @@ public final class RelayServerListBridge {
      * 由 JoinMultiplayerScreenMixin 在屏幕初始化时调用。
      */
     public static void requestLobbyRefresh() {
-        if (!Config.CLIENT.SINGLEPLAYER_RELAY_ENABLED.get()) {
+        if (!RelayConfig.RELAY.SINGLEPLAYER_RELAY_ENABLED.get()) {
             return;
         }
         RelayLobbyWebSocketClient.getInstance().requestLobbyList();
