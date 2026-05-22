@@ -10,6 +10,7 @@ public final class RelayLobbyState {
     private static final List<RelayLobbyRoom> ROOMS = new ArrayList<>();
     private static String statusMessage = "尚未刷新";
     private static boolean refreshing = false;
+    private static long revision = 0;
 
     private RelayLobbyState() {
     }
@@ -26,6 +27,7 @@ public final class RelayLobbyState {
         ROOMS.clear();
         ROOMS.addAll(rooms);
         refreshing = false;
+        revision++;
         statusMessage = rooms.isEmpty() ? "暂无公开单人世界" : "已加载 " + rooms.size() + " 个公开单人世界";
     }
 
@@ -40,5 +42,9 @@ public final class RelayLobbyState {
 
     public static synchronized List<RelayLobbyRoom> rooms() {
         return List.copyOf(ROOMS);
+    }
+
+    public static synchronized long revision() {
+        return revision;
     }
 }
