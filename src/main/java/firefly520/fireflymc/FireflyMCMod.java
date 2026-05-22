@@ -16,6 +16,7 @@ import firefly520.fireflymc.client.ClientHandler;
 import firefly520.fireflymc.client.UpdateChecker;
 import firefly520.fireflymc.client.TitleScreenDetector;
 import firefly520.fireflymc.client.relay.SingleplayerRelayClientEvents;
+import firefly520.fireflymc.client.relay.RelayConfig;
 import firefly520.fireflymc.event.websocket.PlayerEventWebSocketClient;
 import firefly520.fireflymc.network.ModNetwork;
 import firefly520.fireflymc.playtime.PlaytimeManager;
@@ -29,6 +30,9 @@ public class FireflyMCMod {
   public FireflyMCMod(IEventBus modEventBus, ModContainer modContainer) {
     // 1. 注册客户端配置（官方标准写法）
     modContainer.registerConfig(ModConfig.Type.CLIENT, Config.CLIENT_SPEC);
+
+    // 1.1 注册客户端中继/P2P配置
+    modContainer.registerConfig(ModConfig.Type.CLIENT, RelayConfig.RELAY_SPEC);
 
     // 1.5. 注册服务端配置
     modContainer.registerConfig(ModConfig.Type.SERVER, ServerConfig.SERVER_SPEC);

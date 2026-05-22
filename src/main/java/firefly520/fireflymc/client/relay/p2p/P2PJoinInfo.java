@@ -29,7 +29,7 @@ public record P2PJoinInfo(
 
     private static String resolveRelayHostFallback() {
         try {
-            String relayUrl = firefly520.fireflymc.Config.CLIENT.SINGLEPLAYER_RELAY_URL.get();
+            String relayUrl = firefly520.fireflymc.client.relay.RelayConfig.RELAY.SINGLEPLAYER_RELAY_URL.get();
             return java.net.URI.create(relayUrl).getHost();
         } catch (Exception ignored) {
             return "";

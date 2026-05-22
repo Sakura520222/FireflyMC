@@ -1,6 +1,6 @@
 package firefly520.fireflymc.client.relay.p2p;
 
-import firefly520.fireflymc.Config;
+import firefly520.fireflymc.client.relay.RelayConfig;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -89,7 +89,7 @@ public class ReliableUdpChannel {
         InetSocketAddress serverAddress = new InetSocketAddress(info.effectiveUdpHost(), info.udpPort());
         int timeout = info.timeoutSeconds() > 0
                 ? info.timeoutSeconds()
-                : Config.CLIENT.SINGLEPLAYER_RELAY_P2P_CONNECT_TIMEOUT_SECONDS.get();
+                : RelayConfig.RELAY.SINGLEPLAYER_RELAY_P2P_CONNECT_TIMEOUT_SECONDS.get();
         byte[] probe = UdpPacketCodec.probe(info.roomId(), info.guestSessionId(), role, info.p2pToken());
         byte[] punch = UdpPacketCodec.punch(info.roomId(), info.guestSessionId(), role, info.p2pToken());
         LOGGER.info("[FireflyMC] P2P {} 开始探测: serverUdpPort={}, localUdp={}, timeout={}s",
@@ -301,8 +301,8 @@ public class ReliableUdpChannel {
     }
 
     private static DatagramSocket createSocket() throws SocketException {
-        int min = Config.CLIENT.SINGLEPLAYER_RELAY_P2P_UDP_PORT_MIN.get();
-        int max = Config.CLIENT.SINGLEPLAYER_RELAY_P2P_UDP_PORT_MAX.get();
+        int min = RelayConfig.RELAY.SINGLEPLAYER_RELAY_P2P_UDP_PORT_MIN.get();
+        int max = RelayConfig.RELAY.SINGLEPLAYER_RELAY_P2P_UDP_PORT_MAX.get();
         if (min > 0 && max >= min) {
             for (int port = min; port <= max; port++) {
                 try {

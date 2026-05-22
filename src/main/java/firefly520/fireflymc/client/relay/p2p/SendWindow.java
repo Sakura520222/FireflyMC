@@ -1,6 +1,6 @@
 package firefly520.fireflymc.client.relay.p2p;
 
-import firefly520.fireflymc.Config;
+import firefly520.fireflymc.client.relay.RelayConfig;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -38,7 +38,7 @@ final class SendWindow {
     }
 
     void start() {
-        int retransmitMs = Config.CLIENT.SINGLEPLAYER_RELAY_P2P_RETRANSMIT_MILLIS.get();
+        int retransmitMs = RelayConfig.RELAY.SINGLEPLAYER_RELAY_P2P_RETRANSMIT_MILLIS.get();
         retransmitTask = executor.scheduleAtFixedRate(this::retransmit, retransmitMs, retransmitMs, TimeUnit.MILLISECONDS);
     }
 
@@ -74,7 +74,7 @@ final class SendWindow {
     private void retransmit() {
         if (closed || unacked.isEmpty()) return;
         long now = System.currentTimeMillis();
-        int retransmitMs = Config.CLIENT.SINGLEPLAYER_RELAY_P2P_RETRANSMIT_MILLIS.get();
+        int retransmitMs = RelayConfig.RELAY.SINGLEPLAYER_RELAY_P2P_RETRANSMIT_MILLIS.get();
         int retransmitted = 0;
         for (SentPacket sp : unacked.values()) {
             if (now - sp.sentAt >= retransmitMs) {
