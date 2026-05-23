@@ -60,9 +60,7 @@ public class FireflyMCMod {
     NeoForge.EVENT_BUS.addListener(ModEventHandler::onPlayerLoggedIn);
     NeoForge.EVENT_BUS.addListener(ModEventHandler::onPlayerLoggedOut);
 
-    // 4.5.
-
-    // 4.6. 注册服务器生命周期事件（加载中文语言文件）
+    // 4.5. 注册服务器生命周期事件（加载中文语言文件）
     NeoForge.EVENT_BUS.addListener(this::onServerStarted);
     NeoForge.EVENT_BUS.addListener(this::onServerStopping);
 

@@ -75,11 +75,6 @@ public class PasswordAuthScreen extends Screen {
     }
 
     @Override
-    public void tick() {
-        super.tick();
-    }
-
-    @Override
     public void renderBackground(@Nonnull GuiGraphics guiGraphics, int mouseX, int mouseY, float partialTick) {
         // 不调用 super，去掉默认黑色遮罩
     }
