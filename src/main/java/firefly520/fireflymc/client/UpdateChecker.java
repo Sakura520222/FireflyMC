@@ -25,15 +25,15 @@ public class UpdateChecker {
      */
     public static void checkForUpdate() {
         if (checked) return;
-        checked = true;
 
         Thread.startVirtualThread(() -> {
             try {
                 JsonObject release = fetchLatestRelease();
                 if (release == null) {
-                    System.out.println("[FireflyMC] Update check failed: no release data");
                     return;
                 }
+
+                checked = true;
 
                 String tagName = release.get("tag_name").getAsString();
                 String latestVersion = tagName.replaceFirst("^v", "");
@@ -85,7 +85,9 @@ public class UpdateChecker {
         conn.setRequestProperty("Accept", "application/vnd.github+json");
 
         try {
-            if (conn.getResponseCode() != 200) {
+            int responseCode = conn.getResponseCode();
+            if (responseCode != 200) {
+                System.out.println("[FireflyMC] Update check failed: HTTP " + responseCode);
                 return null;
             }
 
