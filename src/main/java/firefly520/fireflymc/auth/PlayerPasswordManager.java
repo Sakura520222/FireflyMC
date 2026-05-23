@@ -214,14 +214,14 @@ public class PlayerPasswordManager {
             completeVerification(player);
             player.sendSystemMessage(Component.literal("§a[FireflyMC] 密码设置成功！"));
             // 通知客户端关闭密码弹窗
-            PacketDistributor.sendToPlayer(player, new PasswordPromptPayload(false, "", -1));
+            PacketDistributor.sendToPlayer(player, new PasswordPromptPayload(false, "", PasswordPromptPayload.AUTH_SUCCESS_SIGNAL));
             return true;
         } else {
             // 验证密码
             if (verifyPassword(player, rawPassword)) {
                 completeVerification(player);
                 // 通知客户端关闭密码弹窗
-                PacketDistributor.sendToPlayer(player, new PasswordPromptPayload(false, "", -1));
+                PacketDistributor.sendToPlayer(player, new PasswordPromptPayload(false, "", PasswordPromptPayload.AUTH_SUCCESS_SIGNAL));
                 return true;
             } else {
                 session.remainingAttempts--;
@@ -261,10 +261,6 @@ public class PlayerPasswordManager {
         return pendingSessions.containsKey(uuid);
     }
 
-    public boolean isVerified(UUID uuid) {
-        return !pendingSessions.containsKey(uuid);
-    }
-
     public void cleanupPlayer(UUID uuid) {
         AuthSession session = pendingSessions.remove(uuid);
         if (session != null && session.timeoutFuture != null) {
@@ -278,7 +274,7 @@ public class PlayerPasswordManager {
     }
 
     private static boolean isValidPassword(String password) {
-        if (password == null || password.length() < 6) return false;
+        if (password == null || password.length() < 6 || password.length() > 32) return false;
         for (char c : password.toCharArray()) {
             if (c < '0' || c > '9') return false;
         }

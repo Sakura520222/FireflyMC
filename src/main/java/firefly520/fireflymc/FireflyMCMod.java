@@ -60,10 +60,7 @@ public class FireflyMCMod {
     NeoForge.EVENT_BUS.addListener(ModEventHandler::onPlayerLoggedIn);
     NeoForge.EVENT_BUS.addListener(ModEventHandler::onPlayerLoggedOut);
 
-    // 4.5. 初始化本地密码验证（仅服务端）
-    if (FMLEnvironment.dist == Dist.DEDICATED_SERVER) {
-      // 密码管理器在服务器启动后加载
-    }
+    // 4.5.
 
     // 4.6. 注册服务器生命周期事件（加载中文语言文件）
     NeoForge.EVENT_BUS.addListener(this::onServerStarted);

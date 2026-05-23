@@ -42,7 +42,7 @@ public class ClientPayloadHandler {
      */
     public static void handlePasswordPrompt(PasswordPromptPayload payload, IPayloadContext context) {
         context.enqueueWork(() -> {
-            if (payload.remainingAttempts() == -1) {
+            if (payload.remainingAttempts() == PasswordPromptPayload.AUTH_SUCCESS_SIGNAL) {
                 // 验证成功信号，关闭密码弹窗
                 Minecraft.getInstance().setScreen(null);
             } else {

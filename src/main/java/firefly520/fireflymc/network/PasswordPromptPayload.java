@@ -9,8 +9,13 @@ import firefly520.fireflymc.FireflyMCMod;
 
 /**
  * 服务端发送给客户端的密码验证提示包
+ * <p>
+ * 当 remainingAttempts == AUTH_SUCCESS_SIGNAL 时表示验证通过，客户端应关闭密码弹窗。
  */
 public record PasswordPromptPayload(boolean firstTime, String message, int remainingAttempts) implements CustomPacketPayload {
+
+    /** 验证成功信号：客户端收到此值时应关闭密码弹窗 */
+    public static final int AUTH_SUCCESS_SIGNAL = -1;
     public static final CustomPacketPayload.Type<PasswordPromptPayload> TYPE =
             new CustomPacketPayload.Type<>(ResourceLocation.fromNamespaceAndPath(FireflyMCMod.MODID, "password_prompt"));
 

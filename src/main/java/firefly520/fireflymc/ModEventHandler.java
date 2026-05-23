@@ -46,8 +46,8 @@ public class ModEventHandler {
             // 发送握手检测包
             PacketDistributor.sendToPlayer(serverPlayer, new ModHandshakePayload());
 
-            // 判断是否首次加入（本次连接）
-            boolean isFirstJoin = !ModPayloadHandler.CONFIRMED_PLAYERS.containsKey(playerUuid);
+            // 首次加入判断：上方刚 remove 过，所以首次加入始终为 true
+            boolean isFirstJoin = true;
 
             // 发送显示准则弹窗包
             PacketDistributor.sendToPlayer(serverPlayer, new ShowRulesPayload(isFirstJoin));

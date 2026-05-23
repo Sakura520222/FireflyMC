@@ -52,7 +52,7 @@ public class StarterKitManager {
     /**
      * 确保数据文件已加载（懒加载，首次调用时按需初始化）
      */
-    private void ensureLoaded(MinecraftServer server) {
+    private synchronized void ensureLoaded(MinecraftServer server) {
         if (dataFile == null) {
             dataFile = server.getServerDirectory().resolve("fireflymc_starter_kit.json");
             if (Files.exists(dataFile)) {
@@ -85,10 +85,6 @@ public class StarterKitManager {
         if (!ServerConfig.SERVER.enableStarterKit.get()) {
             return;
         }
-
-        StarterKitManager instance = new StarterKitManager();
-        // 使用懒加载方式：实际用静态单例更好，但这里保持简洁
-        // 用静态内部数据确保线程安全
         giveStarterKitInternal(player);
     }
 

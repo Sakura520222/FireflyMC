@@ -31,8 +31,6 @@ public class PasswordAuthScreen extends Screen {
 
     private EditBox passwordInput;
     private String errorMessage = null;
-    private int tickCount = 0;
-
     public PasswordAuthScreen(boolean firstTime, String message, int remainingAttempts) {
         super(Component.literal(firstTime ? "设置服务器密码" : "验证服务器密码"));
         this.firstTime = firstTime;
@@ -79,8 +77,6 @@ public class PasswordAuthScreen extends Screen {
     @Override
     public void tick() {
         super.tick();
-        this.tickCount++;
-        // EditBox cursor blink is handled internally in 1.21.1
     }
 
     @Override

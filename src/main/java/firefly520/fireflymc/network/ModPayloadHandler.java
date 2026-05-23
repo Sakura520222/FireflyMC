@@ -2,6 +2,7 @@ package firefly520.fireflymc.network;
 
 import firefly520.fireflymc.FireflyMCMod;
 import firefly520.fireflymc.ModEventHandler;
+import firefly520.fireflymc.ServerConfig;
 import firefly520.fireflymc.auth.PlayerPasswordManager;
 import firefly520.fireflymc.kit.StarterKitManager;
 import net.minecraft.network.chat.Component;
@@ -101,7 +102,8 @@ public class ModPayloadHandler {
     private static void tryCompleteJoin(ServerPlayer serverPlayer) {
         UUID playerUuid = serverPlayer.getUUID();
         boolean rulesConfirmed = CONFIRMED_PLAYERS.getOrDefault(playerUuid, false);
-        boolean passwordOk = PASSWORD_VERIFIED_PLAYERS.getOrDefault(playerUuid, false);
+        boolean passwordRequired = ServerConfig.SERVER.playerAuthEnabled.get();
+        boolean passwordOk = !passwordRequired || PASSWORD_VERIFIED_PLAYERS.getOrDefault(playerUuid, false);
 
         if (rulesConfirmed && passwordOk) {
             // 取消无敌超时任务
