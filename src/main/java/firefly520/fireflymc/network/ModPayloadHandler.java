@@ -7,6 +7,7 @@ import firefly520.fireflymc.auth.PlayerPasswordManager;
 import firefly520.fireflymc.kit.StarterKitManager;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
+import net.neoforged.neoforge.network.PacketDistributor;
 import net.neoforged.neoforge.network.handling.IPayloadContext;
 
 import java.util.Map;
@@ -90,6 +91,8 @@ public class ModPayloadHandler {
                 if (done && !pwdMgr.isPendingVerification(playerUuid)) {
                     // 密码验证通过
                     PASSWORD_VERIFIED_PLAYERS.put(playerUuid, true);
+                    // 密码验证通过后发送公告弹窗（避免与密码弹窗冲突）
+                    PacketDistributor.sendToPlayer(serverPlayer, new ShowRulesPayload(true));
                     tryCompleteJoin(serverPlayer);
                 }
             }

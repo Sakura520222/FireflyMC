@@ -46,18 +46,16 @@ public class ModEventHandler {
             // 发送握手检测包
             PacketDistributor.sendToPlayer(serverPlayer, new ModHandshakePayload());
 
-            // 首次加入判断：上方刚 remove 过，所以首次加入始终为 true
-            boolean isFirstJoin = true;
-
-            // 发送显示准则弹窗包
-            PacketDistributor.sendToPlayer(serverPlayer, new ShowRulesPayload(isFirstJoin));
-
             // 设置玩家无敌（密码验证和规则确认都通过后取消）
             serverPlayer.setInvulnerable(true);
 
             // 开始密码验证流程（多人服务器启用时）
             if (ServerConfig.SERVER.playerAuthEnabled.get()) {
+                // 密码验证启用时，公告弹窗在密码验证通过后发送（避免两个弹窗冲突）
                 PlayerPasswordManager.getInstance().startVerification(serverPlayer);
+            } else {
+                // 密码验证未启用时，立即发送公告弹窗
+                PacketDistributor.sendToPlayer(serverPlayer, new ShowRulesPayload(true));
             }
 
             // 超时保护：60秒后强制取消无敌状态
