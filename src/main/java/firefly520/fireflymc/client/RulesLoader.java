@@ -73,12 +73,11 @@ public class RulesLoader {
      * 格式: # 注释, [SECTION_N] 标题, - 内容
      */
     private static RulesContent parseRules(String content) {
-        String version = "V2.1";
+        String version = "";
         String updateDate = "";
         String website = "";
         String description = "";
         String contact = "";
-        String modUpdateUrl = "";
         List<RulesContent.Section> sections = new ArrayList<>();
 
         String[] lines = content.split("\n");
@@ -133,14 +132,6 @@ public class RulesLoader {
                 continue;
             }
 
-            // 解析Mod更新地址: # Mod更新地址: https://mc.firefly520.top/ireflymc-2.5.1.jar
-            if (trimmedLine.startsWith("# Mod更新地址:")) {
-                if (trimmedLine.length() > 10) {
-                    modUpdateUrl = trimmedLine.substring(10).trim();
-                }
-                continue;
-            }
-
             // 解析章节标题: # [SECTION_1] 行为准则 - 文明交流
             if (trimmedLine.startsWith("# [SECTION_")) {
                 // 保存上一个章节
@@ -168,6 +159,6 @@ public class RulesLoader {
             sections.add(new RulesContent.Section(currentTitle, new ArrayList<>(currentLines)));
         }
 
-        return new RulesContent(version, updateDate, website, description, new ArrayList<>(sections), contact, modUpdateUrl);
+        return new RulesContent(version, updateDate, website, description, new ArrayList<>(sections), contact);
     }
 }
