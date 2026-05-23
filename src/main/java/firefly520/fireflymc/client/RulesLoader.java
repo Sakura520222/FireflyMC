@@ -7,6 +7,8 @@ import java.net.URI;
 import java.util.ArrayList;
 import java.util.List;
 
+import firefly520.fireflymc.FireflyMCMod;
+
 /**
  * 客户端公告加载器
  * 从 URL 同步加载公告文本并解析（无缓存）
@@ -53,7 +55,7 @@ public class RulesLoader {
         conn.setConnectTimeout(10000);  // 10秒连接超时
         conn.setReadTimeout(10000);     // 10秒读取超时
         conn.setRequestMethod("GET");
-        conn.setRequestProperty("User-Agent", "FireflyMC-Client/2.2");
+        conn.setRequestProperty("User-Agent", "FireflyMC-Client/" + FireflyMCMod.VERSION);
 
         StringBuilder result = new StringBuilder();
         try (BufferedReader reader = new BufferedReader(

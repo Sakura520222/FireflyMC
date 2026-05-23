@@ -18,7 +18,7 @@ import firefly520.fireflymc.FireflyMCMod;
  */
 public class UpdateChecker {
     private static final String GITHUB_API_URL = "https://api.github.com/repos/Sakura520222/FireflyMC/releases/latest";
-    private static boolean checked = false;
+    private static volatile boolean checked = false;
 
     /**
      * 检查更新（在客户端启动时调用）
