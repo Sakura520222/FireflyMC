@@ -12,8 +12,7 @@ public record RulesContent(
     String website,        // 官网URL
     String description,    // 说明文字
     List<Section> sections, // 章节列表
-    String contact,        // 联系方式
-    String modUpdateUrl    // Mod更新下载链接
+    String contact         // 联系方式
 ) {
     /**
      * 公告章节

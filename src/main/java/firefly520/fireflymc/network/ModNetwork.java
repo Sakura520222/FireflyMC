@@ -47,6 +47,20 @@ public class ModNetwork {
                 ConfirmRulesPayload.STREAM_CODEC,
                 ModPayloadHandler::handleConfirmRules
         );
+
+        // 注册服务端→客户端的密码提示包
+        registrar.playToClient(
+                PasswordPromptPayload.TYPE,
+                PasswordPromptPayload.STREAM_CODEC,
+                (payload, context) -> handlePasswordPromptOnClient(payload, context)
+        );
+
+        // 注册客户端→服务端的密码提交包
+        registrar.playToServer(
+                PasswordSubmitPayload.TYPE,
+                PasswordSubmitPayload.STREAM_CODEC,
+                ModPayloadHandler::handlePasswordSubmit
+        );
     }
 
     /**
@@ -72,11 +86,9 @@ public class ModNetwork {
 
     /**
      * 使用反射调用客户端显示准则处理器
-     * 这样可以避免在类加载时加载 ClientPayloadHandler
      */
     private static void handleShowRulesOnClient(ShowRulesPayload payload, IPayloadContext context) {
         if (FMLEnvironment.dist == Dist.CLIENT) {
-            // 使用反射调用 ClientPayloadHandler.handleShowRules
             try {
                 Class<?> handlerClass = Class.forName("firefly520.fireflymc.client.ClientPayloadHandler");
                 java.lang.reflect.Method method = handlerClass.getDeclaredMethod(
@@ -86,7 +98,26 @@ public class ModNetwork {
                 );
                 method.invoke(null, payload, context);
             } catch (Exception e) {
-                // 忽略错误，理论上不应该发生
+                // 忽略错误
+            }
+        }
+    }
+
+    /**
+     * 使用反射调用客户端密码提示处理器
+     */
+    private static void handlePasswordPromptOnClient(PasswordPromptPayload payload, IPayloadContext context) {
+        if (FMLEnvironment.dist == Dist.CLIENT) {
+            try {
+                Class<?> handlerClass = Class.forName("firefly520.fireflymc.client.ClientPayloadHandler");
+                java.lang.reflect.Method method = handlerClass.getDeclaredMethod(
+                    "handlePasswordPrompt",
+                    PasswordPromptPayload.class,
+                    IPayloadContext.class
+                );
+                method.invoke(null, payload, context);
+            } catch (Exception e) {
+                // 忽略错误
             }
         }
     }

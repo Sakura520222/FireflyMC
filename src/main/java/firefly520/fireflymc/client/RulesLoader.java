@@ -7,6 +7,8 @@ import java.net.URI;
 import java.util.ArrayList;
 import java.util.List;
 
+import firefly520.fireflymc.FireflyMCMod;
+
 /**
  * 客户端公告加载器
  * 从 URL 同步加载公告文本并解析（无缓存）
@@ -53,7 +55,7 @@ public class RulesLoader {
         conn.setConnectTimeout(10000);  // 10秒连接超时
         conn.setReadTimeout(10000);     // 10秒读取超时
         conn.setRequestMethod("GET");
-        conn.setRequestProperty("User-Agent", "FireflyMC-Client/2.2");
+        conn.setRequestProperty("User-Agent", "FireflyMC-Client/" + FireflyMCMod.VERSION);
 
         StringBuilder result = new StringBuilder();
         try (BufferedReader reader = new BufferedReader(
@@ -73,12 +75,11 @@ public class RulesLoader {
      * 格式: # 注释, [SECTION_N] 标题, - 内容
      */
     private static RulesContent parseRules(String content) {
-        String version = "V2.1";
+        String version = "";
         String updateDate = "";
         String website = "";
         String description = "";
         String contact = "";
-        String modUpdateUrl = "";
         List<RulesContent.Section> sections = new ArrayList<>();
 
         String[] lines = content.split("\n");
@@ -133,14 +134,6 @@ public class RulesLoader {
                 continue;
             }
 
-            // 解析Mod更新地址: # Mod更新地址: https://mc.firefly520.top/ireflymc-2.5.0.jar
-            if (trimmedLine.startsWith("# Mod更新地址:")) {
-                if (trimmedLine.length() > 10) {
-                    modUpdateUrl = trimmedLine.substring(10).trim();
-                }
-                continue;
-            }
-
             // 解析章节标题: # [SECTION_1] 行为准则 - 文明交流
             if (trimmedLine.startsWith("# [SECTION_")) {
                 // 保存上一个章节
@@ -168,6 +161,6 @@ public class RulesLoader {
             sections.add(new RulesContent.Section(currentTitle, new ArrayList<>(currentLines)));
         }
 
-        return new RulesContent(version, updateDate, website, description, new ArrayList<>(sections), contact, modUpdateUrl);
+        return new RulesContent(version, updateDate, website, description, new ArrayList<>(sections), contact);
     }
 }

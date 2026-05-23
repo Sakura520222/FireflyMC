@@ -33,8 +33,6 @@ import net.minecraft.advancements.Advancement;
 import net.minecraft.advancements.DisplayInfo;
 import net.minecraft.network.chat.contents.TranslatableContents;
 
-import firefly520.fireflymc.event.websocket.PlayerEventWebSocketClient;
-import firefly520.fireflymc.event.websocket.PlayerEventMessage;
 import firefly520.fireflymc.util.ServerLanguageLoader;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -114,11 +112,6 @@ public class AIChatEventHandler {
                 MessageType.PLAYER
         ));
 
-        // 发送WebSocket广播
-        PlayerEventWebSocketClient.sendEvent(
-                PlayerEventMessage.playerChat(player.getGameProfile().getName(), message)
-        );
-
         // 检测唤醒词：消息包含"小樱"时自动触发AI回复
         if (message.contains("小樱") && !isOnCooldown(player)) {
             recordTrigger(player);
@@ -187,11 +180,6 @@ public class AIChatEventHandler {
             // 广播玩家消息到聊天区（与普通聊天格式一致）
             broadcastPlayerMessage(server, player.getName().getString(), prompt);
 
-            // 发送WebSocket广播（玩家聊天消息）
-            PlayerEventWebSocketClient.sendEvent(
-                    PlayerEventMessage.playerChat(player.getName().getString(), prompt)
-            );
-
             // 异步调用AI
             callAIAsync(server, player, historyManager, prompt, false);
         } else {
@@ -199,7 +187,6 @@ public class AIChatEventHandler {
             String senderName = "Server Console";
             historyManager.addMessage(new ChatMessage(senderName, prompt, MessageType.PLAYER));
             source.sendSuccess(() -> Component.literal("§a[Server Console] " + prompt), true);
-            PlayerEventWebSocketClient.sendEvent(PlayerEventMessage.playerChat(senderName, prompt));
             callAIAsyncConsole(source.getServer(), historyManager, prompt);
         }
 
@@ -319,8 +306,6 @@ public class AIChatEventHandler {
                     MessageType.SYSTEM
             ));
 
-            // 发送WebSocket广播
-            PlayerEventWebSocketClient.sendEvent(PlayerEventMessage.join(event.getEntity().getName().getString()));
         }
     }
 
@@ -343,9 +328,6 @@ public class AIChatEventHandler {
             ));
             // 清理该玩家的冷却记录
             PLAYER_COOLDOWNS.remove(event.getEntity().getUUID());
-
-            // 发送WebSocket广播
-            PlayerEventWebSocketClient.sendEvent(PlayerEventMessage.leave(event.getEntity().getName().getString()));
         }
     }
 
@@ -393,11 +375,6 @@ public class AIChatEventHandler {
                 player.getGameProfile().getName() + " " + deathMessage,
                 MessageType.SYSTEM
         ));
-
-        // 发送WebSocket广播
-        PlayerEventWebSocketClient.sendEvent(
-                PlayerEventMessage.death(player.getGameProfile().getName(), deathMessage)
-        );
     }
 
     /**
@@ -481,17 +458,10 @@ public class AIChatEventHandler {
                 player.getGameProfile().getName() + " 解锁了成就: " + advancementTitle,
                 MessageType.SYSTEM
         ));
-
-        // 发送WebSocket广播
-        PlayerEventWebSocketClient.sendEvent(
-                PlayerEventMessage.advancement(player.getGameProfile().getName(), advancementTitle)
-        );
     }
 
     /**
      * 监听服务器关闭事件
-     *
-     * ⚠️ 规范：必须清理以MinecraftServer为key的资源，防止内存泄漏
      */
     @SubscribeEvent
     public static void onServerStopping(ServerStoppingEvent event) {
@@ -499,9 +469,6 @@ public class AIChatEventHandler {
         HISTORY_MANAGERS.remove(server);
         PLAYER_COOLDOWNS.clear();
         MESSAGE_COUNTERS.remove(server);
-
-        // 关闭WebSocket连接
-        PlayerEventWebSocketClient.shutdown();
     }
 
     /**
@@ -680,84 +647,6 @@ public class AIChatEventHandler {
         } else {
             triggerPlayer.displayClientMessage(fullChatMessage, false);
         }
-
-        // 发送WebSocket广播（AI聊天消息）
-        PlayerEventWebSocketClient.sendEvent(PlayerEventMessage.aiChat(reply));
-    }
-
-    // ========== WebSocket消息处理 ==========
-
-    /**
-     * 记录WebSocket消息到AI上下文
-     *
-     * @param server Minecraft服务器实例
-     * @param message WebSocket消息
-     */
-    public static void recordWebSocketMessage(MinecraftServer server, firefly520.fireflymc.event.websocket.ServerMessage message) {
-        if (!AIConfig.getEnabled()) {
-            return;
-        }
-
-        if (!isMultiplayerServer(server)) {
-            return;
-        }
-
-        var historyManager = getHistoryManager(server);
-        historyManager.addMessage(new ChatMessage(
-                message.getSenderOrDefault(),
-                message.getMessage(),
-                MessageType.PLAYER
-        ));
-    }
-
-    /**
-     * 触发AI回复（无触发玩家，用于WebSocket消息）
-     *
-     * @param server Minecraft服务器实例
-     * @param prompt 提示词
-     */
-    public static void triggerAIReplyNoPlayer(MinecraftServer server, String prompt) {
-        if (!AIConfig.getEnabled()) {
-            return;
-        }
-
-        if (!isMultiplayerServer(server)) {
-            return;
-        }
-
-        var historyManager = getHistoryManager(server);
-        callAIAsyncNoPlayer(server, historyManager, prompt);
-    }
-
-    /**
-     * 异步调用AI API（无触发玩家版本）
-     */
-    private static void callAIAsyncNoPlayer(MinecraftServer server,
-                                             ChatHistoryManager historyManager,
-                                             String prompt) {
-        CompletableFuture.supplyAsync(() -> {
-            // 异步线程：执行网络请求
-            var history = List.copyOf(historyManager.getHistory());
-            return AIApiClient.callAI(history, prompt, "Server");
-        }).thenAccept(response -> {
-            // 回到主线程：发送游戏消息
-            server.execute(() -> {
-                if (response.isSuccess()) {
-                    // 成功获取回复
-                    broadcastReplyNoPlayer(server, response.content());
-
-                    // 添加AI回复到历史
-                    historyManager.addMessage(new ChatMessage(
-                            AIConfig.getAiNamePlain(),
-                            response.content(),
-                            MessageType.ASSISTANT
-                    ));
-                } else {
-                    // 无触发玩家，无法发送错误提示，仅记录日志
-                    LOGGER.error("[FireflyMC] AI回复失败 (WebSocket触发): {}", response.errorType());
-                }
-            });
-        });
     }
 
     /**
@@ -767,14 +656,12 @@ public class AIChatEventHandler {
                                            ChatHistoryManager historyManager,
                                            String prompt) {
         CompletableFuture.supplyAsync(() -> {
-            // 异步线程：执行网络请求
             var history = List.copyOf(historyManager.getHistory());
             List<AIFunctionTool> tools = AIConfig.getFunctionsEnabled()
                     ? new java.util.ArrayList<>(FunctionToolRegistry.getAllTools())
                     : null;
             return AIApiClient.callAIWithFunctions(history, prompt, "Server Console", tools);
         }).thenAccept(response -> {
-            // 回到主线程：发送游戏消息
             server.execute(() -> {
                 if (!response.isSuccess()) {
                     LOGGER.error("[FireflyMC] 终端AI请求失败: {}", response.errorType());
@@ -807,13 +694,11 @@ public class AIChatEventHandler {
 
         var call = toolCalls.get(0);
 
-        // 终端始终具有4级OP权限，跳过权限检查
         FunctionToolRegistry.getTool(call.name()).ifPresent(tool -> {
             FunctionCallResult result = tool.execute(server, call.arguments());
             sendToolCallResultToAIConsole(server, historyManager, call.id(), result);
         });
 
-        // 继续调用AI获取最终回复
         callAIAsyncConsole(server, historyManager,
                    "[函数调用已完成，请根据结果回复]");
     }
@@ -842,14 +727,11 @@ public class AIChatEventHandler {
      * 广播AI回复（无触发玩家版本）
      */
     private static void broadcastReplyNoPlayer(MinecraftServer server, String reply) {
-        // 樱花粉颜色 #FFB7C5
         final TextColor SAKURA_PINK = TextColor.fromRgb(0xFFB7C5);
 
-        // 构建AI名称组件（带交互效果）
         Component aiNameComponent = Component.literal(AIConfig.getAiNamePlain())
             .withStyle(style -> style
                 .withColor(SAKURA_PINK)
-                // 悬浮显示AI信息
                 .withHoverEvent(new HoverEvent(
                     HoverEvent.Action.SHOW_TEXT,
                     Component.literal(AIConfig.getAiNamePlain())
@@ -857,22 +739,16 @@ public class AIChatEventHandler {
                         .append(Component.literal("\n类型: FireflyMC-AI助手")
                             .withStyle(ChatFormatting.GRAY))
                 ))
-                // 点击名称自动填充私聊命令
                 .withClickEvent(new ClickEvent(ClickEvent.Action.SUGGEST_COMMAND, "/msg " + AIConfig.getAiNamePlain() + " "))
             );
 
-        // 拼接完整聊天消息，匹配原版 <玩家名> 消息 格式
         Component fullChatMessage = Component.literal("<")
             .append(aiNameComponent)
             .append("> ")
             .append(Component.literal(reply));
 
-        // 广播给所有在线玩家
         for (ServerPlayer player : server.getPlayerList().getPlayers()) {
             player.displayClientMessage(fullChatMessage, false);
         }
-
-        // 发送WebSocket广播（AI聊天消息）
-        PlayerEventWebSocketClient.sendEvent(PlayerEventMessage.aiChat(reply));
     }
 }

@@ -2,7 +2,7 @@
 
 FireflyMC 是一个面向 FireflyMC 服务器生态的 Minecraft 模组，基于 **Minecraft 1.21.1** 与 **NeoForge 21.1.219** 开发。
 
-当前版本：`2.5.0`  
+当前版本：`2.5.1`  
 Mod ID：`fireflymc`
 
 ## 功能特性
@@ -41,12 +41,13 @@ Mod ID：`fireflymc`
 启动后会生成以下配置：
 
 - `config/fireflymc-client.toml`：客户端配置，例如 HUD 缩放、单人世界中继大厅与 P2P 参数。
-- `config/fireflymc-server.toml`：服务端配置，例如 WebSocket 鉴权、成员验证、AI 聊天、新手福利包、掉落物清理和在线时长限制。
+- `config/fireflymc-server.toml`：服务端配置，例如玩家密码验证、AI 聊天、新手福利包、掉落物清理和在线时长限制。
 
 重要配置项示例：
 
-- `server.wsAuthKey`：WebSocket 鉴权密钥，生产环境请务必修改默认值。
-- `server.enableMemberVerification`：是否启用成员验证。
+- `playerAuth.enabled`：是否启用玩家密码验证（离线模式防顶号）。
+- `playerAuth.timeoutSeconds`：密码验证超时时间（秒）。
+- `playerAuth.maxAttempts`：密码最大尝试次数。
 - `server.enableItemCleanup`：是否启用掉落物自动清理。
 - `ai.enabled`：是否启用 AI 聊天功能。
 - `starterKit.enabled`：是否启用新手福利包。
@@ -76,6 +77,14 @@ Mod ID：`fireflymc`
 - `/playtime check <玩家>`：查看其他玩家剩余在线时长，需要 OP 2。
 - `/playtime reset <玩家>`：重置指定玩家每日在线时长，需要 OP 4。
 - `/playtime resetdaily`：重置所有玩家每日在线时长，需要 OP 4。
+
+### 玩家密码验证
+
+```text
+/fireflyauth reset <玩家名>
+```
+
+- `/fireflyauth reset <玩家名>`：重置指定玩家的密码，下次加入时重新设置。需要 OP 4。
 
 ### 生成生物
 

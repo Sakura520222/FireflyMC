@@ -19,13 +19,16 @@ public class ServerConfig {
 
     public static class ServerConfigImpl {
         // 服务器配置
-        public final ModConfigSpec.BooleanValue enableRemoteShutdown;
-        public final ModConfigSpec.ConfigValue<String> wsAuthKey;
-        public final ModConfigSpec.BooleanValue enableMemberVerification;
-        public final ModConfigSpec.IntValue memberVerificationTimeout;
         public final ModConfigSpec.BooleanValue enableItemCleanup;
         public final ModConfigSpec.IntValue itemCleanupIntervalMinutes;
         public final ModConfigSpec.IntValue itemCleanupWarningSeconds;
+
+        // 玩家密码验证配置
+        public final ModConfigSpec.BooleanValue playerAuthEnabled;
+        public final ModConfigSpec.ConfigValue<Integer> playerAuthTimeoutSeconds;
+        public final ModConfigSpec.ConfigValue<Integer> playerAuthMaxAttempts;
+        public final ModConfigSpec.ConfigValue<String> playerAuthKickMessageTimeout;
+        public final ModConfigSpec.ConfigValue<String> playerAuthKickMessageFailed;
 
         // AI配置
         public final ModConfigSpec.ConfigValue<String> aiApiUrl;
@@ -65,26 +68,6 @@ public class ServerConfig {
             builder.push("server")
                     .translation("fireflymc.config.server");
 
-            enableRemoteShutdown = builder
-                    .comment("Enable remote server shutdown via WebSocket")
-                    .translation("fireflymc.config.server.enable_remote_shutdown")
-                    .define("enableRemoteShutdown", true);
-
-            wsAuthKey = builder
-                    .comment("Secret key for WebSocket authentication")
-                    .translation("fireflymc.config.server.ws_auth_key")
-                    .define("wsAuthKey", "change-this-key-in-production");
-
-            enableMemberVerification = builder
-                    .comment("Enable WebSocket member verification (kick players not in verified list)")
-                    .translation("fireflymc.config.server.enable_member_verification")
-                    .define("enableMemberVerification", false);
-
-            memberVerificationTimeout = builder
-                    .comment("Member verification timeout in seconds")
-                    .translation("fireflymc.config.server.member_verification_timeout")
-                    .defineInRange("memberVerificationTimeout", 10, 3, 60);
-
             enableItemCleanup = builder
                     .comment("Enable automatic item cleanup (remove dropped items periodically)")
                     .translation("fireflymc.config.server.enable_item_cleanup")
@@ -99,6 +82,38 @@ public class ServerConfig {
                     .comment("Warning time before item cleanup in seconds (0 to disable)")
                     .translation("fireflymc.config.server.item_cleanup_warning_seconds")
                     .defineInRange("itemCleanupWarningSeconds", 60, 0, 300);
+
+            builder.pop();
+
+            // 玩家密码验证配置
+            builder.push("playerAuth")
+                    .comment("玩家密码验证配置（离线模式防顶号）")
+                    .translation("fireflymc.config.player_auth");
+
+            playerAuthEnabled = builder
+                    .comment("是否启用玩家密码验证（首次加入设置密码，后续每次验证）")
+                    .translation("fireflymc.config.player_auth.enabled")
+                    .define("enabled", true);
+
+            playerAuthTimeoutSeconds = builder
+                    .comment("密码验证超时时间（秒）")
+                    .translation("fireflymc.config.player_auth.timeout_seconds")
+                    .define("timeoutSeconds", 60);
+
+            playerAuthMaxAttempts = builder
+                    .comment("密码最大尝试次数")
+                    .translation("fireflymc.config.player_auth.max_attempts")
+                    .define("maxAttempts", 3);
+
+            playerAuthKickMessageTimeout = builder
+                    .comment("验证超时踢出提示")
+                    .translation("fireflymc.config.player_auth.kick_message_timeout")
+                    .define("kickMessageTimeout", "§c[FireflyMC] 密码验证超时，请重新加入服务器");
+
+            playerAuthKickMessageFailed = builder
+                    .comment("密码错误次数耗尽踢出提示")
+                    .translation("fireflymc.config.player_auth.kick_message_failed")
+                    .define("kickMessageFailed", "§c[FireflyMC] 密码错误次数过多，请稍后再试");
 
             builder.pop();
 

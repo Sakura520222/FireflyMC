@@ -1,36 +1,71 @@
 package firefly520.fireflymc.client;
 
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
+import java.net.HttpURLConnection;
+import java.net.URI;
+
+import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
+
 import firefly520.fireflymc.FireflyMCMod;
 
 /**
  * Mod更新检查器
- * 游戏启动时检查是否有新版本可用
+ * 通过 GitHub Releases API 检查是否有新版本
  */
 public class UpdateChecker {
-    private static boolean checked = false;
+    private static final String GITHUB_API_URL = "https://api.github.com/repos/Sakura520222/FireflyMC/releases/latest";
+    private static volatile boolean checked = false;
 
     /**
      * 检查更新（在客户端启动时调用）
      */
     public static void checkForUpdate() {
         if (checked) return;
-        checked = true;
 
-        // 异步检查更新
         Thread.startVirtualThread(() -> {
             try {
-                RulesContent rules = RulesLoader.loadRules();
-                if (rules != null && rules.modUpdateUrl() != null && !rules.modUpdateUrl().isEmpty()) {
-                    String latestVersion = extractVersionFromUrl(rules.modUpdateUrl());
-                    System.out.println("[FireflyMC] Checking for updates: current=" + FireflyMCMod.VERSION + ", latest=" + latestVersion);
-                    if (isNewerVersion(latestVersion)) {
-                        ClientState.hasUpdateAvailable = true;
-                        ClientState.updateVersion = latestVersion;
-                        ClientState.updateUrl = rules.modUpdateUrl();
-                        System.out.println("[FireflyMC] Update available: " + latestVersion);
-                    } else {
-                        System.out.println("[FireflyMC] No update available");
+                JsonObject release = fetchLatestRelease();
+                if (release == null) {
+                    return;
+                }
+
+                checked = true;
+
+                String tagName = release.get("tag_name").getAsString();
+                String latestVersion = tagName.replaceFirst("^v", "");
+                String releasePageUrl = release.get("html_url").getAsString();
+
+                // 查找 JAR 资产下载链接
+                String downloadUrl = "";
+                JsonArray assets = release.getAsJsonArray("assets");
+                if (assets != null) {
+                    for (JsonElement assetElem : assets) {
+                        JsonObject asset = assetElem.getAsJsonObject();
+                        String name = asset.get("name").getAsString();
+                        if (name.endsWith(".jar")) {
+                            downloadUrl = asset.get("browser_download_url").getAsString();
+                            break;
+                        }
                     }
+                }
+
+                System.out.println("[FireflyMC] Checking for updates: current=" + FireflyMCMod.VERSION + ", latest=" + latestVersion);
+
+                if (isNewerVersion(latestVersion)) {
+                    ClientState.hasUpdateAvailable = true;
+                    ClientState.updateVersion = latestVersion;
+                    // 优先使用发布页面 URL，用户可查看更新日志
+                    ClientState.updateUrl = releasePageUrl;
+                    System.out.println("[FireflyMC] Update available: " + latestVersion);
+                    if (!downloadUrl.isEmpty()) {
+                        System.out.println("[FireflyMC] Download: " + downloadUrl);
+                    }
+                } else {
+                    System.out.println("[FireflyMC] No update available");
                 }
             } catch (Exception e) {
                 System.out.println("[FireflyMC] Update check failed: " + e.getMessage());
@@ -39,18 +74,36 @@ public class UpdateChecker {
     }
 
     /**
-     * 从URL中提取版本号
-     * 例如: https://mc.firefly520.top/ireflymc-2.5.0.jar -> 2.5.0
+     * 从 GitHub Releases API 获取最新发布信息
      */
-    private static String extractVersionFromUrl(String url) {
-        int lastSlash = url.lastIndexOf('/');
-        if (lastSlash >= 0 && lastSlash < url.length() - 1) {
-            String filename = url.substring(lastSlash + 1);
-            // 移除 .jar 扩展名和前缀
-            String version = filename.replace(".jar", "").replace("fireflymc-", "").replace("ireflymc-", "");
-            return version;
+    private static JsonObject fetchLatestRelease() throws Exception {
+        HttpURLConnection conn = (HttpURLConnection) URI.create(GITHUB_API_URL).toURL().openConnection();
+        conn.setConnectTimeout(10000);
+        conn.setReadTimeout(10000);
+        conn.setRequestMethod("GET");
+        conn.setRequestProperty("User-Agent", "FireflyMC-Client/" + FireflyMCMod.VERSION);
+        conn.setRequestProperty("Accept", "application/vnd.github+json");
+
+        try {
+            int responseCode = conn.getResponseCode();
+            if (responseCode != 200) {
+                System.out.println("[FireflyMC] Update check failed: HTTP " + responseCode);
+                return null;
+            }
+
+            StringBuilder result = new StringBuilder();
+            try (BufferedReader reader = new BufferedReader(
+                    new InputStreamReader(conn.getInputStream(), "UTF-8"))) {
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    result.append(line);
+                }
+            }
+
+            return JsonParser.parseString(result.toString()).getAsJsonObject();
+        } finally {
+            conn.disconnect();
         }
-        return null;
     }
 
     /**

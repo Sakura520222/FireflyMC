@@ -1,23 +1,36 @@
 package firefly520.fireflymc.kit;
 
+import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
+import com.google.gson.reflect.TypeToken;
 import firefly520.fireflymc.ServerConfig;
-import firefly520.fireflymc.event.websocket.StarterKitWebSocketManager;
 import net.minecraft.network.chat.Component;
+import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.lang.reflect.Type;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * 新手福利包管理器
- * 负责给首次加入的玩家发放福利物品
+ * 新手福利包管理器（本地存储版本）
  */
 public class StarterKitManager {
     private static final Logger LOGGER = LoggerFactory.getLogger(StarterKitManager.class);
+    private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
+    private static final Type DATA_TYPE = new TypeToken<Map<String, ClaimRecord>>() {}.getType();
+
+    private Map<String, ClaimRecord> claimedMap = new ConcurrentHashMap<>();
+    private Path dataFile;
 
     private static final Component WELCOME_MESSAGE = Component.literal(
         "§a§l欢迎来到FireflyMC！§r\n" +
@@ -32,49 +45,76 @@ public class StarterKitManager {
         "§a§l欢迎来到FireflyMC！"
     );
 
-    private static final Component SERVICE_UNAVAILABLE_MESSAGE = Component.literal(
-        "§c服务暂时不可用，请稍后再试"
-    );
+    private static String normalizeName(String name) {
+        return name.toLowerCase(Locale.ROOT);
+    }
+
+    /**
+     * 确保数据文件已加载（懒加载，首次调用时按需初始化）
+     */
+    private synchronized void ensureLoaded(MinecraftServer server) {
+        if (dataFile == null) {
+            dataFile = server.getServerDirectory().resolve("fireflymc_starter_kit.json");
+            if (Files.exists(dataFile)) {
+                try {
+                    String json = Files.readString(dataFile);
+                    Map<String, ClaimRecord> loaded = GSON.fromJson(json, DATA_TYPE);
+                    if (loaded != null) {
+                        this.claimedMap = new ConcurrentHashMap<>(loaded);
+                    }
+                } catch (Exception e) {
+                    LOGGER.error("[FireflyMC] 加载福利包领取记录失败", e);
+                }
+            }
+        }
+    }
+
+    private synchronized void saveData() {
+        if (dataFile == null) return;
+        try {
+            Files.writeString(dataFile, GSON.toJson(claimedMap));
+        } catch (Exception e) {
+            LOGGER.error("[FireflyMC] 保存福利包领取记录失败", e);
+        }
+    }
 
     /**
      * 给予玩家新手福利包（如果尚未领取）
      */
     public static void giveStarterKit(ServerPlayer player) {
-        // 检查配置是否启用
         if (!ServerConfig.SERVER.enableStarterKit.get()) {
             return;
         }
+        giveStarterKitInternal(player);
+    }
 
-        // 使用 WebSocket 异步检查
-        boolean requestSent = StarterKitWebSocketManager.getInstance()
-            .checkClaimedAsync(player, claimed -> {
-                // 回调：检查玩家是否仍在服务器
-                ServerPlayer onlinePlayer = player.server.getPlayerList().getPlayer(player.getUUID());
-                if (onlinePlayer == null) {
-                    LOGGER.debug("[FireflyMC] 玩家已下线，跳过福利包给予: {}", player.getUUID());
-                    return;
-                }
+    private static final StarterKitManager INSTANCE = new StarterKitManager();
+    public static StarterKitManager getInstance() { return INSTANCE; }
 
-                if (claimed) {
-                    // 已领取
-                    onlinePlayer.sendSystemMessage(ALREADY_CLAIMED_MESSAGE);
-                } else {
-                    // 未领取，给予物品
-                    giveItems(onlinePlayer);
-                    // 标记已领取
-                    StarterKitWebSocketManager.getInstance().markClaimed(
-                        onlinePlayer,
-                        () -> onlinePlayer.sendSystemMessage(WELCOME_MESSAGE),
-                        () -> LOGGER.warn("[FireflyMC] 标记福利包领取失败: {}", onlinePlayer.getUUID())
-                    );
-                }
-            });
+    /**
+     * 内部实现：检查领取状态并发放
+     */
+    private static void giveStarterKitInternal(ServerPlayer player) {
+        StarterKitManager mgr = INSTANCE;
+        mgr.ensureLoaded(player.server);
 
-        // WebSocket 未连接
-        if (!requestSent) {
-            LOGGER.warn("[FireflyMC] WebSocket未连接，无法给予福利包: {}", player.getGameProfile().getName());
-            player.sendSystemMessage(SERVICE_UNAVAILABLE_MESSAGE);
+        String key = normalizeName(player.getGameProfile().getName());
+        if (mgr.claimedMap.containsKey(key)) {
+            player.sendSystemMessage(ALREADY_CLAIMED_MESSAGE);
+            return;
         }
+
+        // 未领取，给予物品
+        giveItems(player);
+        // 标记已领取
+        ClaimRecord record = new ClaimRecord(
+                player.getUUID().toString(),
+                player.getGameProfile().getName(),
+                java.time.Instant.now().toString()
+        );
+        mgr.claimedMap.put(key, record);
+        mgr.saveData();
+        player.sendSystemMessage(WELCOME_MESSAGE);
     }
 
     /**
@@ -83,25 +123,14 @@ public class StarterKitManager {
     private static List<ItemStack> createStarterItems() {
         List<ItemStack> items = new ArrayList<>();
 
-        // 石工具套装
         items.add(new ItemStack(Items.STONE_SWORD));
         items.add(new ItemStack(Items.STONE_PICKAXE));
         items.add(new ItemStack(Items.STONE_AXE));
         items.add(new ItemStack(Items.STONE_SHOVEL));
-
-        // 食物
         items.add(new ItemStack(Items.BREAD, 32));
-
-        // 火把
         items.add(new ItemStack(Items.TORCH, 64));
-
-        // 建材
         items.add(new ItemStack(Items.OAK_PLANKS, 64));
-
-        // 床
         items.add(new ItemStack(Items.RED_BED));
-
-        // 箱子
         items.add(new ItemStack(Items.CHEST));
 
         return items;
@@ -114,7 +143,6 @@ public class StarterKitManager {
         List<ItemStack> items = createStarterItems();
         List<ItemStack> droppedItems = new ArrayList<>();
 
-        // 尝试添加到背包
         for (ItemStack item : items) {
             boolean added = player.getInventory().add(item);
             if (!added) {
@@ -122,14 +150,30 @@ public class StarterKitManager {
             }
         }
 
-        // 掉落未添加的物品
         for (ItemStack item : droppedItems) {
             player.spawnAtLocation(item);
         }
 
-        // 发送背包满警告
         if (!droppedItems.isEmpty()) {
             player.sendSystemMessage(INVENTORY_FULL_WARNING);
+        }
+    }
+
+    /**
+     * 领取记录
+     */
+    private static class ClaimRecord {
+        String uuid;
+        String playerName;
+        String claimedAt;
+
+        @SuppressWarnings("unused")
+        public ClaimRecord() {}
+
+        public ClaimRecord(String uuid, String playerName, String claimedAt) {
+            this.uuid = uuid;
+            this.playerName = playerName;
+            this.claimedAt = claimedAt;
         }
     }
 }
