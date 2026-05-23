@@ -104,4 +104,10 @@ FireflyMC 是一个基于 Java 开发的 Minecraft 模组项目，核心功能�
 ## 仓库信息
 - 仓库名: Sakura520222/FireflyMC
 - 语言统计: Java: 510438
-- 累计反思次数: 11
+- 累计反思次数: 13
+
+## 知识文件位置
+- **审查规则**：`.sakura/rules/review_rules.md`
+- **架构文档**：`.sakura/docs/architecture.md`
+- **经验教训**：`.sakura/plans/lessons_learned.md`
+- **知识总结**：`.sakura/KNOWLEDGE_SUMMARY.md`
