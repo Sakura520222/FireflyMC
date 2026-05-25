@@ -7,7 +7,9 @@
   ],
   "client": [
     "ServerSelectionListMixin",
-    "JoinMultiplayerScreenMixin"
+    "JoinMultiplayerScreenMixin",
+    "ClientPacketListenerMixin",
+    "ClientAdvancementsMixin"
   ],
   "server": ["ServerChatMixin"],
   "injectors": {

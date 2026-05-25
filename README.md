@@ -2,7 +2,7 @@
 
 FireflyMC 是一个面向 FireflyMC 服务器生态的 Minecraft 模组，基于 **Minecraft 1.21.1** 与 **NeoForge 21.1.219** 开发。
 
-当前版本：`2.5.1`  
+当前版本：`2.5.2`  
 Mod ID：`fireflymc`
 
 ## 功能特性
@@ -10,7 +10,7 @@ Mod ID：`fireflymc`
 - **服务器信息 HUD**：在游戏内显示服务器名称、在线人数与官网链接。
 - **入服规则确认**：玩家加入多人服务器时显示服务器规则弹窗，并在确认前提供临时保护。
 - **客户端安装校验**：多人服务器可检测玩家是否安装 FireflyMC 客户端模组。
-- **WebSocket 事件联动**：广播玩家加入、退出、聊天等服务器事件，并支持成员验证、远程控制等服务端联动能力。
+- **客户端事件通知 WebSocket**：客户端可将本地玩家加入多人服务器、进入单人存档、死亡和获得新成就等事件发送到独立 WebSocket 服务端。
 - **AI 聊天助手**：通过 `/ai <消息>` 与 AI 对话，支持聊天上下文、冷却、主动回复与函数调用配置。
 - **新手福利包**：玩家首次加入服务器时可发放新手物资。
 - **掉落物自动清理**：专用服务器可按配置周期清理掉落物，并在清理前提示。
@@ -53,6 +53,8 @@ Mod ID：`fireflymc`
 - `starterKit.enabled`：是否启用新手福利包。
 - `playtime.enablePlaytimeLimiter`：是否启用在线时长限制。
 - `singleplayer_relay.enabled`：是否启用单人世界公开联机提示与中继准备功能。
+- `event_notification.enabled`：是否启用客户端事件通知 WebSocket。
+- `event_notification.webSocketUrl`：客户端事件通知 WebSocket 服务端地址。
 
 ## 游戏内命令
 
@@ -125,6 +127,10 @@ src/main/templates/META-INF/             NeoForge 模组元数据模板
 docs/                                    项目文档
 .sakura/                                 开发文档与实现参考
 ```
+
+### 对接文档
+
+- [客户端事件通知 WebSocket 协议](docs/client-event-websocket-protocol.md)
 
 ## 构建产物
 

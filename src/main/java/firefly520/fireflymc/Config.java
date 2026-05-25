@@ -27,6 +27,13 @@ public class Config {
     public final ModConfigSpec.ConfigValue<Integer> SINGLEPLAYER_RELAY_P2P_UDP_PORT_MAX;
     public final ModConfigSpec.ConfigValue<Integer> SINGLEPLAYER_RELAY_P2P_RETRANSMIT_MILLIS;
     public final ModConfigSpec.ConfigValue<Integer> SINGLEPLAYER_RELAY_P2P_WINDOW_SIZE;
+    public final ModConfigSpec.BooleanValue EVENT_NOTIFICATION_ENABLED;
+    public final ModConfigSpec.ConfigValue<String> EVENT_NOTIFICATION_URL;
+    public final ModConfigSpec.BooleanValue EVENT_NOTIFICATION_AUTO_RECONNECT;
+    public final ModConfigSpec.ConfigValue<Integer> EVENT_NOTIFICATION_RECONNECT_INTERVAL_MILLIS;
+    public final ModConfigSpec.ConfigValue<Integer> EVENT_NOTIFICATION_HEARTBEAT_INTERVAL_MILLIS;
+    public final ModConfigSpec.ConfigValue<Integer> EVENT_NOTIFICATION_SEND_TIMEOUT_MILLIS;
+    public final ModConfigSpec.ConfigValue<Integer> EVENT_NOTIFICATION_QUEUE_CAPACITY;
 
     public ClientConfig(ModConfigSpec.Builder builder) {
       builder.push("hud_settings")
@@ -96,6 +103,46 @@ public class Config {
         .comment("Reliable UDP sliding window size in packets")
         .translation("fireflymc.config.singleplayer_relay.p2p_window_size")
         .define("p2pWindowSize", 64);
+
+      builder.pop();
+
+      builder.push("event_notification")
+        .translation("fireflymc.configuration.event_notification");
+
+      EVENT_NOTIFICATION_ENABLED = builder
+        .comment("Enable client-side player event notifications over WebSocket")
+        .translation("fireflymc.config.event_notification.enabled")
+        .define("enabled", true);
+
+      EVENT_NOTIFICATION_URL = builder
+        .comment("WebSocket URL for client-side player event notifications")
+        .translation("fireflymc.config.event_notification.web_socket_url")
+        .define("webSocketUrl", "wss://fk.firefly520.top/events");
+
+      EVENT_NOTIFICATION_AUTO_RECONNECT = builder
+        .comment("Reconnect the event notification WebSocket after the connection closes")
+        .translation("fireflymc.config.event_notification.auto_reconnect")
+        .define("autoReconnect", true);
+
+      EVENT_NOTIFICATION_RECONNECT_INTERVAL_MILLIS = builder
+        .comment("Delay before reconnecting the event notification WebSocket in milliseconds")
+        .translation("fireflymc.config.event_notification.reconnect_interval_millis")
+        .define("reconnectIntervalMillis", 5000);
+
+      EVENT_NOTIFICATION_HEARTBEAT_INTERVAL_MILLIS = builder
+        .comment("Heartbeat interval for the event notification WebSocket in milliseconds")
+        .translation("fireflymc.config.event_notification.heartbeat_interval_millis")
+        .define("heartbeatIntervalMillis", 30000);
+
+      EVENT_NOTIFICATION_SEND_TIMEOUT_MILLIS = builder
+        .comment("Timeout for sending event notification WebSocket messages in milliseconds")
+        .translation("fireflymc.config.event_notification.send_timeout_millis")
+        .define("sendTimeoutMillis", 5000);
+
+      EVENT_NOTIFICATION_QUEUE_CAPACITY = builder
+        .comment("Maximum queued event notification messages while the WebSocket is reconnecting")
+        .translation("fireflymc.config.event_notification.queue_capacity")
+        .define("queueCapacity", 128);
 
       builder.pop();
     }

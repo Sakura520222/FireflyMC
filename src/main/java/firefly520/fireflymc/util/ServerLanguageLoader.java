@@ -3,6 +3,9 @@ package firefly520.fireflymc.util;
 import com.google.gson.Gson;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
+import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.contents.PlainTextContents;
+import net.minecraft.network.chat.contents.TranslatableContents;
 import net.neoforged.fml.ModList;
 import net.neoforged.neoforgespi.language.IModInfo;
 import net.neoforged.neoforgespi.language.IModFileInfo;
@@ -18,6 +21,8 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * 服务端语言加载工具类
@@ -26,6 +31,7 @@ import java.util.Map;
 public class ServerLanguageLoader {
     public static final Logger LOGGER = LogManager.getLogger();
     private static final Gson GSON = new Gson();
+    private static final Pattern TRANSLATION_FORMAT_PATTERN = Pattern.compile("%(?:(\\d+)\\$)?([A-Za-z%]|$)");
     private static final Map<String, String> TRANSLATION_MAP = new HashMap<>();
     private static boolean isLoaded = false;
 
@@ -47,29 +53,29 @@ public class ServerLanguageLoader {
             for (IModFileInfo fileInfo : ModList.get().getModFiles()) {
                 IModFile modFile = fileInfo.getFile();
 
-                // 获取该文件中的第一个 Mod 的 ID
-                IModInfo modInfo = fileInfo.getMods().get(0);
-                String modId = modInfo.getModId();
+                for (IModInfo modInfo : fileInfo.getMods()) {
+                    String modId = modInfo.getModId();
 
-                // 查找该 Mod 的语言文件路径
-                Path langPath = modFile.findResource("assets", modId, "lang", "zh_cn.json");
+                    // 查找该 Mod 的语言文件路径
+                    Path langPath = modFile.findResource("assets", modId, "lang", "zh_cn.json");
 
-                if (Files.exists(langPath)) {
-                    try {
-                        String content = Files.readString(langPath, StandardCharsets.UTF_8);
-                        JsonObject jsonObject = GSON.fromJson(content, JsonObject.class);
+                    if (Files.exists(langPath)) {
+                        try {
+                            String content = Files.readString(langPath, StandardCharsets.UTF_8);
+                            JsonObject jsonObject = GSON.fromJson(content, JsonObject.class);
 
-                        int count = 0;
-                        for (Map.Entry<String, JsonElement> entry : jsonObject.entrySet()) {
-                            if (entry.getValue().isJsonPrimitive() && entry.getValue().getAsJsonPrimitive().isString()) {
-                                TRANSLATION_MAP.put(entry.getKey(), entry.getValue().getAsString());
-                                count++;
+                            int count = 0;
+                            for (Map.Entry<String, JsonElement> entry : jsonObject.entrySet()) {
+                                if (entry.getValue().isJsonPrimitive() && entry.getValue().getAsJsonPrimitive().isString()) {
+                                    TRANSLATION_MAP.put(entry.getKey(), entry.getValue().getAsString());
+                                    count++;
+                                }
                             }
-                        }
 
-                        LOGGER.info("[FireflyMC] 成功加载 Mod [{}] 的中文语言文件，共 {} 个翻译键", modId, count);
-                    } catch (Exception e) {
-                        LOGGER.error("[FireflyMC] 加载 Mod [{}] 的中文语言文件失败", modId, e);
+                            LOGGER.info("[FireflyMC] 成功加载 Mod [{}] 的中文语言文件，共 {} 个翻译键", modId, count);
+                        } catch (Exception e) {
+                            LOGGER.error("[FireflyMC] 加载 Mod [{}] 的中文语言文件失败", modId, e);
+                        }
                     }
                 }
             }
@@ -115,6 +121,92 @@ public class ServerLanguageLoader {
      */
     public static String getTranslation(String translationKey) {
         return TRANSLATION_MAP.getOrDefault(translationKey, translationKey);
+    }
+
+    /**
+     * 将聊天组件按已加载的中文语言表解析为纯文本。
+     * @param component 需要解析的组件
+     * @return 解析后的纯文本
+     */
+    public static String translateComponent(Component component) {
+        if (component == null) {
+            return null;
+        }
+        if (!isLoaded) {
+            loadZhCnLanguage();
+        }
+        try {
+            return resolveComponent(component);
+        } catch (Exception e) {
+            LOGGER.warn("[FireflyMC] 解析翻译组件失败，使用原始文本", e);
+            return component.getString();
+        }
+    }
+
+    private static String resolveComponent(Component component) {
+        StringBuilder builder = new StringBuilder(resolveContents(component));
+        for (Component sibling : component.getSiblings()) {
+            builder.append(resolveComponent(sibling));
+        }
+        return builder.toString();
+    }
+
+    private static String resolveContents(Component component) {
+        if (component.getContents() instanceof PlainTextContents plainTextContents) {
+            return plainTextContents.text();
+        }
+        if (component.getContents() instanceof TranslatableContents translatableContents) {
+            String template = getTranslation(translatableContents.getKey());
+            if (template.equals(translatableContents.getKey()) && translatableContents.getFallback() != null) {
+                template = translatableContents.getFallback();
+            }
+            return formatTranslationTemplate(template, translatableContents.getArgs());
+        }
+        return component.plainCopy().getString();
+    }
+
+    private static String formatTranslationTemplate(String template, Object[] args) {
+        if (template == null || template.isEmpty()) {
+            return template;
+        }
+
+        StringBuilder result = new StringBuilder();
+        Matcher matcher = TRANSLATION_FORMAT_PATTERN.matcher(template);
+        int implicitArgIndex = 0;
+        int lastEnd = 0;
+
+        while (matcher.find()) {
+            result.append(template, lastEnd, matcher.start());
+            String placeholder = matcher.group();
+            String type = matcher.group(2);
+
+            if ("%".equals(type) && "%%".equals(placeholder)) {
+                result.append('%');
+            } else if ("s".equals(type)) {
+                String explicitIndex = matcher.group(1);
+                int argIndex = explicitIndex == null ? implicitArgIndex++ : Integer.parseInt(explicitIndex) - 1;
+                result.append(resolveTranslationArgument(args, argIndex, placeholder));
+            } else {
+                result.append(placeholder);
+            }
+
+            lastEnd = matcher.end();
+        }
+
+        result.append(template.substring(lastEnd));
+        return result.toString();
+    }
+
+    private static String resolveTranslationArgument(Object[] args, int index, String fallback) {
+        if (args == null || index < 0 || index >= args.length) {
+            return fallback;
+        }
+
+        Object arg = args[index];
+        if (arg instanceof Component component) {
+            return translateComponent(component);
+        }
+        return arg == null ? "null" : String.valueOf(arg);
     }
 
     /**
