@@ -100,8 +100,9 @@ public final class ClientEventNotificationMessage {
         if (player == null) {
             return this;
         }
+        UUID playerUuid = player.getGameProfile().getId();
         return add("playerName", player.getGameProfile().getName())
-            .add("playerUuid", player.getGameProfile().getId().toString());
+            .add("playerUuid", playerUuid == null ? null : playerUuid.toString());
     }
 
     private ClientEventNotificationMessage addWorldContext(Minecraft minecraft, String worldType) {

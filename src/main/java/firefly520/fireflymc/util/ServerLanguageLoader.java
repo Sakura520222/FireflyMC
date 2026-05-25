@@ -31,6 +31,7 @@ import java.util.regex.Pattern;
 public class ServerLanguageLoader {
     public static final Logger LOGGER = LogManager.getLogger();
     private static final Gson GSON = new Gson();
+    private static final int MAX_COMPONENT_DEPTH = 32;
     private static final Pattern TRANSLATION_FORMAT_PATTERN = Pattern.compile("%(?:(\\d+)\\$)?([A-Za-z%]|$)");
     private static final Map<String, String> TRANSLATION_MAP = new HashMap<>();
     private static boolean isLoaded = false;
@@ -136,22 +137,27 @@ public class ServerLanguageLoader {
             loadZhCnLanguage();
         }
         try {
-            return resolveComponent(component);
+            return resolveComponent(component, 0);
         } catch (Exception e) {
             LOGGER.warn("[FireflyMC] 解析翻译组件失败，使用原始文本", e);
             return component.getString();
         }
     }
 
-    private static String resolveComponent(Component component) {
-        StringBuilder builder = new StringBuilder(resolveContents(component));
+    private static String resolveComponent(Component component, int depth) {
+        if (depth > MAX_COMPONENT_DEPTH) {
+            String collapsed = component.tryCollapseToString();
+            return collapsed == null ? "" : collapsed;
+        }
+
+        StringBuilder builder = new StringBuilder(resolveContents(component, depth));
         for (Component sibling : component.getSiblings()) {
-            builder.append(resolveComponent(sibling));
+            builder.append(resolveComponent(sibling, depth + 1));
         }
         return builder.toString();
     }
 
-    private static String resolveContents(Component component) {
+    private static String resolveContents(Component component, int depth) {
         if (component.getContents() instanceof PlainTextContents plainTextContents) {
             return plainTextContents.text();
         }
@@ -160,12 +166,12 @@ public class ServerLanguageLoader {
             if (template.equals(translatableContents.getKey()) && translatableContents.getFallback() != null) {
                 template = translatableContents.getFallback();
             }
-            return formatTranslationTemplate(template, translatableContents.getArgs());
+            return formatTranslationTemplate(template, translatableContents.getArgs(), depth);
         }
         return component.plainCopy().getString();
     }
 
-    private static String formatTranslationTemplate(String template, Object[] args) {
+    private static String formatTranslationTemplate(String template, Object[] args, int depth) {
         if (template == null || template.isEmpty()) {
             return template;
         }
@@ -185,7 +191,7 @@ public class ServerLanguageLoader {
             } else if ("s".equals(type)) {
                 String explicitIndex = matcher.group(1);
                 int argIndex = explicitIndex == null ? implicitArgIndex++ : Integer.parseInt(explicitIndex) - 1;
-                result.append(resolveTranslationArgument(args, argIndex, placeholder));
+                result.append(resolveTranslationArgument(args, argIndex, placeholder, depth + 1));
             } else {
                 result.append(placeholder);
             }
@@ -197,14 +203,14 @@ public class ServerLanguageLoader {
         return result.toString();
     }
 
-    private static String resolveTranslationArgument(Object[] args, int index, String fallback) {
+    private static String resolveTranslationArgument(Object[] args, int index, String fallback, int depth) {
         if (args == null || index < 0 || index >= args.length) {
             return fallback;
         }
 
         Object arg = args[index];
         if (arg instanceof Component component) {
-            return translateComponent(component);
+            return resolveComponent(component, depth);
         }
         return arg == null ? "null" : String.valueOf(arg);
     }

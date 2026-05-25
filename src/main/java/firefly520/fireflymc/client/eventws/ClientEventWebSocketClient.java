@@ -32,11 +32,17 @@ public final class ClientEventWebSocketClient {
     private final AtomicBoolean connected = new AtomicBoolean(false);
     private final AtomicBoolean connecting = new AtomicBoolean(false);
     private final AtomicBoolean reconnectScheduled = new AtomicBoolean(false);
+    private final AtomicBoolean sessionActive = new AtomicBoolean(false);
     private final Queue<ClientEventNotificationMessage> pendingMessages = new ArrayDeque<>();
 
+    private HttpClient httpClient;
+    private int httpClientTimeoutMillis;
     private WebSocket webSocket;
     private ScheduledFuture<?> heartbeatTask;
+    private ScheduledFuture<?> reconnectTask;
     private String activeUrl;
+    private int tickCounter;
+    private long connectionGeneration;
 
     private ClientEventWebSocketClient() {
     }
@@ -46,7 +52,15 @@ public final class ClientEventWebSocketClient {
     }
 
     public void onClientTick() {
-        executor.execute(this::refreshConnectionState);
+        if (++tickCounter < 20) {
+            return;
+        }
+        tickCounter = 0;
+        executor.execute(() -> {
+            if (sessionActive.get()) {
+                refreshConnectionState();
+            }
+        });
     }
 
     public void send(ClientEventNotificationMessage message) {
@@ -57,28 +71,45 @@ public final class ClientEventWebSocketClient {
             if (!ClientEventNotificationConfig.enabled()) {
                 return;
             }
+            sessionActive.set(true);
+            if (!refreshConnectionState()) {
+                return;
+            }
             enqueue(message);
-            refreshConnectionState();
             flushPendingMessages();
         });
     }
 
     public void close() {
-        executor.execute(() -> closeConnection(false, "client_logged_out"));
+        reset("client_logged_out");
     }
 
-    private void refreshConnectionState() {
+    public void reset() {
+        reset("reset");
+    }
+
+    private void reset(String reason) {
+        executor.execute(() -> {
+            sessionActive.set(false);
+            tickCounter = 0;
+            closeConnection(false, reason);
+            reconnectScheduled.set(false);
+            connected.set(false);
+            connecting.set(false);
+            activeUrl = null;
+        });
+    }
+
+    private boolean refreshConnectionState() {
         if (!ClientEventNotificationConfig.enabled()) {
             closeConnection(false, "disabled");
-            pendingMessages.clear();
-            return;
+            return false;
         }
 
         String configuredUrl = ClientEventNotificationConfig.webSocketUrl();
         if (configuredUrl == null || configuredUrl.isBlank()) {
             closeConnection(false, "empty_url");
-            pendingMessages.clear();
-            return;
+            return false;
         }
 
         if (activeUrl != null && !activeUrl.equals(configuredUrl)) {
@@ -88,6 +119,7 @@ public final class ClientEventWebSocketClient {
         if (!connected.get() && !connecting.get() && !reconnectScheduled.get()) {
             connect(configuredUrl);
         }
+        return true;
     }
 
     private void connect(String url) {
@@ -101,17 +133,22 @@ public final class ClientEventWebSocketClient {
 
         connecting.set(true);
         activeUrl = url;
+        long generation = ++connectionGeneration;
         LOGGER.info("[FireflyMC] 正在连接事件通知 WebSocket: {}", uri);
 
-        HttpClient client = HttpClient.newBuilder()
+        getHttpClient().newWebSocketBuilder()
             .connectTimeout(Duration.ofMillis(ClientEventNotificationConfig.sendTimeoutMillis()))
-            .build();
-
-        client.newWebSocketBuilder()
-            .connectTimeout(Duration.ofMillis(ClientEventNotificationConfig.sendTimeoutMillis()))
-            .buildAsync(uri, new Listener())
+            .buildAsync(uri, new Listener(generation))
             .whenCompleteAsync((socket, error) -> {
+                if (generation != connectionGeneration) {
+                    closeStaleSocket(socket);
+                    return;
+                }
                 connecting.set(false);
+                if (!sessionActive.get() || !url.equals(activeUrl)) {
+                    closeStaleSocket(socket);
+                    return;
+                }
                 if (error != null) {
                     connected.set(false);
                     webSocket = null;
@@ -120,8 +157,18 @@ public final class ClientEventWebSocketClient {
                     return;
                 }
                 webSocket = socket;
-                flushPendingMessages();
             }, executor);
+    }
+
+    private HttpClient getHttpClient() {
+        int timeoutMillis = ClientEventNotificationConfig.sendTimeoutMillis();
+        if (httpClient == null || httpClientTimeoutMillis != timeoutMillis) {
+            httpClient = HttpClient.newBuilder()
+                .connectTimeout(Duration.ofMillis(timeoutMillis))
+                .build();
+            httpClientTimeoutMillis = timeoutMillis;
+        }
+        return httpClient;
     }
 
     private void enqueue(ClientEventNotificationMessage message) {
@@ -144,11 +191,20 @@ public final class ClientEventWebSocketClient {
     }
 
     private void sendNow(ClientEventNotificationMessage message) {
+        WebSocket socket = webSocket;
+        long generation = connectionGeneration;
+        if (socket == null || !connected.get()) {
+            return;
+        }
+
         String json = message.toJson();
         try {
-            webSocket.sendText(json, true)
+            socket.sendText(json, true)
                 .orTimeout(ClientEventNotificationConfig.sendTimeoutMillis(), TimeUnit.MILLISECONDS)
-                .whenCompleteAsync((socket, error) -> {
+                .whenCompleteAsync((sentSocket, error) -> {
+                    if (!isCurrentConnection(generation, socket)) {
+                        return;
+                    }
                     if (error != null) {
                         LOGGER.debug("[FireflyMC] 事件通知发送失败: {}", error.getMessage());
                         markDisconnected();
@@ -161,6 +217,9 @@ public final class ClientEventWebSocketClient {
                     }
                 }, executor);
         } catch (Exception e) {
+            if (!isCurrentConnection(generation, socket)) {
+                return;
+            }
             LOGGER.debug("[FireflyMC] 事件通知发送异常: {}", e.getMessage());
             markDisconnected();
             enqueue(message);
@@ -186,13 +245,13 @@ public final class ClientEventWebSocketClient {
     }
 
     private void scheduleReconnect() {
-        if (!ClientEventNotificationConfig.enabled() || !ClientEventNotificationConfig.autoReconnect()) {
+        if (!sessionActive.get() || !ClientEventNotificationConfig.enabled() || !ClientEventNotificationConfig.autoReconnect()) {
             return;
         }
         if (!reconnectScheduled.compareAndSet(false, true)) {
             return;
         }
-        executor.schedule(() -> {
+        reconnectTask = executor.schedule(() -> {
             reconnectScheduled.set(false);
             refreshConnectionState();
         }, ClientEventNotificationConfig.reconnectIntervalMillis(), TimeUnit.MILLISECONDS);
@@ -200,6 +259,9 @@ public final class ClientEventWebSocketClient {
 
     private void closeConnection(boolean reconnect, String reason) {
         stopHeartbeat();
+        stopReconnect();
+        pendingMessages.clear();
+        connectionGeneration++;
         WebSocket socket = webSocket;
         webSocket = null;
         connected.set(false);
@@ -217,16 +279,50 @@ public final class ClientEventWebSocketClient {
         }
     }
 
+    private void stopReconnect() {
+        if (reconnectTask != null && !reconnectTask.isDone()) {
+            reconnectTask.cancel(false);
+        }
+        reconnectTask = null;
+        reconnectScheduled.set(false);
+    }
+
     private void markDisconnected() {
         stopHeartbeat();
         connected.set(false);
         webSocket = null;
     }
 
+    private boolean isCurrentConnection(long generation, WebSocket socket) {
+        return sessionActive.get() && generation == connectionGeneration && socket != null && socket == webSocket;
+    }
+
+    private void closeStaleSocket(WebSocket socket) {
+        if (socket == null) {
+            return;
+        }
+        try {
+            socket.sendClose(WebSocket.NORMAL_CLOSURE, "stale_connection");
+        } catch (Exception e) {
+            LOGGER.debug("[FireflyMC] 关闭过期事件通知 WebSocket 失败: {}", e.getMessage());
+        }
+    }
+
     private final class Listener implements WebSocket.Listener {
+        private final long generation;
+
+        private Listener(long generation) {
+            this.generation = generation;
+        }
+
         @Override
         public void onOpen(WebSocket webSocket) {
             executor.execute(() -> {
+                if (generation != connectionGeneration || !sessionActive.get()) {
+                    closeStaleSocket(webSocket);
+                    return;
+                }
+                ClientEventWebSocketClient.this.webSocket = webSocket;
                 connected.set(true);
                 reconnectScheduled.set(false);
                 LOGGER.info("[FireflyMC] 事件通知 WebSocket 连接成功");
@@ -245,6 +341,9 @@ public final class ClientEventWebSocketClient {
         @Override
         public CompletionStage<?> onClose(WebSocket webSocket, int statusCode, String reason) {
             executor.execute(() -> {
+                if (generation != connectionGeneration) {
+                    return;
+                }
                 LOGGER.info("[FireflyMC] 事件通知 WebSocket 连接关闭: {} - {}", statusCode, reason);
                 markDisconnected();
                 scheduleReconnect();
@@ -255,6 +354,9 @@ public final class ClientEventWebSocketClient {
         @Override
         public void onError(WebSocket webSocket, Throwable error) {
             executor.execute(() -> {
+                if (generation != connectionGeneration) {
+                    return;
+                }
                 LOGGER.warn("[FireflyMC] 事件通知 WebSocket 连接错误: {}", error.getMessage());
                 markDisconnected();
                 scheduleReconnect();
