@@ -46,3 +46,4 @@ repo/
 # Backup files
 *.bak
 CLAUDE.md
+docs/client-event-websocket-protocol.md
