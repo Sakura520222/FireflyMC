@@ -214,39 +214,39 @@ public class HUDRenderer
       int playerIndex = scrollOffset + i;
       if (playerIndex < totalPlayers) {
         PlayerEntry entry = players.get(playerIndex);
-        // 构建带颜色代码的完整显示文本
         String title = ClientState.titleMap.get(entry.uuid());
-        StringBuilder sb = new StringBuilder();
+        // 构建纯文本（用于宽度计算和滚动）与带颜色文本（用于渲染）
+        String plainText;
+        String coloredText;
         if (title != null && !title.isEmpty()) {
-          sb.append("§7[§r").append(title).append("§7]§r");
-        }
-        sb.append(entry.name());
-        String fullText = sb.toString();
-
-        int textWidth = font.width(fullText);
-        int maxWidth = width - 4;
-
-        if (textWidth <= maxWidth) {
-          guiGraphics.drawString(font, Component.literal(fullText), x + 8, y, TEXT_COLOR);
+          plainText = "[" + title + "]" + entry.name();
+          coloredText = "§7[§r" + title + "§7]§r" + entry.name();
         } else {
-          // 跑马灯滚动（与网址滚动逻辑一致）
+          plainText = entry.name();
+          coloredText = entry.name();
+        }
+
+        int textWidth = font.width(plainText);
+
+        if (textWidth <= width) {
+          guiGraphics.drawString(font, Component.literal(coloredText), x + 8, y, TEXT_COLOR);
+        } else {
+          // 跑马灯滚动（与网址滚动逻辑完全一致，基于纯文本计算）
           long time = System.currentTimeMillis();
           int scrollSpeed = 200;
-          int cycle = fullText.length() + 5;
+          int cycle = plainText.length() + 5;
           int offset = (int) ((time / scrollSpeed) % cycle);
-          if (offset > fullText.length()) {
-            offset = fullText.length();
-          }
-          String scrollText = fullText + "     " + fullText.substring(0, Math.min(offset, fullText.length()));
+
+          String scrollPlain = plainText + "     " + plainText.substring(0, Math.min(offset, plainText.length()));
           int maxChars = 0;
           int testWidth = 0;
-          for (int ci = offset; ci < scrollText.length(); ci++) {
-            int charWidth = font.width(scrollText.substring(ci, ci + 1));
-            if (testWidth + charWidth > maxWidth) break;
+          for (int ci = offset; ci < scrollPlain.length(); ci++) {
+            int charWidth = font.width(scrollPlain.substring(ci, ci + 1));
+            if (testWidth + charWidth > width) break;
             testWidth += charWidth;
             maxChars++;
           }
-          String visibleText = scrollText.substring(offset, Math.min(offset + maxChars, scrollText.length()));
+          String visibleText = scrollPlain.substring(offset, Math.min(offset + maxChars, scrollPlain.length()));
           guiGraphics.drawString(font, Component.literal(visibleText), x + 8, y, TEXT_COLOR);
         }
         y += lineHeight;
