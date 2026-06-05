@@ -22,6 +22,7 @@ public class ServerConfig {
         public final ModConfigSpec.BooleanValue enableItemCleanup;
         public final ModConfigSpec.IntValue itemCleanupIntervalMinutes;
         public final ModConfigSpec.IntValue itemCleanupWarningSeconds;
+        public final ModConfigSpec.IntValue itemCleanupCountdownSeconds;
 
         // 玩家密码验证配置
         public final ModConfigSpec.BooleanValue playerAuthEnabled;
@@ -82,6 +83,11 @@ public class ServerConfig {
                     .comment("Warning time before item cleanup in seconds (0 to disable)")
                     .translation("fireflymc.config.server.item_cleanup_warning_seconds")
                     .defineInRange("itemCleanupWarningSeconds", 60, 0, 300);
+
+            itemCleanupCountdownSeconds = builder
+                    .comment("Countdown reminder duration in seconds (ActionBar countdown per second in the last N seconds before cleanup, 0 to disable)")
+                    .translation("fireflymc.config.server.item_cleanup_countdown_seconds")
+                    .defineInRange("itemCleanupCountdownSeconds", 10, 0, 60);
 
             builder.pop();
 

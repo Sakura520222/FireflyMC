@@ -14,6 +14,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * 掉落物自动清理管理器
@@ -34,6 +35,7 @@ public class ItemCleanupManager {
     private MinecraftServer server;
     private ScheduledFuture<?> cleanupTask;
     private ScheduledFuture<?> warningTask;
+    private ScheduledFuture<?> countdownTask;
 
     private ItemCleanupManager() {
     }
@@ -65,6 +67,7 @@ public class ItemCleanupManager {
             warningTask = scheduler.scheduleAtFixedRate(() -> {
                 try {
                     server.execute(this::sendWarning);
+                    startCountdownSequence();
                 } catch (Exception e) {
                     LOGGER.error("[FireflyMC] 掉落物警告任务异常", e);
                 }
@@ -91,6 +94,53 @@ public class ItemCleanupManager {
 
         for (ServerPlayer player : server.getPlayerList().getPlayers()) {
             player.sendSystemMessage(Component.literal(message));
+        }
+    }
+
+    /**
+     * 启动逐秒倒计时序列，通过 ActionBar 显示
+     */
+    private void startCountdownSequence() {
+        int countdownSeconds = ServerConfig.SERVER.itemCleanupCountdownSeconds.get();
+        if (countdownSeconds <= 0) return;
+
+        int warningSeconds = ServerConfig.SERVER.itemCleanupWarningSeconds.get();
+        if (countdownSeconds > warningSeconds) {
+            LOGGER.warn("[FireflyMC] 倒计时时间({}s)大于警告时间({}s)，跳过倒计时", countdownSeconds, warningSeconds);
+            return;
+        }
+
+        // 取消上一个周期的倒计时（如有残留）
+        if (countdownTask != null) {
+            countdownTask.cancel(false);
+        }
+
+        AtomicInteger remaining = new AtomicInteger(countdownSeconds);
+        countdownTask = scheduler.scheduleAtFixedRate(() -> {
+            try {
+                int left = remaining.decrementAndGet();
+                if (left <= 0) {
+                    if (countdownTask != null) {
+                        countdownTask.cancel(false);
+                        countdownTask = null;
+                    }
+                    return;
+                }
+                server.execute(() -> sendActionBarCountdown(left));
+            } catch (Exception e) {
+                LOGGER.error("[FireflyMC] 倒计时序列异常", e);
+            }
+        }, (warningSeconds - countdownSeconds) * 1000L, 1000L, TimeUnit.MILLISECONDS);
+    }
+
+    /**
+     * 通过 ActionBar 发送倒计时消息
+     */
+    private void sendActionBarCountdown(int seconds) {
+        String message = String.format("§c掉落物将在 §e%d §c秒后自动清理！", seconds);
+        Component component = Component.literal(message);
+        for (ServerPlayer player : server.getPlayerList().getPlayers()) {
+            player.displayClientMessage(component, true);
         }
     }
 
@@ -125,6 +175,10 @@ public class ItemCleanupManager {
         if (warningTask != null) {
             warningTask.cancel(false);
             warningTask = null;
+        }
+        if (countdownTask != null) {
+            countdownTask.cancel(false);
+            countdownTask = null;
         }
         if (cleanupTask != null) {
             cleanupTask.cancel(false);
