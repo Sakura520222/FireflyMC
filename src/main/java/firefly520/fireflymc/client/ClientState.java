@@ -1,10 +1,18 @@
 package firefly520.fireflymc.client;
 
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+
 /**
  * 客户端状态管理
  * 用于记录本次游戏会话中的状态
  */
 public class ClientState {
+
+    /**
+     * 服务端同步的称号数据：UUID字符串 → 称号（含§颜色代码）
+     */
+    public static final Map<String, String> titleMap = new ConcurrentHashMap<>();
     /**
      * 本次会话是否已显示过准则
      * 用于判断是否需要显示确认按钮（首次需要确认，后续自动消失）

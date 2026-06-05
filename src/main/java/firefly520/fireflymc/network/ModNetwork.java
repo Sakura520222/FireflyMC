@@ -61,6 +61,13 @@ public class ModNetwork {
                 PasswordSubmitPayload.STREAM_CODEC,
                 ModPayloadHandler::handlePasswordSubmit
         );
+
+        // 注册服务端→客户端的称号同步包
+        registrar.playToClient(
+                TitleSyncPayload.TYPE,
+                TitleSyncPayload.STREAM_CODEC,
+                (payload, context) -> handleTitleSyncOnClient(payload, context)
+        );
     }
 
     /**
@@ -113,6 +120,25 @@ public class ModNetwork {
                 java.lang.reflect.Method method = handlerClass.getDeclaredMethod(
                     "handlePasswordPrompt",
                     PasswordPromptPayload.class,
+                    IPayloadContext.class
+                );
+                method.invoke(null, payload, context);
+            } catch (Exception e) {
+                // 忽略错误
+            }
+        }
+    }
+
+    /**
+     * 使用反射调用客户端称号同步处理器
+     */
+    private static void handleTitleSyncOnClient(TitleSyncPayload payload, IPayloadContext context) {
+        if (FMLEnvironment.dist == Dist.CLIENT) {
+            try {
+                Class<?> handlerClass = Class.forName("firefly520.fireflymc.client.ClientPayloadHandler");
+                java.lang.reflect.Method method = handlerClass.getDeclaredMethod(
+                    "handleTitleSync",
+                    TitleSyncPayload.class,
                     IPayloadContext.class
                 );
                 method.invoke(null, payload, context);

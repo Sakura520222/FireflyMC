@@ -20,6 +20,7 @@ import firefly520.fireflymc.client.relay.SingleplayerRelayClientEvents;
 import firefly520.fireflymc.auth.PlayerPasswordManager;
 import firefly520.fireflymc.network.ModNetwork;
 import firefly520.fireflymc.playtime.PlaytimeManager;
+import firefly520.fireflymc.title.TitleManager;
 import firefly520.fireflymc.util.ServerLanguageLoader;
 
 @Mod(FireflyMCMod.MODID)
@@ -87,6 +88,8 @@ public class FireflyMCMod {
     if (event.getServer().isDedicatedServer()) {
       PlayerPasswordManager.getInstance().load(event.getServer());
     }
+    // 称号数据在所有服务器类型上加载
+    TitleManager.getInstance().load(event.getServer());
     if (event.getServer().isDedicatedServer()) {
       ItemCleanupManager.getInstance().start(event.getServer());
       PlaytimeManager.getInstance().start(event.getServer());
@@ -102,6 +105,8 @@ public class FireflyMCMod {
     ServerLanguageLoader.clear();
     // 关闭密码验证管理器
     PlayerPasswordManager.getInstance().shutdown();
+    // 关闭称号管理器
+    TitleManager.getInstance().shutdown();
     if (event.getServer().isDedicatedServer()) {
       // 停止在线时长限制
       PlaytimeManager.getInstance().stop();

@@ -3,13 +3,16 @@
   "package": "firefly520.fireflymc.mixin",
   "compatibilityLevel": "JAVA_21",
   "mixins": [
-    "ServerChatMixin"
+    "ServerChatMixin",
+    "PlayerMixin"
   ],
   "client": [
     "ServerSelectionListMixin",
     "JoinMultiplayerScreenMixin",
     "ClientPacketListenerMixin",
-    "ClientAdvancementsMixin"
+    "ClientAdvancementsMixin",
+    "PlayerTabOverlayMixin",
+    "LivingEntityRendererMixin"
   ],
   "server": ["ServerChatMixin"],
   "injectors": {
