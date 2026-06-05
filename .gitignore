@@ -47,3 +47,4 @@ repo/
 *.bak
 CLAUDE.md
 docs/client-event-websocket-protocol.md
+.codegraph/
