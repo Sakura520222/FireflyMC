@@ -214,14 +214,41 @@ public class HUDRenderer
       int playerIndex = scrollOffset + i;
       if (playerIndex < totalPlayers) {
         PlayerEntry entry = players.get(playerIndex);
-        // 查找称号
+        // 构建带颜色代码的完整显示文本
         String title = ClientState.titleMap.get(entry.uuid());
-        MutableComponent displayComponent = Component.literal("");
+        StringBuilder sb = new StringBuilder();
         if (title != null && !title.isEmpty()) {
-          displayComponent.append(Component.literal("§7[§r" + title + "§7]§r"));
+          sb.append("§7[§r").append(title).append("§7]§r");
         }
-        displayComponent.append(Component.literal(entry.name()));
-        guiGraphics.drawString(font, displayComponent, x + 8, y, TEXT_COLOR);
+        sb.append(entry.name());
+        String fullText = sb.toString();
+
+        int textWidth = font.width(fullText);
+        int maxWidth = width - 4;
+
+        if (textWidth <= maxWidth) {
+          guiGraphics.drawString(font, Component.literal(fullText), x + 8, y, TEXT_COLOR);
+        } else {
+          // 跑马灯滚动（与网址滚动逻辑一致）
+          long time = System.currentTimeMillis();
+          int scrollSpeed = 200;
+          int cycle = fullText.length() + 5;
+          int offset = (int) ((time / scrollSpeed) % cycle);
+          if (offset > fullText.length()) {
+            offset = fullText.length();
+          }
+          String scrollText = fullText + "     " + fullText.substring(0, Math.min(offset, fullText.length()));
+          int maxChars = 0;
+          int testWidth = 0;
+          for (int ci = offset; ci < scrollText.length(); ci++) {
+            int charWidth = font.width(scrollText.substring(ci, ci + 1));
+            if (testWidth + charWidth > maxWidth) break;
+            testWidth += charWidth;
+            maxChars++;
+          }
+          String visibleText = scrollText.substring(offset, Math.min(offset + maxChars, scrollText.length()));
+          guiGraphics.drawString(font, Component.literal(visibleText), x + 8, y, TEXT_COLOR);
+        }
         y += lineHeight;
       }
     }

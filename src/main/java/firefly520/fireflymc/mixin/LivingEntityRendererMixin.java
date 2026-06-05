@@ -61,12 +61,12 @@ public class LivingEntityRendererMixin {
         int bgColor = (int) (bgOpacity * 255.0F) << 24;
         Matrix4f matrix4f = poseStack.last().pose();
 
-        // 在名牌上方（y=10）绘制称号，与原版名称渲染模式一致
+        // 在名牌上方绘制称号（字体高度约9，间隙2，偏移 -11）
         // 第一次：半透明背景模式
-        font.drawInBatch(titleComponent, -halfWidth, 10, 553648127, false,
+        font.drawInBatch(titleComponent, -halfWidth, -11, 553648127, false,
                 matrix4f, bufferSource, Font.DisplayMode.SEE_THROUGH, bgColor, packedLight);
         // 第二次：不透明文字
-        font.drawInBatch(titleComponent, -halfWidth, 10, -1, false,
+        font.drawInBatch(titleComponent, -halfWidth, -11, -1, false,
                 matrix4f, bufferSource, Font.DisplayMode.NORMAL, 0, packedLight);
     }
 }
