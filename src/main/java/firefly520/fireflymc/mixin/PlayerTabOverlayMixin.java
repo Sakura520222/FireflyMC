@@ -32,9 +32,9 @@ public class PlayerTabOverlayMixin {
         String title = ClientState.titleMap.get(uuid);
         if (title != null && !title.isEmpty()) {
             Component original = cir.getReturnValue();
-            // 称号 + 空格 + 原名
+            // 格式：[称号]玩家ID
             Component withTitle = Component.literal("")
-                    .append(Component.literal(title + " "))
+                    .append(Component.literal("§7[§r" + title + "§7]§r"))
                     .append(original);
             cir.setReturnValue(withTitle);
         }

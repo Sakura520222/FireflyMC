@@ -218,7 +218,7 @@ public class HUDRenderer
         String title = ClientState.titleMap.get(entry.uuid());
         MutableComponent displayComponent = Component.literal("");
         if (title != null && !title.isEmpty()) {
-          displayComponent.append(Component.literal(title + " "));
+          displayComponent.append(Component.literal("§7[§r" + title + "§7]§r"));
         }
         displayComponent.append(Component.literal(entry.name()));
         guiGraphics.drawString(font, displayComponent, x + 8, y, TEXT_COLOR);

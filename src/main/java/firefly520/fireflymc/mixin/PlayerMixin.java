@@ -32,8 +32,9 @@ public class PlayerMixin {
         String title = TitleManager.getInstance().getTitle(self.getUUID());
         if (title != null && !title.isEmpty()) {
             Component original = cir.getReturnValue();
+            // 格式：[称号]玩家ID
             Component withTitle = Component.literal("")
-                    .append(Component.literal(title + " "))
+                    .append(Component.literal("§7[§r" + title + "§7]§r"))
                     .append(original);
             cir.setReturnValue(withTitle);
         }
