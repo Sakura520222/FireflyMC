@@ -72,6 +72,17 @@ public class HUDRenderer
     // 计算网址换行后的行数
     int urlLines = font.split(WEBSITE_URL, baseWidth).size();
 
+    // 扩展宽度以容纳称号+玩家名的最长行
+    for (PlayerEntry pe : players) {
+      String t = ClientState.titleMap.get(pe.uuid());
+      StringBuilder sb = new StringBuilder();
+      if (t != null && !t.isEmpty()) {
+        sb.append("§7[§r").append(t).append("§7]§r");
+      }
+      sb.append(pe.name());
+      baseWidth = Math.max(baseWidth, font.width(sb.toString()));
+    }
+
     // 总高度 = 服务器名(1行) + 在线人数(1行) + 网址(urlLines行) + 分隔线(1行) + 实际可见玩家列表行
     int visiblePlayerCount = Math.min(playerCount, MAX_VISIBLE_PLAYERS);
     int playerListHeight = lineHeight * (visiblePlayerCount + 1); // +1 for separator
@@ -215,40 +226,13 @@ public class HUDRenderer
       if (playerIndex < totalPlayers) {
         PlayerEntry entry = players.get(playerIndex);
         String title = ClientState.titleMap.get(entry.uuid());
-        // 构建纯文本（用于宽度计算和滚动）与带颜色文本（用于渲染）
-        String plainText;
-        String coloredText;
+        String displayText;
         if (title != null && !title.isEmpty()) {
-          plainText = "[" + title + "]" + entry.name();
-          coloredText = "§7[§r" + title + "§7]§r" + entry.name();
+          displayText = "§7[§r" + title + "§7]§r" + entry.name();
         } else {
-          plainText = entry.name();
-          coloredText = entry.name();
+          displayText = entry.name();
         }
-
-        int textWidth = font.width(plainText);
-
-        if (textWidth <= width) {
-          guiGraphics.drawString(font, Component.literal(coloredText), x + 8, y, TEXT_COLOR);
-        } else {
-          // 跑马灯滚动（与网址滚动逻辑完全一致，基于纯文本计算）
-          long time = System.currentTimeMillis();
-          int scrollSpeed = 200;
-          int cycle = plainText.length() + 5;
-          int offset = (int) ((time / scrollSpeed) % cycle);
-
-          String scrollPlain = plainText + "     " + plainText.substring(0, Math.min(offset, plainText.length()));
-          int maxChars = 0;
-          int testWidth = 0;
-          for (int ci = offset; ci < scrollPlain.length(); ci++) {
-            int charWidth = font.width(scrollPlain.substring(ci, ci + 1));
-            if (testWidth + charWidth > width) break;
-            testWidth += charWidth;
-            maxChars++;
-          }
-          String visibleText = scrollPlain.substring(offset, Math.min(offset + maxChars, scrollPlain.length()));
-          guiGraphics.drawString(font, Component.literal(visibleText), x + 8, y, TEXT_COLOR);
-        }
+        guiGraphics.drawString(font, Component.literal(displayText), x + 8, y, TEXT_COLOR);
         y += lineHeight;
       }
     }
