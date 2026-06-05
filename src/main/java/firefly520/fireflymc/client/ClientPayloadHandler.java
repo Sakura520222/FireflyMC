@@ -7,6 +7,7 @@ import firefly520.fireflymc.network.ModHandshakePayload;
 import firefly520.fireflymc.network.ModHandshakeReplyPayload;
 import firefly520.fireflymc.network.PasswordPromptPayload;
 import firefly520.fireflymc.network.ShowRulesPayload;
+import firefly520.fireflymc.network.TitleSyncPayload;
 import net.minecraft.client.Minecraft;
 import net.neoforged.neoforge.network.handling.IPayloadContext;
 
@@ -52,6 +53,16 @@ public class ClientPayloadHandler {
                         payload.remainingAttempts()
                 ));
             }
+        });
+    }
+
+    /**
+     * 客户端处理服务端发来的称号同步包，更新本地缓存
+     */
+    public static void handleTitleSync(TitleSyncPayload payload, IPayloadContext context) {
+        context.enqueueWork(() -> {
+            ClientState.titleMap.clear();
+            ClientState.titleMap.putAll(payload.titles());
         });
     }
 }

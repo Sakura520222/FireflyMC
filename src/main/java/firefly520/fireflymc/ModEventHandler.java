@@ -5,6 +5,9 @@ import firefly520.fireflymc.playtime.PlaytimeManager;
 import firefly520.fireflymc.network.ModHandshakePayload;
 import firefly520.fireflymc.network.ModPayloadHandler;
 import firefly520.fireflymc.network.ShowRulesPayload;
+import firefly520.fireflymc.network.TitleSyncPayload;
+import firefly520.fireflymc.title.TitleCommandHandler;
+import firefly520.fireflymc.title.TitleManager;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
@@ -90,6 +93,16 @@ public class ModEventHandler {
 
             // 通知在线时长管理器
             PlaytimeManager.getInstance().onPlayerLogin(serverPlayer);
+
+            // 同步称号数据给新登录的玩家
+            if (TitleManager.getInstance().size() > 0) {
+                java.util.Map<UUID, String> allTitles = TitleManager.getInstance().getAllTitles();
+                java.util.Map<String, String> stringKeyMap = new java.util.HashMap<>();
+                for (Map.Entry<UUID, String> entry : allTitles.entrySet()) {
+                    stringKeyMap.put(entry.getKey().toString(), entry.getValue());
+                }
+                PacketDistributor.sendToPlayer(serverPlayer, new TitleSyncPayload(stringKeyMap));
+            }
         }
     }
 

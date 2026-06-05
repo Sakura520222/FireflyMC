@@ -22,6 +22,7 @@ public class ServerConfig {
         public final ModConfigSpec.BooleanValue enableItemCleanup;
         public final ModConfigSpec.IntValue itemCleanupIntervalMinutes;
         public final ModConfigSpec.IntValue itemCleanupWarningSeconds;
+        public final ModConfigSpec.IntValue itemCleanupCountdownSeconds;
 
         // 玩家密码验证配置
         public final ModConfigSpec.BooleanValue playerAuthEnabled;
@@ -66,22 +67,28 @@ public class ServerConfig {
 
         public ServerConfigImpl(ModConfigSpec.Builder builder) {
             builder.push("server")
+                    .comment("服务器配置")
                     .translation("fireflymc.config.server");
 
             enableItemCleanup = builder
-                    .comment("Enable automatic item cleanup (remove dropped items periodically)")
+                    .comment("是否启用掉落物自动清理（定期移除地面掉落物）")
                     .translation("fireflymc.config.server.enable_item_cleanup")
                     .define("enableItemCleanup", true);
 
             itemCleanupIntervalMinutes = builder
-                    .comment("Item cleanup interval in minutes")
+                    .comment("掉落物清理间隔（分钟）")
                     .translation("fireflymc.config.server.item_cleanup_interval_minutes")
                     .defineInRange("itemCleanupIntervalMinutes", 5, 1, 60);
 
             itemCleanupWarningSeconds = builder
-                    .comment("Warning time before item cleanup in seconds (0 to disable)")
+                    .comment("清理前警告时间（秒），0表示不警告")
                     .translation("fireflymc.config.server.item_cleanup_warning_seconds")
                     .defineInRange("itemCleanupWarningSeconds", 60, 0, 300);
+
+            itemCleanupCountdownSeconds = builder
+                    .comment("倒计时提醒时长（秒），在清理前最后N秒通过ActionBar逐秒倒计时，0表示不倒计时")
+                    .translation("fireflymc.config.server.item_cleanup_countdown_seconds")
+                    .defineInRange("itemCleanupCountdownSeconds", 10, 0, 60);
 
             builder.pop();
 

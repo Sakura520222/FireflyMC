@@ -17,7 +17,7 @@ import firefly520.fireflymc.Config;
 
 public class HUDRenderer
 {
-  private static final Component SERVER_NAME = Component.literal("FireflyMC 2.5.2");
+  private static final Component SERVER_NAME = Component.literal("FireflyMC 2.5.3");
   private static final Component WEBSITE_URL = Component.literal("https://mc.firefly520.top");
   private static final Component PLAYER_COUNT_PREFIX = Component.literal("在线人数: ");
 
@@ -29,6 +29,9 @@ public class HUDRenderer
   private static final int BORDER_COLOR = 0x40FFFFFF;  // 白色半透明
   private static final int BORDER_RADIUS = 4;
   private static final int BORDER_THICKNESS = 1;
+
+  /** 玩家条目：UUID字符串 + 玩家名 */
+  private record PlayerEntry(String uuid, String name) {}
 
 
   public static void render(GuiGraphics guiGraphics) {
@@ -53,8 +56,8 @@ public class HUDRenderer
     }
 
 
-    List<String> playerNames = getOnlinePlayerNames(player);
-    int playerCount = playerNames.size();
+    List<PlayerEntry> players = getOnlinePlayers(player);
+    int playerCount = players.size();
 
 
     Font font = mc.font;
@@ -68,6 +71,17 @@ public class HUDRenderer
 
     // 计算网址换行后的行数
     int urlLines = font.split(WEBSITE_URL, baseWidth).size();
+
+    // 扩展宽度以容纳称号+玩家名的最长行
+    for (PlayerEntry pe : players) {
+      String t = ClientState.titleMap.get(pe.uuid());
+      StringBuilder sb = new StringBuilder();
+      if (t != null && !t.isEmpty()) {
+        sb.append("§7[§r").append(t).append("§7]§r");
+      }
+      sb.append(pe.name());
+      baseWidth = Math.max(baseWidth, font.width(sb.toString()));
+    }
 
     // 总高度 = 服务器名(1行) + 在线人数(1行) + 网址(urlLines行) + 分隔线(1行) + 实际可见玩家列表行
     int visiblePlayerCount = Math.min(playerCount, MAX_VISIBLE_PLAYERS);
@@ -141,52 +155,54 @@ public class HUDRenderer
     y += lineHeight;
 
     // 渲染玩家列表
-    renderPlayerList(guiGraphics, font, x, y, baseWidth, lineHeight, playerNames);
+    renderPlayerList(guiGraphics, font, x, y, baseWidth, lineHeight, players);
 
     // 恢复缩放
     guiGraphics.pose().popPose();
   }
 
 
-  private static List<String> getOnlinePlayerNames(LocalPlayer player) {
-    List<String> playerNames = new ArrayList<>();
+  private static List<PlayerEntry> getOnlinePlayers(LocalPlayer player) {
+    List<PlayerEntry> players = new ArrayList<>();
     ClientPacketListener connection = player.connection;
 
     if (connection != null) {
       try {
         Collection<?> onlinePlayers = connection.getOnlinePlayers();
         if (onlinePlayers != null) {
-          playerNames = onlinePlayers.stream()
+          players = onlinePlayers.stream()
             .map(p -> {
               try {
                 Object profile = p.getClass().getMethod("getProfile").invoke(p);
                 if (profile != null) {
                   Object name = profile.getClass().getMethod("getName").invoke(profile);
-                  return name != null ? name.toString() : null;
+                  Object id = profile.getClass().getMethod("getId").invoke(profile);
+                  String uuid = id != null ? id.toString() : "";
+                  return name != null ? new PlayerEntry(uuid, name.toString()) : null;
                 }
               } catch (Exception ignored) {
               }
               return null;
             })
-            .filter(name -> name != null)
+            .filter(e -> e != null)
             .collect(Collectors.toList());
         }
       } catch (Exception e) {
-        playerNames.add(player.getName().getString());
+        players.add(new PlayerEntry(player.getUUID().toString(), player.getName().getString()));
       }
     }
 
-    if (playerNames.isEmpty()) {
-      playerNames.add(player.getName().getString());
+    if (players.isEmpty()) {
+      players.add(new PlayerEntry(player.getUUID().toString(), player.getName().getString()));
     }
 
-    return playerNames;
+    return players;
   }
 
   private static int renderPlayerList(GuiGraphics guiGraphics, Font font,
                                      int x, int y, int width, int lineHeight,
-                                     List<String> playerNames) {
-    int totalPlayers = playerNames.size();
+                                     List<PlayerEntry> players) {
+    int totalPlayers = players.size();
 
     // 分隔线
     guiGraphics.drawString(font, Component.literal("──在线玩家──"), x + 8, y, TEXT_COLOR);
@@ -203,13 +219,20 @@ public class HUDRenderer
       }
     }
 
-    // 渲染可见玩家
+    // 渲染可见玩家（称号 + 玩家名）
     int visibleCount = Math.min(MAX_VISIBLE_PLAYERS, totalPlayers);
     for (int i = 0; i < visibleCount; i++) {
       int playerIndex = scrollOffset + i;
       if (playerIndex < totalPlayers) {
-        String playerName = playerNames.get(playerIndex);
-        guiGraphics.drawString(font, Component.literal(playerName), x + 8, y, TEXT_COLOR);
+        PlayerEntry entry = players.get(playerIndex);
+        String title = ClientState.titleMap.get(entry.uuid());
+        String displayText;
+        if (title != null && !title.isEmpty()) {
+          displayText = "§7[§r" + title + "§7]§r" + entry.name();
+        } else {
+          displayText = entry.name();
+        }
+        guiGraphics.drawString(font, Component.literal(displayText), x + 8, y, TEXT_COLOR);
         y += lineHeight;
       }
     }
