@@ -26,7 +26,7 @@ import firefly520.fireflymc.util.ServerLanguageLoader;
 @Mod(FireflyMCMod.MODID)
 public class FireflyMCMod {
   public static final String MODID = "fireflymc";
-  public static final String VERSION = "2.5.3";
+  public static final String VERSION = "2.5.4";
 
   public FireflyMCMod(IEventBus modEventBus, ModContainer modContainer) {
     // 1. 注册客户端配置（官方标准写法）
@@ -73,7 +73,7 @@ public class FireflyMCMod {
     // 5. 检查Mod更新
     UpdateChecker.checkForUpdate();
 
-    System.out.println("Loading FireflyMC 2.5.3");
+    System.out.println("Loading FireflyMC 2.5.4");
   }
 
   // 配置热重载时更新缓存
