@@ -64,6 +64,10 @@ public final class RelayLobbyMessage {
     @SerializedName("p2pToken")
     private final String p2pToken;
 
+    /** P2P candidate（IPv6 直连自报用），仅 p2p_candidate 消息非空。 */
+    @SerializedName("candidate")
+    private final Candidate candidate;
+
     @SerializedName("modVersion")
     private final String modVersion;
 
@@ -108,13 +112,14 @@ public final class RelayLobbyMessage {
         this.p2pProtocolVersion = p2pProtocolVersion;
         this.p2pSessionId = p2pSessionId;
         this.p2pToken = p2pToken;
+        this.candidate = null;
         this.modVersion = FireflyMCMod.VERSION;
         this.minecraftVersion = "1.21.1";
         this.timestamp = System.currentTimeMillis();
     }
 
     private RelayLobbyMessage(String type, String roomId, String guestSessionId, String p2pSessionId,
-                              String p2pToken, String reason) {
+                              String p2pToken, String reason, Candidate candidate) {
         this.type = type;
         this.roomId = roomId;
         this.worldName = null;
@@ -132,6 +137,7 @@ public final class RelayLobbyMessage {
         this.p2pProtocolVersion = 1;
         this.p2pSessionId = p2pSessionId;
         this.p2pToken = p2pToken;
+        this.candidate = candidate;
         this.modVersion = FireflyMCMod.VERSION;
         this.minecraftVersion = "1.21.1";
         this.timestamp = System.currentTimeMillis();
@@ -182,19 +188,29 @@ public final class RelayLobbyMessage {
     }
 
     public static RelayLobbyMessage p2pOffer(String roomId, String guestSessionId, String p2pSessionId, String p2pToken) {
-        return new RelayLobbyMessage("p2p_offer", roomId, guestSessionId, p2pSessionId, p2pToken, null);
+        return new RelayLobbyMessage("p2p_offer", roomId, guestSessionId, p2pSessionId, p2pToken, null, null);
     }
 
     public static RelayLobbyMessage p2pReady(String roomId, String guestSessionId, String p2pSessionId, String p2pToken) {
-        return new RelayLobbyMessage("p2p_ready", roomId, guestSessionId, p2pSessionId, p2pToken, null);
+        return new RelayLobbyMessage("p2p_ready", roomId, guestSessionId, p2pSessionId, p2pToken, null, null);
     }
 
     public static RelayLobbyMessage p2pFailed(String roomId, String guestSessionId, String p2pSessionId, String p2pToken, String reason) {
-        return new RelayLobbyMessage("p2p_failed", roomId, guestSessionId, p2pSessionId, p2pToken, reason);
+        return new RelayLobbyMessage("p2p_failed", roomId, guestSessionId, p2pSessionId, p2pToken, reason, null);
     }
 
     public static RelayLobbyMessage relayFallback(String roomId, String guestSessionId, String p2pSessionId, String p2pToken, String reason) {
-        return new RelayLobbyMessage("relay_fallback", roomId, guestSessionId, p2pSessionId, p2pToken, reason);
+        return new RelayLobbyMessage("relay_fallback", roomId, guestSessionId, p2pSessionId, p2pToken, reason, null);
+    }
+
+    /**
+     * 构造 p2p_candidate 消息：向对端上报本端 candidate。
+     * IPv6 直连用，candidateAddress 可为 IPv6 字面量，经服务器原样转发给对端。
+     */
+    public static RelayLobbyMessage p2pCandidate(String roomId, String guestSessionId, String p2pSessionId,
+                                                 String p2pToken, String candidateAddress, int candidatePort) {
+        return new RelayLobbyMessage("p2p_candidate", roomId, guestSessionId, p2pSessionId, p2pToken, null,
+                new Candidate(candidateAddress, candidatePort));
     }
 
     public String type() {
@@ -252,9 +268,19 @@ public final class RelayLobbyMessage {
         if (p2pToken != null) {
             json.addProperty("p2pToken", p2pToken);
         }
+        if (candidate != null) {
+            JsonObject candidateJson = new JsonObject();
+            candidateJson.addProperty("address", candidate.address());
+            candidateJson.addProperty("port", candidate.port());
+            json.add("candidate", candidateJson);
+        }
         json.addProperty("modVersion", modVersion);
         json.addProperty("minecraftVersion", minecraftVersion);
         json.addProperty("timestamp", timestamp);
         return GSON.toJson(json);
+    }
+
+    /** P2P candidate 载荷，address 可为 IPv4 或 IPv6 字面量。 */
+    public record Candidate(String address, int port) {
     }
 }

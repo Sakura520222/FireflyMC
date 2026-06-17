@@ -116,6 +116,10 @@ public final class RelayGuestJoiner {
 
     public static void stopActiveRelay(String reason) {
         if (activeP2PProxy != null) {
+            if (connectingToRelayRoom.get() && !activeP2PProxy.hasAcceptedClientConnection()) {
+                LOGGER.debug("[FireflyMC] 忽略连接阶段的断开事件（P2P），等待本地代理连接或超时: {}", reason);
+                return;
+            }
             activeP2PProxy.stop(reason);
             activeP2PProxy = null;
             pendingRoomId = null;

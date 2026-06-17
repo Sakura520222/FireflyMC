@@ -27,6 +27,7 @@ public class Config {
     public final ModConfigSpec.ConfigValue<Integer> SINGLEPLAYER_RELAY_P2P_UDP_PORT_MAX;
     public final ModConfigSpec.ConfigValue<Integer> SINGLEPLAYER_RELAY_P2P_RETRANSMIT_MILLIS;
     public final ModConfigSpec.ConfigValue<Integer> SINGLEPLAYER_RELAY_P2P_WINDOW_SIZE;
+    public final ModConfigSpec.BooleanValue SINGLEPLAYER_RELAY_P2P_IPV6_ENABLED;
     public final ModConfigSpec.BooleanValue EVENT_NOTIFICATION_ENABLED;
     public final ModConfigSpec.ConfigValue<String> EVENT_NOTIFICATION_URL;
     public final ModConfigSpec.BooleanValue EVENT_NOTIFICATION_AUTO_RECONNECT;
@@ -103,6 +104,11 @@ public class Config {
         .comment("Reliable UDP sliding window size in packets")
         .translation("fireflymc.config.singleplayer_relay.p2p_window_size")
         .define("p2pWindowSize", 64);
+
+      SINGLEPLAYER_RELAY_P2P_IPV6_ENABLED = builder
+        .comment("Try direct IPv6 connection first when both peers have public IPv6 addresses")
+        .translation("fireflymc.config.singleplayer_relay.p2p_ipv6_enabled")
+        .define("p2pIpv6Enabled", true);
 
       builder.pop();
 

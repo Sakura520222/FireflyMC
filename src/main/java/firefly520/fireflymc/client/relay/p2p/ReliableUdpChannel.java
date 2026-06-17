@@ -44,6 +44,8 @@ public class ReliableUdpChannel {
     private final Thread receiverThread;
     private final AtomicBoolean running = new AtomicBoolean(false);
     private volatile InetSocketAddress peerAddress;
+    /** 主动打洞/直连的候选地址列表（IPv6 优先），运行期可通过 addCandidate 追加。 */
+    private final List<InetSocketAddress> peerCandidatesAddresses = new java.util.concurrent.CopyOnWriteArrayList<>();
     private volatile boolean observedByServer;
     private volatile boolean punchedPeer;
     private volatile boolean loggedObserved;
@@ -76,15 +78,27 @@ public class ReliableUdpChannel {
     }
 
     public CompletableFuture<Boolean> probeAndPunch(P2PJoinInfo info, P2PCandidate peerCandidate, String role) {
+        return probeAndPunch(info,
+                peerCandidate != null && peerCandidate.isValid() ? List.of(peerCandidate) : List.of(),
+                role);
+    }
+
+    /**
+     * 发起探测与打洞，支持多个候选地址（IPv6 优先）。
+     *
+     * <p>持续向服务器探测地址发 probe（维持 IPv4 NAT 映射观测），同时向所有候选地址
+     * 发 punch。任一候选双向打通即视为成功（punchedPeer）。IPv6 候选因通常无 NAT，
+     * 无需服务器观测即可直连成功；故成功条件不再强制 observedByServer。
+     */
+    public CompletableFuture<Boolean> probeAndPunch(P2PJoinInfo info, List<P2PCandidate> peerCandidates, String role) {
         CompletableFuture<Boolean> result = new CompletableFuture<>();
         if (!info.isUsable()) {
             result.complete(false);
             return result;
         }
         running.set(true);
-        if (peerCandidate != null && peerCandidate.isValid()) {
-            peerAddress = peerCandidate.toSocketAddress();
-            LOGGER.info("[FireflyMC] P2P 初始 peer candidate: udpPort={}", peerAddress.getPort());
+        for (P2PCandidate candidate : peerCandidates) {
+            addCandidate(candidate);
         }
         if (!receiverThread.isAlive()) {
             receiverThread.start();
@@ -95,16 +109,16 @@ public class ReliableUdpChannel {
                 : RelayConfig.RELAY.SINGLEPLAYER_RELAY_P2P_CONNECT_TIMEOUT_SECONDS.get();
         byte[] probe = UdpPacketCodec.probe(info.roomId(), info.guestSessionId(), role, info.p2pToken());
         byte[] punch = UdpPacketCodec.punch(info.roomId(), info.guestSessionId(), role, info.p2pToken());
-        LOGGER.info("[FireflyMC] P2P {} 开始探测: serverUdpPort={}, localUdp={}, timeout={}s",
-            role, serverAddress.getPort(), localPort(), timeout);
+        LOGGER.info("[FireflyMC] P2P {} 开始探测: serverUdpPort={}, localUdp={}, candidates={}, timeout={}s",
+            role, serverAddress.getPort(), localPort(), peerCandidatesAddresses.size(), timeout);
         ScheduledFuture<?> probeTask = executor.scheduleAtFixedRate(() -> {
             send(serverAddress, probe);
-            InetSocketAddress peer = peerAddress;
-            if (peer != null) {
+            for (InetSocketAddress peer : peerCandidatesAddresses) {
                 send(peer, punch);
             }
-            if (observedByServer && punchedPeer && !result.isDone()) {
-                LOGGER.info("[FireflyMC] P2P {} 打洞完成: peerUdpPort={}", role, peerAddress != null ? peerAddress.getPort() : -1);
+            if (punchedPeer && !result.isDone()) {
+                LOGGER.info("[FireflyMC] P2P {} 直连/打洞完成: peerUdpPort={}, observedByServer={}",
+                        role, peerAddress != null ? peerAddress.getPort() : -1, observedByServer);
                 sendWindow.start();
                 startIdleCheck();
                 result.complete(true);
@@ -127,11 +141,20 @@ public class ReliableUdpChannel {
         return result;
     }
 
-    public void setPeerCandidate(P2PCandidate candidate) {
-        if (candidate != null && candidate.isValid()) {
-            this.peerAddress = candidate.toSocketAddress();
-            LOGGER.info("[FireflyMC] P2P 更新 peer candidate: udpPort={}", this.peerAddress.getPort());
+    /** 加入一个候选地址（IPv6 优先），运行期可多次调用追加新候选（如收到 p2p_candidate）。 */
+    public void addCandidate(P2PCandidate candidate) {
+        if (candidate == null || !candidate.isValid()) {
+            return;
         }
+        InetSocketAddress addr = candidate.toSocketAddress();
+        if (!peerCandidatesAddresses.contains(addr)) {
+            peerCandidatesAddresses.add(addr);
+            LOGGER.info("[FireflyMC] P2P 加入候选: {}, 当前候选数={}", addr, peerCandidatesAddresses.size());
+        }
+    }
+
+    public void setPeerCandidate(P2PCandidate candidate) {
+        addCandidate(candidate);
     }
 
     public void registerStream(int streamId, OutputStream output) {
@@ -359,12 +382,31 @@ public class ReliableUdpChannel {
         if (min > 0 && max >= min) {
             for (int port = min; port <= max; port++) {
                 try {
-                    return new DatagramSocket(port);
+                    return bindDualStackSocket(port);
                 } catch (SocketException ignored) {
                     // try next port
                 }
             }
         }
-        return new DatagramSocket(0);
+        return bindDualStackSocket(0);
+    }
+
+    /**
+     * 创建绑定 IPv6 通配符（::）的 UDP socket。
+     *
+     * <p>双栈系统上同一 socket 可同时收发 IPv6 与 IPv4-mapped 流量，使 IPv6 直连与
+     * IPv4 NAT 打洞共用同一通道。若系统不支持 IPv6（纯 IPv4 环境），回退到 IPv4 socket
+     * 以保持兼容。
+     */
+    private static DatagramSocket bindDualStackSocket(int port) throws SocketException {
+        try {
+            java.nio.channels.DatagramChannel channel =
+                    java.nio.channels.DatagramChannel.open(java.net.StandardProtocolFamily.INET6);
+            channel.bind(new InetSocketAddress(port));
+            return channel.socket();
+        } catch (Exception ipv6Failed) {
+            LOGGER.debug("[FireflyMC] P2P IPv6 socket 绑定失败，回退 IPv4: {}", ipv6Failed.getMessage());
+            return new DatagramSocket(port);
+        }
     }
 }

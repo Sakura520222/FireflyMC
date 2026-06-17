@@ -1,5 +1,6 @@
 package firefly520.fireflymc.client.relay.p2p;
 
+import firefly520.fireflymc.client.relay.RelayConfig;
 import firefly520.fireflymc.client.relay.RelayControlMessage;
 import firefly520.fireflymc.client.relay.RelayLobbyMessage;
 import firefly520.fireflymc.client.relay.RelayLobbyWebSocketClient;
@@ -7,9 +8,11 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.net.SocketException;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CopyOnWriteArrayList;
 
 /** Coordinates P2P attempts and keeps relay fallback decisions centralized. */
 public final class P2PConnectionManager {
@@ -17,9 +20,8 @@ public final class P2PConnectionManager {
     private static final P2PConnectionManager INSTANCE = new P2PConnectionManager();
 
     private final Map<String, ReliableUdpChannel> channels = new ConcurrentHashMap<>();
-    private final Map<String, P2PCandidate> candidates = new ConcurrentHashMap<>();
+    private final Map<String, List<P2PCandidate>> candidates = new ConcurrentHashMap<>();
     private final Map<String, P2PJoinInfo> joinInfos = new ConcurrentHashMap<>();
-    private final Map<String, String> loggedCandidates = new ConcurrentHashMap<>();
     private final Map<String, P2PHostBridge> hostBridges = new ConcurrentHashMap<>();
     private volatile int hostLanPort = -1;
     private volatile String hostRoomId;
@@ -53,8 +55,9 @@ public final class P2PConnectionManager {
             RelayLobbyWebSocketClient.getInstance().sendControl(
                     RelayLobbyMessage.p2pOffer(info.roomId(), info.guestSessionId(), info.p2pSessionId(), info.p2pToken())
             );
-            P2PCandidate candidate = candidates.get(info.guestSessionId());
-            channel.probeAndPunch(info, candidate, "guest").whenComplete((success, error) -> {
+            sendLocalIpv6Candidates(info.roomId(), info.guestSessionId(), info.p2pSessionId(), info.p2pToken(), channel.localPort());
+            List<P2PCandidate> candidateList = candidates.getOrDefault(info.guestSessionId(), List.of());
+            channel.probeAndPunch(info, candidateList, "guest").whenComplete((success, error) -> {
                 if (error != null || !Boolean.TRUE.equals(success)) {
                     RelayLobbyWebSocketClient.getInstance().sendControl(
                             RelayLobbyMessage.relayFallback(info.roomId(), info.guestSessionId(), info.p2pSessionId(), info.p2pToken(), "p2p_timeout")
@@ -88,19 +91,9 @@ public final class P2PConnectionManager {
                 return;
             }
             RelayControlMessage.P2PCandidate raw = message.candidate();
-            P2PCandidate candidate = new P2PCandidate(raw.address(), raw.port());
-            candidates.put(message.guestSessionId(), candidate);
-            ReliableUdpChannel channel = channels.get(message.guestSessionId());
-            if (channel != null) {
-                channel.setPeerCandidate(candidate);
-            }
+            addCandidate(message.guestSessionId(), new P2PCandidate(raw.address(), raw.port()));
             if (message.guestSessionId().equals(hostSessionId)) {
                 startHostProbeIfReady();
-            }
-            String candidateKey = raw.address() + ":" + raw.port();
-            if (!candidateKey.equals(loggedCandidates.put(message.guestSessionId(), candidateKey))) {
-                LOGGER.info("[FireflyMC] P2P 收到对端候选: session={}, udpPort={}",
-                        message.guestSessionId(), raw.port());
             }
         } else if ("guest_joined".equals(message.type()) && message.p2pSupported()) {
             if (message.guestSessionId() == null) {
@@ -149,11 +142,7 @@ public final class P2PConnectionManager {
         }
         try {
             if (channels.containsKey(hostSessionId)) {
-                ReliableUdpChannel channel = channels.get(hostSessionId);
-                P2PCandidate candidate = candidates.get(hostSessionId);
-                if (channel != null && candidate != null) {
-                    channel.setPeerCandidate(candidate);
-                }
+                // 通道已建立，对端候选已通过 addCandidate 动态注入通道，无需重复探测
                 return;
             }
             ReliableUdpChannel channel = new ReliableUdpChannel();
@@ -163,7 +152,8 @@ public final class P2PConnectionManager {
             channel.setOnClose(() -> onChannelClosed(info.guestSessionId()));
                 LOGGER.info("[FireflyMC] P2P Host 开始探测: room={}, session={}, udpPort={}",
                     hostRoomId, hostSessionId, hostUdpPort);
-            channel.probeAndPunch(info, candidates.get(hostSessionId), "host").whenComplete((success, error) -> {
+            sendLocalIpv6Candidates(hostRoomId, hostSessionId, hostRoomId, hostToken, channel.localPort());
+            channel.probeAndPunch(info, candidates.getOrDefault(hostSessionId, List.of()), "host").whenComplete((success, error) -> {
                 if (error != null || !Boolean.TRUE.equals(success)) {
                     LOGGER.warn("[FireflyMC] P2P Host 探测失败，清理 session={}", info.guestSessionId());
                     stop(info.guestSessionId());
@@ -223,5 +213,49 @@ public final class P2PConnectionManager {
         }
         LOGGER.info("[FireflyMC] P2P 收到 guest_leave，清理 session={}", guestSessionId);
         stop(guestSessionId);
+    }
+
+    /** 加入对端候选（IPv6/IPv4 均可），并同步到已建立的通道；同一地址去重。 */
+    private void addCandidate(String sessionId, P2PCandidate candidate) {
+        if (candidate == null || !candidate.isValid()) {
+            return;
+        }
+        List<P2PCandidate> list = candidates.computeIfAbsent(sessionId, k -> new CopyOnWriteArrayList<>());
+        boolean exists = list.stream().anyMatch(c -> c.port() == candidate.port() && candidate.address().equals(c.address()));
+        if (!exists) {
+            list.add(candidate);
+            LOGGER.info("[FireflyMC] P2P 收到候选: session={}, candidate={}:{}, 候选数={}",
+                    sessionId, candidate.address(), candidate.port(), list.size());
+        }
+        ReliableUdpChannel channel = channels.get(sessionId);
+        if (channel != null) {
+            channel.addCandidate(candidate);
+        }
+    }
+
+    /**
+     * 向对端上报本机公网 IPv6 candidate，通过 p2p_candidate 信令经服务器转发给对端。
+     * IPv6 直连用——双方都有公网 IPv6 时可直接端到端连接，无需 NAT 打洞。
+     */
+    private void sendLocalIpv6Candidates(String roomId, String sessionId, String p2pSessionId,
+                                         String token, int localPort) {
+        if (!RelayConfig.RELAY.SINGLEPLAYER_RELAY_P2P_IPV6_ENABLED.get()) {
+            return;
+        }
+        if (localPort <= 0) {
+            return;
+        }
+        List<String> ipv6Addresses = Ipv6AddressCollector.collectGlobalIpv6();
+        if (ipv6Addresses.isEmpty()) {
+            LOGGER.debug("[FireflyMC] P2P 本机无公网 IPv6，跳过 IPv6 candidate 上报");
+            return;
+        }
+        for (String addr : ipv6Addresses) {
+            RelayLobbyWebSocketClient.getInstance().sendControl(
+                    RelayLobbyMessage.p2pCandidate(roomId, sessionId, p2pSessionId, token, addr, localPort)
+            );
+        }
+        LOGGER.info("[FireflyMC] P2P 已上报本机 IPv6 candidate: session={}, count={}, localPort={}",
+                sessionId, ipv6Addresses.size(), localPort);
     }
 }
