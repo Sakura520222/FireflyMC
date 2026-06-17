@@ -311,7 +311,7 @@ public final class RelayLobbyWebSocketClient {
                 }
                 RelayLobbyState.setStatusMessage("Relay 错误: " + message.message());
             }
-                case "host_open_ack", "guest_joined", "p2p_offer", "p2p_answer", "p2p_candidate", "p2p_udp_observed", "p2p_ready", "p2p_failed", "relay_fallback" ->
+                case "host_open_ack", "guest_joined", "guest_leave", "p2p_offer", "p2p_answer", "p2p_candidate", "p2p_udp_observed", "p2p_ready", "p2p_failed", "relay_fallback" ->
                     P2PConnectionManager.getInstance().handleControlMessage(message);
             default -> LOGGER.debug("[FireflyMC] 收到未处理的公开大厅消息: {}", sanitizeRelayJsonForLog(rawJson));
         }

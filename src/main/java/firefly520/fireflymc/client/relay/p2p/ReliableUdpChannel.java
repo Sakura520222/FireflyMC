@@ -58,14 +58,17 @@ public class ReliableUdpChannel {
     private final AtomicLong nextSentLogAt = new AtomicLong(64 * 1024);
     private final AtomicLong nextReceivedLogAt = new AtomicLong(64 * 1024);
     private final SendWindow sendWindow;
+    private volatile Runnable onClose;
     private volatile long lastReceivedAt = System.currentTimeMillis();
     private static final long PEER_IDLE_TIMEOUT_MS = 30_000;
+    /** 发送窗口背压最长等待时间，超过则丢弃当前数据，避免窗口长期不释放时无限堆积。 */
+    private static final long WINDOW_BACKPRESSURE_TIMEOUT_MS = 5_000;
 
     public ReliableUdpChannel() throws SocketException {
         this.socket = createSocket();
         this.receiverThread = new Thread(this::receiveLoop, "FireflyMC-P2P-UDP-Receiver");
         this.receiverThread.setDaemon(true);
-        this.sendWindow = new SendWindow(executor, this::send);
+        this.sendWindow = new SendWindow(executor, this::send, this::handlePeerUnreachable);
     }
 
     public int localPort() {
@@ -157,6 +160,10 @@ public class ReliableUdpChannel {
         while (offset < length) {
             int chunk = Math.min(UdpPacketCodec.MAX_PAYLOAD_SIZE, length - offset);
             byte[] payload = Arrays.copyOfRange(bytes, offset, offset + chunk);
+            if (!awaitWindowSpace()) {
+                LOGGER.warn("[FireflyMC] P2P 发送窗口长时间未释放，丢弃剩余数据: stream={}, remaining={} bytes", streamId, length - offset);
+                return;
+            }
             int seq = nextSeq.getAndIncrement();
             byte[] packet = UdpPacketCodec.data(streamId, seq, lastAck.get(), (byte) 0, payload, payload.length);
             send(peer, packet);
@@ -170,6 +177,26 @@ public class ReliableUdpChannel {
             }
             offset += chunk;
         }
+    }
+
+    /**
+     * 发送窗口背压：窗口满时等待对端 ACK 释放空间，将发送速率与对端处理能力对齐，
+     * 避免在加入方未就绪或网络拥塞时持续灌入并放大流量。
+     */
+    private boolean awaitWindowSpace() {
+        long deadline = System.currentTimeMillis() + WINDOW_BACKPRESSURE_TIMEOUT_MS;
+        while (running.get() && sendWindow.isFull()) {
+            if (System.currentTimeMillis() > deadline) {
+                return false;
+            }
+            try {
+                Thread.sleep(5);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                return false;
+            }
+        }
+        return running.get();
     }
 
     public void sendFin(int streamId) {
@@ -191,6 +218,23 @@ public class ReliableUdpChannel {
         sendWindow.close();
         socket.close();
         executor.shutdownNow();
+        Runnable callback = onClose;
+        if (callback != null) {
+            onClose = null;
+            callback.run();
+        }
+    }
+
+    public void setOnClose(Runnable onClose) {
+        this.onClose = onClose;
+    }
+
+    private void handlePeerUnreachable() {
+        if (!running.get()) {
+            return;
+        }
+        LOGGER.warn("[FireflyMC] P2P 对端不可达，关闭通道: localPort={}", socket.getLocalPort());
+        close();
     }
 
     private void startIdleCheck() {
@@ -250,6 +294,15 @@ public class ReliableUdpChannel {
             sendWindow.acknowledge(decoded.ack());
             return;
         }
+        if ((decoded.flags() & UdpPacketCodec.FLAG_FIN) != 0) {
+            LOGGER.info("[FireflyMC] P2P 收到对端 FIN，关闭通道: stream={}", decoded.streamId());
+            InetSocketAddress peer = peerAddress;
+            if (peer != null) {
+                send(peer, UdpPacketCodec.ack(decoded.streamId(), decoded.seq()));
+            }
+            close();
+            return;
+        }
         lastAck.set(Math.max(lastAck.get(), decoded.seq()));
         // Send ACK back to peer
         InetSocketAddress peer = peerAddress;
@@ -264,7 +317,7 @@ public class ReliableUdpChannel {
             List<UdpPacketCodec.DecodedData> pending = pendingBeforeRegister.computeIfAbsent(
                     decoded.streamId(), ignored -> Collections.synchronizedList(new ArrayList<>())
             );
-            if (pending.size() < 256) {
+            if (pending.size() < 1024) {
                 pending.add(decoded);
                 LOGGER.info("[FireflyMC] P2P 缓存早到数据: stream={}, seq={}, bytes={}, pending={}",
                         decoded.streamId(), decoded.seq(), decoded.payload().length, pending.size());

@@ -47,6 +47,7 @@ public final class P2PConnectionManager {
             ReliableUdpChannel channel = new ReliableUdpChannel();
             channels.put(info.guestSessionId(), channel);
             joinInfos.put(info.guestSessionId(), info);
+            channel.setOnClose(() -> onChannelClosed(info.guestSessionId()));
                 LOGGER.info("[FireflyMC] P2P Guest 开始连接: room={}, session={}, udpPort={}",
                     info.roomId(), info.guestSessionId(), info.udpPort());
             RelayLobbyWebSocketClient.getInstance().sendControl(
@@ -117,6 +118,8 @@ public final class P2PConnectionManager {
             startHostProbeIfReady();
         } else if ("p2p_ready".equals(message.type())) {
             startHostBridge(message.guestSessionId());
+        } else if ("guest_leave".equals(message.type())) {
+            handleGuestLeave(message.guestSessionId());
         }
     }
 
@@ -157,6 +160,7 @@ public final class P2PConnectionManager {
             channels.put(hostSessionId, channel);
             P2PJoinInfo info = new P2PJoinInfo(hostRoomId, hostSessionId, hostRoomId, hostToken, hostUdpHost, hostUdpPort, 10);
             joinInfos.put(hostSessionId, info);
+            channel.setOnClose(() -> onChannelClosed(info.guestSessionId()));
                 LOGGER.info("[FireflyMC] P2P Host 开始探测: room={}, session={}, udpPort={}",
                     hostRoomId, hostSessionId, hostUdpPort);
             channel.probeAndPunch(info, candidates.get(hostSessionId), "host").whenComplete((success, error) -> {
@@ -186,13 +190,38 @@ public final class P2PConnectionManager {
     public void stop(String guestSessionId) {
         ReliableUdpChannel channel = channels.remove(guestSessionId);
         if (channel != null) {
+            channel.setOnClose(null);
             channel.close();
         }
+        onChannelClosed(guestSessionId);
+    }
+
+    /**
+     * channel 自身因 idle 超时、收到对端 FIN 或重传上限触发 {@link ReliableUdpChannel#close()} 时回调，
+     * 负责清理管理器侧的映射并停止对应的 Host bridge，避免房主端在加入方断开后持续发包。
+     */
+    private void onChannelClosed(String guestSessionId) {
+        channels.remove(guestSessionId);
         candidates.remove(guestSessionId);
         joinInfos.remove(guestSessionId);
         P2PHostBridge bridge = hostBridges.remove(guestSessionId);
         if (bridge != null) {
             bridge.stop();
         }
+        if (guestSessionId != null && guestSessionId.equals(hostSessionId)) {
+            hostSessionId = null;
+        }
+    }
+
+    /**
+     * 房主收到加入方的 guest_leave 控制消息时调用，立即停止对应 session 的 P2P 通道与 bridge。
+     * 走 WebSocket 中继传输，不依赖 P2P UDP，是最可靠的房主端清理信号。
+     */
+    public void handleGuestLeave(String guestSessionId) {
+        if (guestSessionId == null) {
+            return;
+        }
+        LOGGER.info("[FireflyMC] P2P 收到 guest_leave，清理 session={}", guestSessionId);
+        stop(guestSessionId);
     }
 }

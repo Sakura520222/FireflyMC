@@ -34,6 +34,7 @@ public final class RelayGuestJoiner {
     private static RelayGuestProxy activeProxy;
     private static String pendingRoomId;
     private static String pendingGuestSessionId;
+    private static P2PGuestProxy activeP2PProxy;
     private static final AtomicBoolean connectingToRelayRoom = new AtomicBoolean(false);
     private static ScheduledFuture<?> connectTimeoutTask;
 
@@ -76,7 +77,16 @@ public final class RelayGuestJoiner {
                                         try {
                                             if (p2pError == null && result != null && result.success()) {
                                                 RelayLobbyState.setStatusMessage("P2P 连接成功");
-                                                P2PGuestProxy proxy = new P2PGuestProxy(result.channel());
+                                                if (activeP2PProxy != null) {
+                                                    activeP2PProxy.stop();
+                                                }
+                                                P2PGuestProxy proxy = new P2PGuestProxy(result.channel(), room.roomId(), guestSessionId);
+                                                proxy.setOnClientAccepted(() -> markP2PProxyAcceptedConnection(proxy));
+                                                activeP2PProxy = proxy;
+                                                pendingRoomId = room.roomId();
+                                                pendingGuestSessionId = guestSessionId;
+                                                connectingToRelayRoom.set(true);
+                                                scheduleP2PConnectTimeout(proxy);
                                                 proxy.start();
                                                 proxy.connectMinecraft(parent, room.worldName());
                                                 return;
@@ -105,6 +115,15 @@ public final class RelayGuestJoiner {
     }
 
     public static void stopActiveRelay(String reason) {
+        if (activeP2PProxy != null) {
+            activeP2PProxy.stop(reason);
+            activeP2PProxy = null;
+            pendingRoomId = null;
+            pendingGuestSessionId = null;
+            connectingToRelayRoom.set(false);
+            cancelConnectTimeout();
+            return;
+        }
         if (connectingToRelayRoom.get() && activeProxy != null && !activeProxy.hasAcceptedClientConnection()) {
             LOGGER.debug("[FireflyMC] 忽略连接阶段的断开事件，等待本地代理连接或超时: {}", reason);
             return;
@@ -131,6 +150,13 @@ public final class RelayGuestJoiner {
 
     public static void markProxyAcceptedConnection(RelayGuestProxy proxy) {
         if (activeProxy == proxy) {
+            connectingToRelayRoom.set(false);
+            cancelConnectTimeout();
+        }
+    }
+
+    public static void markP2PProxyAcceptedConnection(P2PGuestProxy proxy) {
+        if (activeP2PProxy == proxy) {
             connectingToRelayRoom.set(false);
             cancelConnectTimeout();
         }
@@ -176,8 +202,22 @@ public final class RelayGuestJoiner {
         }), CONNECT_TIMEOUT_SECONDS, TimeUnit.SECONDS);
     }
 
+    private static void scheduleP2PConnectTimeout(P2PGuestProxy proxy) {
+        cancelConnectTimeout();
+        connectTimeoutTask = EXECUTOR.schedule(() -> Minecraft.getInstance().execute(() -> {
+            if (activeP2PProxy == proxy && connectingToRelayRoom.get() && !proxy.hasAcceptedClientConnection()) {
+                LOGGER.warn("[FireflyMC] P2P 加入公开房间超时，本地客户端未连接代理，释放房间名额");
+                forceStopActiveRelay("connect_timeout");
+                RelayLobbyState.setStatusMessage("连接超时，已释放房间名额");
+            }
+        }), CONNECT_TIMEOUT_SECONDS, TimeUnit.SECONDS);
+    }
+
     private static void forceStopActiveRelay(String reason) {
-        if (activeProxy != null) {
+        if (activeP2PProxy != null) {
+            activeP2PProxy.stop(reason);
+            activeP2PProxy = null;
+        } else if (activeProxy != null) {
             activeProxy.stop(reason);
             activeProxy = null;
         } else if (pendingRoomId != null && pendingGuestSessionId != null) {

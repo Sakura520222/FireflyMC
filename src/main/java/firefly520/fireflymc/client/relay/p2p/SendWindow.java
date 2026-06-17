@@ -20,11 +20,14 @@ import java.util.concurrent.atomic.AtomicInteger;
 final class SendWindow {
     private static final Logger LOGGER = LoggerFactory.getLogger(SendWindow.class);
     private static final int MAX_WINDOW = 128;
+    /** 单包最大重传次数，超过则判定对端不可达，触发通道关闭以停止持续发包。 */
+    private static final int MAX_RETRIES = 20;
 
     private final Map<Integer, SentPacket> unacked = new ConcurrentHashMap<>();
     private final AtomicInteger lastAckedSeq = new AtomicInteger(0);
     private final ScheduledExecutorService executor;
     private final UdpSender sender;
+    private final Runnable onPeerUnreachable;
     private ScheduledFuture<?> retransmitTask;
     private volatile boolean closed;
 
@@ -32,9 +35,10 @@ final class SendWindow {
         void send(InetSocketAddress target, byte[] packet);
     }
 
-    SendWindow(ScheduledExecutorService executor, UdpSender sender) {
+    SendWindow(ScheduledExecutorService executor, UdpSender sender, Runnable onPeerUnreachable) {
         this.executor = executor;
         this.sender = sender;
+        this.onPeerUnreachable = onPeerUnreachable;
     }
 
     void start() {
@@ -44,7 +48,7 @@ final class SendWindow {
 
     void record(int seq, byte[] packet, InetSocketAddress target) {
         if (closed) return;
-        unacked.put(seq, new SentPacket(packet, target, System.currentTimeMillis()));
+        unacked.put(seq, new SentPacket(seq, packet, target, System.currentTimeMillis()));
         // Evict very old packets to prevent memory leak
         if (unacked.size() > MAX_WINDOW * 4) {
             int cutoff = lastAckedSeq.get() - MAX_WINDOW;
@@ -63,6 +67,10 @@ final class SendWindow {
         return unacked.size();
     }
 
+    boolean isFull() {
+        return unacked.size() >= MAX_WINDOW;
+    }
+
     void close() {
         closed = true;
         if (retransmitTask != null) {
@@ -78,6 +86,14 @@ final class SendWindow {
         int retransmitted = 0;
         for (SentPacket sp : unacked.values()) {
             if (now - sp.sentAt >= retransmitMs) {
+                sp.retryCount++;
+                if (sp.retryCount > MAX_RETRIES) {
+                    LOGGER.warn("[FireflyMC] P2P 对端不可达: seq={} 已重传 {} 次未确认，触发关闭", sp.seq, sp.retryCount);
+                    if (onPeerUnreachable != null) {
+                        onPeerUnreachable.run();
+                    }
+                    return;
+                }
                 sender.send(sp.target, sp.packet);
                 sp.sentAt = now;
                 retransmitted++;
@@ -89,11 +105,14 @@ final class SendWindow {
     }
 
     private static class SentPacket {
+        final int seq;
         final byte[] packet;
         final InetSocketAddress target;
         volatile long sentAt;
+        volatile int retryCount;
 
-        SentPacket(byte[] packet, InetSocketAddress target, long sentAt) {
+        SentPacket(int seq, byte[] packet, InetSocketAddress target, long sentAt) {
+            this.seq = seq;
             this.packet = packet;
             this.target = target;
             this.sentAt = sentAt;
