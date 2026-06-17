@@ -60,7 +60,7 @@ public class ReliableUdpChannel {
     private final AtomicLong nextSentLogAt = new AtomicLong(64 * 1024);
     private final AtomicLong nextReceivedLogAt = new AtomicLong(64 * 1024);
     private final SendWindow sendWindow;
-    private volatile Runnable onClose;
+    private final java.util.concurrent.CopyOnWriteArrayList<Runnable> closeHandlers = new java.util.concurrent.CopyOnWriteArrayList<>();
     private volatile long lastReceivedAt = System.currentTimeMillis();
     private static final long PEER_IDLE_TIMEOUT_MS = 30_000;
     /** 发送窗口背压最长等待时间，超过则丢弃当前数据，避免窗口长期不释放时无限堆积。 */
@@ -241,15 +241,28 @@ public class ReliableUdpChannel {
         sendWindow.close();
         socket.close();
         executor.shutdownNow();
-        Runnable callback = onClose;
-        if (callback != null) {
-            onClose = null;
-            callback.run();
+        for (Runnable handler : closeHandlers) {
+            try {
+                handler.run();
+            } catch (Exception e) {
+                LOGGER.warn("[FireflyMC] P2P close handler 异常: {}", e.getMessage());
+            }
         }
+        closeHandlers.clear();
     }
 
     public void setOnClose(Runnable onClose) {
-        this.onClose = onClose;
+        closeHandlers.clear();
+        if (onClose != null) {
+            closeHandlers.add(onClose);
+        }
+    }
+
+    /** 追加 close 回调；通道关闭时全部触发，可用于级联断开本地连接（如房主退出后断开 MC）。 */
+    public void addCloseHandler(Runnable handler) {
+        if (handler != null) {
+            closeHandlers.add(handler);
+        }
     }
 
     private void handlePeerUnreachable() {

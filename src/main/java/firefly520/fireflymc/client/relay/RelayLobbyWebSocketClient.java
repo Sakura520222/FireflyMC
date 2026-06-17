@@ -309,7 +309,14 @@ public final class RelayLobbyWebSocketClient {
                     pendingJoin.completeExceptionally(new IllegalStateException(message.code() + ": " + message.message()));
                     pendingJoin = null;
                 }
-                RelayLobbyState.setStatusMessage("Relay 错误: " + message.message());
+                if ("ROOM_CLOSED".equals(message.code())) {
+                    // 房主退出/断开导致房间关闭，立即断开本地 P2P 与 MC 连接，避免滞留幽灵世界
+                    LOGGER.info("[FireflyMC] 房间已关闭（房主退出），断开联机");
+                    RelayLobbyState.setStatusMessage("房主已退出，房间关闭");
+                    RelayGuestJoiner.stopActiveRelay("room_closed");
+                } else {
+                    RelayLobbyState.setStatusMessage("Relay 错误: " + message.message());
+                }
             }
                 case "host_open_ack", "guest_joined", "guest_leave", "p2p_offer", "p2p_answer", "p2p_candidate", "p2p_udp_observed", "p2p_ready", "p2p_failed", "relay_fallback" ->
                     P2PConnectionManager.getInstance().handleControlMessage(message);

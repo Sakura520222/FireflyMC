@@ -41,11 +41,27 @@ public class P2PGuestProxy {
     private Runnable onClientAccepted;
     private ServerSocket serverSocket;
     private int localPort = -1;
+    private volatile Socket clientSocket;
 
     public P2PGuestProxy(ReliableUdpChannel channel, String roomId, String guestSessionId) {
         this.channel = channel;
         this.roomId = roomId;
         this.guestSessionId = guestSessionId;
+        // P2P 通道断开（如房主退出导致对端不可达）时，立即关闭本地 Minecraft 连接，
+        // 否则 MC 的 TCP 连接到本地代理保持，玩家会滞留在无服务器响应的"幽灵世界"。
+        channel.addCloseHandler(this::onChannelClosed);
+    }
+
+    /** P2P 通道断开时关闭本地 Minecraft 连接，使 MC 检测到断开并返回菜单。 */
+    private void onChannelClosed() {
+        Socket socket = clientSocket;
+        if (socket != null && !socket.isClosed()) {
+            try {
+                socket.close();
+            } catch (IOException ignored) {
+            }
+        }
+        LOGGER.info("[FireflyMC] P2P 通道断开，已断开本地 Minecraft 连接");
     }
 
     public String roomId() {
@@ -116,6 +132,7 @@ public class P2PGuestProxy {
         while (running.get()) {
             try {
                 Socket socket = serverSocket.accept();
+                clientSocket = socket;
                 socket.setTcpNoDelay(true);
                 socket.setReceiveBufferSize(SOCKET_BUFFER_SIZE);
                 socket.setSendBufferSize(SOCKET_BUFFER_SIZE);
