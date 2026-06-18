@@ -12,7 +12,6 @@
     "ClientPacketListenerMixin",
     "ClientAdvancementsMixin",
     "PlayerTabOverlayMixin",
-    "LivingEntityRendererMixin",
     "ConnectScreenMixin"
   ],
   "server": ["ServerChatMixin"],

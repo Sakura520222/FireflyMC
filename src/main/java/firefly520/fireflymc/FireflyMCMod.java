@@ -13,6 +13,7 @@ import net.neoforged.neoforge.common.NeoForge;
 import net.neoforged.neoforge.event.server.ServerStartedEvent;
 import net.neoforged.neoforge.event.server.ServerStoppingEvent;
 import firefly520.fireflymc.client.ClientHandler;
+import firefly520.fireflymc.client.TitleWorldRenderer;
 import firefly520.fireflymc.client.UpdateChecker;
 import firefly520.fireflymc.client.TitleScreenDetector;
 import firefly520.fireflymc.client.eventws.ClientEventNotificationEvents;
@@ -49,6 +50,8 @@ public class FireflyMCMod {
       );
       // 直接注册渲染事件到 NeoForge 总线
       NeoForge.EVENT_BUS.addListener(ClientHandler::onRenderGui);
+      // 称号头顶渲染（世界空间，独立于实体渲染，兼容其他 mod 的隐身效果）
+      NeoForge.EVENT_BUS.addListener(TitleWorldRenderer::onRenderLevelStage);
       // 注册主菜单更新通知检测器
       NeoForge.EVENT_BUS.addListener(TitleScreenDetector::onScreenRender);
       // 注册单人世界公开联机事件
