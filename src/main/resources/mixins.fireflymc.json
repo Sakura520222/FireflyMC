@@ -12,7 +12,8 @@
     "ClientPacketListenerMixin",
     "ClientAdvancementsMixin",
     "PlayerTabOverlayMixin",
-    "LivingEntityRendererMixin"
+    "LivingEntityRendererMixin",
+    "ConnectScreenMixin"
   ],
   "server": ["ServerChatMixin"],
   "injectors": {

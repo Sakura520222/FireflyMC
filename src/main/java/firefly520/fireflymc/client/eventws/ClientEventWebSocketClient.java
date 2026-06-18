@@ -1,7 +1,11 @@
 package firefly520.fireflymc.client.eventws;
 
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import firefly520.fireflymc.client.ServerShutdownManager;
 
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -68,7 +72,7 @@ public final class ClientEventWebSocketClient {
             return;
         }
         executor.execute(() -> {
-            if (!ClientEventNotificationConfig.enabled()) {
+            if (!ClientEventNotificationConfig.channelActive()) {
                 return;
             }
             sessionActive.set(true);
@@ -101,7 +105,7 @@ public final class ClientEventWebSocketClient {
     }
 
     private boolean refreshConnectionState() {
-        if (!ClientEventNotificationConfig.enabled()) {
+        if (!ClientEventNotificationConfig.channelActive()) {
             closeConnection(false, "disabled");
             return false;
         }
@@ -230,7 +234,7 @@ public final class ClientEventWebSocketClient {
     private void startHeartbeat() {
         stopHeartbeat();
         heartbeatTask = executor.scheduleAtFixedRate(() -> {
-            if (!ClientEventNotificationConfig.enabled() || webSocket == null || !connected.get()) {
+            if (!ClientEventNotificationConfig.channelActive() || webSocket == null || !connected.get()) {
                 return;
             }
             sendNow(ClientEventNotificationMessage.heartbeat());
@@ -245,7 +249,7 @@ public final class ClientEventWebSocketClient {
     }
 
     private void scheduleReconnect() {
-        if (!sessionActive.get() || !ClientEventNotificationConfig.enabled() || !ClientEventNotificationConfig.autoReconnect()) {
+        if (!sessionActive.get() || !ClientEventNotificationConfig.channelActive() || !ClientEventNotificationConfig.autoReconnect()) {
             return;
         }
         if (!reconnectScheduled.compareAndSet(false, true)) {
@@ -293,6 +297,43 @@ public final class ClientEventWebSocketClient {
         webSocket = null;
     }
 
+    /**
+     * 处理来自云端的下行消息（如 QQ 群聊天转发到游戏内）。
+     */
+    private void handleInbound(String raw) {
+        if (raw == null || raw.isBlank()) {
+            return;
+        }
+        executor.execute(() -> {
+            try {
+                JsonObject obj = JsonParser.parseString(raw).getAsJsonObject();
+                String type = obj.has("type") && !obj.get("type").isJsonNull()
+                    ? obj.get("type").getAsString() : "";
+                if ("qq_chat".equals(type)) {
+                    String sender = obj.has("sender") && !obj.get("sender").isJsonNull()
+                        ? obj.get("sender").getAsString() : "";
+                    String message = obj.has("message") && !obj.get("message").isJsonNull()
+                        ? obj.get("message").getAsString() : "";
+                    ClientEventNotificationEvents.onQQChatReceived(sender, message);
+                } else if ("mc_chat".equals(type)) {
+                    String playerName = obj.has("playerName") && !obj.get("playerName").isJsonNull()
+                        ? obj.get("playerName").getAsString() : "";
+                    String message = obj.has("message") && !obj.get("message").isJsonNull()
+                        ? obj.get("message").getAsString() : "";
+                    String worldTag = obj.has("worldTag") && !obj.get("worldTag").isJsonNull()
+                        ? obj.get("worldTag").getAsString() : "";
+                    ClientEventNotificationEvents.onMCChatReceived(playerName, message, worldTag);
+                } else if ("server_shutdown".equals(type)) {
+                    ServerShutdownManager.onShutdownStateChanged(true);
+                } else if ("server_startup".equals(type)) {
+                    ServerShutdownManager.onShutdownStateChanged(false);
+                }
+            } catch (Exception e) {
+                LOGGER.debug("[FireflyMC] 解析事件通知下行消息失败: {}", e.getMessage());
+            }
+        });
+    }
+
     private boolean isCurrentConnection(long generation, WebSocket socket) {
         return sessionActive.get() && generation == connectionGeneration && socket != null && socket == webSocket;
     }
@@ -335,6 +376,7 @@ public final class ClientEventWebSocketClient {
         @Override
         public CompletionStage<?> onText(WebSocket webSocket, CharSequence data, boolean last) {
             webSocket.request(1);
+            ClientEventWebSocketClient.this.handleInbound(data == null ? "" : data.toString());
             return CompletableFuture.completedFuture(null);
         }
 

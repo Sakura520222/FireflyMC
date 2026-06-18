@@ -55,4 +55,17 @@ public class ClientState {
     public static int updateNotificationSkipX = 0;
     public static int updateNotificationSkipY = 0;
     public static int updateNotificationSkipSize = 0;
+
+    /**
+     * 云端伪关机维护状态（由 QQ 群 /关机 指令触发，经云端下发）。
+     * 为 true 时禁止进入多人服务器、禁用中继联机；单人/局域网/P2P 不受影响。
+     */
+    public static boolean serverShutdown = false;
+
+    /**
+     * 当前 ConnectScreen.startConnecting 是否由联机大厅发起（P2P/中继本地代理）。
+     * 用于让 ConnectScreenMixin 放行大厅发起的连接，仅拦截原版多人菜单发起的连接。
+     * 由调用方在 startConnecting 前置 true、返回后立即复位。
+     */
+    public static boolean isLobbyInitiatedConnection = false;
 }

@@ -27,6 +27,7 @@ public class Config {
     public final ModConfigSpec.ConfigValue<Integer> SINGLEPLAYER_RELAY_P2P_UDP_PORT_MAX;
     public final ModConfigSpec.ConfigValue<Integer> SINGLEPLAYER_RELAY_P2P_RETRANSMIT_MILLIS;
     public final ModConfigSpec.ConfigValue<Integer> SINGLEPLAYER_RELAY_P2P_WINDOW_SIZE;
+    public final ModConfigSpec.BooleanValue SINGLEPLAYER_RELAY_P2P_IPV6_ENABLED;
     public final ModConfigSpec.BooleanValue EVENT_NOTIFICATION_ENABLED;
     public final ModConfigSpec.ConfigValue<String> EVENT_NOTIFICATION_URL;
     public final ModConfigSpec.BooleanValue EVENT_NOTIFICATION_AUTO_RECONNECT;
@@ -34,6 +35,7 @@ public class Config {
     public final ModConfigSpec.ConfigValue<Integer> EVENT_NOTIFICATION_HEARTBEAT_INTERVAL_MILLIS;
     public final ModConfigSpec.ConfigValue<Integer> EVENT_NOTIFICATION_SEND_TIMEOUT_MILLIS;
     public final ModConfigSpec.ConfigValue<Integer> EVENT_NOTIFICATION_QUEUE_CAPACITY;
+    public final ModConfigSpec.BooleanValue CROSS_CHAT_ENABLED;
 
     public ClientConfig(ModConfigSpec.Builder builder) {
       builder.push("hud_settings")
@@ -104,6 +106,11 @@ public class Config {
         .translation("fireflymc.config.singleplayer_relay.p2p_window_size")
         .define("p2pWindowSize", 64);
 
+      SINGLEPLAYER_RELAY_P2P_IPV6_ENABLED = builder
+        .comment("Try direct IPv6 connection first when both peers have public IPv6 addresses")
+        .translation("fireflymc.config.singleplayer_relay.p2p_ipv6_enabled")
+        .define("p2pIpv6Enabled", true);
+
       builder.pop();
 
       builder.push("event_notification")
@@ -143,6 +150,11 @@ public class Config {
         .comment("Maximum queued event notification messages while the WebSocket is reconnecting")
         .translation("fireflymc.config.event_notification.queue_capacity")
         .define("queueCapacity", 128);
+
+      CROSS_CHAT_ENABLED = builder
+        .comment("跨级聊天：开启后，游戏内聊天将与 QQ 群双向互通（需云端同步启用 cross_chat_enabled）")
+        .translation("fireflymc.config.event_notification.cross_chat_enabled")
+        .define("crossChatEnabled", true);
 
       builder.pop();
     }
