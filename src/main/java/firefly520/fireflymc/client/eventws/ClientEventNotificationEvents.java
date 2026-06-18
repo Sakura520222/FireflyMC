@@ -2,6 +2,7 @@ package firefly520.fireflymc.client.eventws;
 
 import firefly520.fireflymc.client.ClientState;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.multiplayer.ServerData;
 import net.minecraft.client.server.IntegratedServer;
 import net.minecraft.network.chat.Component;
 import net.neoforged.neoforge.client.event.ClientChatEvent;
@@ -13,16 +14,10 @@ import net.neoforged.neoforge.client.event.ClientTickEvent;
  */
 public final class ClientEventNotificationEvents {
     private static final long DEATH_DEDUPLICATION_WINDOW_MILLIS = 1000L;
-    private static final long CHAT_UPLINK_DEDUPLICATE_WINDOW_MILLIS = 1000L;
-    private static final long MC_CHAT_DEDUPLICATE_WINDOW_MILLIS = 1000L;
 
     private static int lastDeathPlayerId = Integer.MIN_VALUE;
     private static String lastDeathMessage = "";
     private static long lastDeathNotificationAt;
-    private static String lastChatUplinkMessage = "";
-    private static long lastChatUplinkAt;
-    private static String lastMcChatKey = "";
-    private static long lastMcChatAt;
 
     private ClientEventNotificationEvents() {
     }
@@ -101,15 +96,6 @@ public final class ClientEventNotificationEvents {
         if (message == null || message.isBlank()) {
             return;
         }
-        // 短窗口去重：避免同一消息被重复上行（如 ClientChatEvent 重复触发），
-        // 否则云端会按不同 eventId 处理两次，向其他玩家广播两遍 [MC]。
-        long now = System.currentTimeMillis();
-        if (message.equals(lastChatUplinkMessage)
-            && now - lastChatUplinkAt < CHAT_UPLINK_DEDUPLICATE_WINDOW_MILLIS) {
-            return;
-        }
-        lastChatUplinkMessage = message;
-        lastChatUplinkAt = now;
         ClientEventWebSocketClient.getInstance().send(
             ClientEventNotificationMessage.playerChat(minecraft, minecraft.player, message)
         );
@@ -153,17 +139,12 @@ public final class ClientEventNotificationEvents {
         String displayPlayer = (playerName == null || playerName.isBlank()) ? "MC" : playerName;
         String tag = (worldTag == null || worldTag.isBlank()) ? "" : " (" + worldTag + ")";
         String safeMessage = message == null ? "" : message;
-        // 短窗口去重：避免重复下行使 [MC] 消息显示两遍（如云端连接残留或网络重发）。
-        // key 用 SOH 控制符(U+0001，编辑器中不可见、显示为相邻引号)分隔三个字段，
-        // 防止不同字段组合拼接出相同 key 造成误去重（如 player="A"/msg="BC" 与 player="AB"/msg="C"）。
-        String key = displayPlayer + "" + safeMessage + "" + tag;
-        long now = System.currentTimeMillis();
-        if (key.equals(lastMcChatKey)
-            && now - lastMcChatAt < MC_CHAT_DEDUPLICATE_WINDOW_MILLIS) {
+        // 同一服务器/世界内的消息，vanilla 聊天已广播给本机玩家，无需再以 [MC] 重复展示；
+        // [MC] 下行仅服务于跨服务器 / 单人 / QQ 互通场景。
+        String localTag = resolveLocalWorldTag(minecraft);
+        if (localTag != null && localTag.equals(worldTag)) {
             return;
         }
-        lastMcChatKey = key;
-        lastMcChatAt = now;
         minecraft.execute(() -> {
             Component text = Component.literal("§a[MC]§r ")
                 .append(Component.literal(displayPlayer))
@@ -173,6 +154,27 @@ public final class ClientEventNotificationEvents {
                 minecraft.gui.getChat().addMessage(text);
             }
         });
+    }
+
+    /**
+     * 构造本机当前所处世界的标识，格式与云端 worldTag 完全一致
+     * （"多人: &lt;serverName|serverAddress&gt;" 或 "单人: &lt;worldName&gt;"）。
+     * 用于判断收到的 mc_chat 是否来自本机所在的同一会话——若是，vanilla 已显示该消息，
+     * 应跳过 [MC] 下行以避免重复。返回 null 表示本机不在可识别的世界（如主菜单）。
+     */
+    private static String resolveLocalWorldTag(Minecraft minecraft) {
+        ServerData current = minecraft.getCurrentServer();
+        if (current != null) {
+            String server = (current.name != null && !current.name.isBlank()) ? current.name : current.ip;
+            if (server != null && !server.isBlank()) {
+                return "多人: " + server;
+            }
+        }
+        IntegratedServer integrated = minecraft.getSingleplayerServer();
+        if (integrated != null) {
+            return "单人: " + resolveWorldName(integrated);
+        }
+        return null;
     }
 
     private static String resolveWorldName(IntegratedServer server) {
