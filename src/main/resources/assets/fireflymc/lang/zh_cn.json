@@ -58,6 +58,8 @@
   "fireflymc.config.event_notification.send_timeout_millis.tooltip": "事件通知 WebSocket 消息发送超时时间",
   "fireflymc.config.event_notification.queue_capacity": "消息队列容量",
   "fireflymc.config.event_notification.queue_capacity.tooltip": "重连期间最多缓存的事件通知消息数量",
+  "fireflymc.config.event_notification.cross_chat_enabled": "启用跨级聊天",
+  "fireflymc.config.event_notification.cross_chat_enabled.tooltip": "开启后，游戏内聊天将与 QQ 群双向互通（需云端同步启用 cross_chat_enabled）",
 
   "fireflymc.config.player_auth": "玩家密码验证",
   "fireflymc.config.player_auth.enabled": "启用密码验证",

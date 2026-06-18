@@ -67,6 +67,16 @@ public final class ClientEventNotificationMessage {
             .add("advancementDescription", componentToString(description));
     }
 
+    /**
+     * 玩家游戏内聊天消息（跨级聊天上行，转发到 QQ 群）。
+     */
+    public static ClientEventNotificationMessage playerChat(Minecraft minecraft, LocalPlayer player, String message) {
+        return create("player_chat")
+            .addPlayer(player)
+            .addWorldContext(minecraft, resolveWorldType(minecraft))
+            .add("message", message);
+    }
+
     public ClientEventNotificationMessage add(String key, String value) {
         if (value != null && !value.isBlank()) {
             this.json.addProperty(key, value);

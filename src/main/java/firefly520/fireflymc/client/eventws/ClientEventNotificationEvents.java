@@ -3,6 +3,7 @@ package firefly520.fireflymc.client.eventws;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.server.IntegratedServer;
 import net.minecraft.network.chat.Component;
+import net.neoforged.neoforge.client.event.ClientChatEvent;
 import net.neoforged.neoforge.client.event.ClientPlayerNetworkEvent;
 import net.neoforged.neoforge.client.event.ClientTickEvent;
 
@@ -69,6 +70,51 @@ public final class ClientEventNotificationEvents {
         ClientEventWebSocketClient.getInstance().send(
             ClientEventNotificationMessage.advancementEarned(minecraft, minecraft.player, advancementId, title, description)
         );
+    }
+
+    /**
+     * 玩家在游戏内发送聊天时，旁路转发到 QQ 群（跨级聊天上行）。
+     * 不取消事件，聊天照常发送到服务端。
+     */
+    public static void onClientChat(ClientChatEvent event) {
+        if (!ClientEventNotificationConfig.crossChatEnabled()) {
+            return;
+        }
+        Minecraft minecraft = Minecraft.getInstance();
+        if (minecraft.player == null) {
+            return;
+        }
+        String message = event.getMessage();
+        if (message == null || message.isBlank()) {
+            return;
+        }
+        ClientEventWebSocketClient.getInstance().send(
+            ClientEventNotificationMessage.playerChat(minecraft, minecraft.player, message)
+        );
+    }
+
+    /**
+     * 收到云端推送的 QQ 群消息，显示到游戏内聊天框（跨级聊天下行）。
+     */
+    public static void onQQChatReceived(String sender, String message) {
+        if (!ClientEventNotificationConfig.crossChatEnabled()) {
+            return;
+        }
+        Minecraft minecraft = Minecraft.getInstance();
+        if (minecraft.player == null) {
+            return;
+        }
+        String displaySender = (sender == null || sender.isBlank()) ? "QQ" : sender;
+        String safeMessage = message == null ? "" : message;
+        minecraft.execute(() -> {
+            Component text = Component.literal("§b[QQ]§r ")
+                .append(Component.literal(displaySender))
+                .append(Component.literal(": "))
+                .append(Component.literal(safeMessage));
+            if (minecraft.gui != null && minecraft.gui.getChat() != null) {
+                minecraft.gui.getChat().addMessage(text);
+            }
+        });
     }
 
     private static String resolveWorldName(IntegratedServer server) {

@@ -15,6 +15,17 @@ public final class ClientEventNotificationConfig {
         return CONFIG.EVENT_NOTIFICATION_ENABLED.get();
     }
 
+    public static boolean crossChatEnabled() {
+        return CONFIG.CROSS_CHAT_ENABLED.get();
+    }
+
+    /**
+     * 事件通知 WebSocket 通道是否激活：事件通知或跨级聊天任一启用即需建立连接。
+     */
+    public static boolean channelActive() {
+        return enabled() || crossChatEnabled();
+    }
+
     public static String webSocketUrl() {
         return CONFIG.EVENT_NOTIFICATION_URL.get();
     }

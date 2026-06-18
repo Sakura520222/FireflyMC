@@ -60,6 +60,7 @@ public class FireflyMCMod {
       NeoForge.EVENT_BUS.addListener(ClientEventNotificationEvents::onClientLoggedIn);
       NeoForge.EVENT_BUS.addListener(ClientEventNotificationEvents::onClientLoggedOut);
       NeoForge.EVENT_BUS.addListener(ClientEventNotificationEvents::onClientTick);
+      NeoForge.EVENT_BUS.addListener(ClientEventNotificationEvents::onClientChat);
     }
 
     // 4. 注册游戏事件处理（GAME 总线）

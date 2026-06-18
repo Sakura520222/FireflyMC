@@ -35,6 +35,7 @@ public class Config {
     public final ModConfigSpec.ConfigValue<Integer> EVENT_NOTIFICATION_HEARTBEAT_INTERVAL_MILLIS;
     public final ModConfigSpec.ConfigValue<Integer> EVENT_NOTIFICATION_SEND_TIMEOUT_MILLIS;
     public final ModConfigSpec.ConfigValue<Integer> EVENT_NOTIFICATION_QUEUE_CAPACITY;
+    public final ModConfigSpec.BooleanValue CROSS_CHAT_ENABLED;
 
     public ClientConfig(ModConfigSpec.Builder builder) {
       builder.push("hud_settings")
@@ -149,6 +150,11 @@ public class Config {
         .comment("Maximum queued event notification messages while the WebSocket is reconnecting")
         .translation("fireflymc.config.event_notification.queue_capacity")
         .define("queueCapacity", 128);
+
+      CROSS_CHAT_ENABLED = builder
+        .comment("跨级聊天：开启后，游戏内聊天将与 QQ 群双向互通（需云端同步启用 cross_chat_enabled）")
+        .translation("fireflymc.config.event_notification.cross_chat_enabled")
+        .define("crossChatEnabled", true);
 
       builder.pop();
     }

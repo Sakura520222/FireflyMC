@@ -58,6 +58,8 @@
   "fireflymc.config.event_notification.send_timeout_millis.tooltip": "Timeout for sending event notification WebSocket messages",
   "fireflymc.config.event_notification.queue_capacity": "Message Queue Capacity",
   "fireflymc.config.event_notification.queue_capacity.tooltip": "Maximum queued event notification messages while reconnecting",
+  "fireflymc.config.event_notification.cross_chat_enabled": "Enable Cross-Level Chat",
+  "fireflymc.config.event_notification.cross_chat_enabled.tooltip": "Forward in-game chat to QQ groups and vice versa (requires cross_chat_enabled on the server)",
 
   "fireflymc.config.player_auth": "Player Password Auth",
   "fireflymc.config.player_auth.enabled": "Enable Password Auth",
