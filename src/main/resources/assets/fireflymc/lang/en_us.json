@@ -69,5 +69,10 @@
   "fireflymc.config.player_auth.max_attempts": "Max Attempts",
   "fireflymc.config.player_auth.max_attempts.tooltip": "Kick after exceeding",
   "fireflymc.config.player_auth.kick_message_timeout": "Timeout Kick Message",
-  "fireflymc.config.player_auth.kick_message_failed": "Failed Kick Message"
+  "fireflymc.config.player_auth.kick_message_failed": "Failed Kick Message",
+
+  "fireflymc.server_shutdown.title": "Server Under Maintenance",
+  "fireflymc.server_shutdown.message": "The server is under maintenance (pseudo-shutdown). Multiplayer and relay are temporarily disabled. Singleplayer / LAN / P2P are unaffected.",
+  "fireflymc.server_shutdown.announce": "§c[FireflyMC]§r Server entered shutdown maintenance. Multiplayer and relay are disabled.",
+  "fireflymc.server_startup.announce": "§a[FireflyMC]§r Online services restored."
 }

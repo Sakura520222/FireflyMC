@@ -1,5 +1,6 @@
 package firefly520.fireflymc.client.relay;
 
+import firefly520.fireflymc.client.ClientState;
 import firefly520.fireflymc.client.relay.RelayConfig;
 import firefly520.fireflymc.client.relay.p2p.P2PConnectionManager;
 import firefly520.fireflymc.client.relay.p2p.P2PGuestProxy;
@@ -91,6 +92,14 @@ public final class RelayGuestJoiner {
                                                 proxy.connectMinecraft(parent, room.worldName());
                                                 return;
                                             }
+                                            if (ClientState.serverShutdown) {
+                                                RelayLobbyState.setStatusMessage("服务器维护中，P2P 不可用且中继已禁用");
+                                                RelayLobbyWebSocketClient.getInstance().sendControl(
+                                                        RelayLobbyMessage.guestLeave(room.roomId(), guestSessionId, "server_shutdown")
+                                                );
+                                                LOGGER.info("[FireflyMC] 关机维护中，P2P 失败不回退中继: roomId={}", room.roomId());
+                                                return;
+                                            }
                                             RelayLobbyState.setStatusMessage("P2P 不可用，正在切换中继...");
                                             startProxyAndConnect(parent, room, guestSessionId);
                                         } catch (Exception fallbackError) {
@@ -166,7 +175,39 @@ public final class RelayGuestJoiner {
         }
     }
 
+    /**
+     * 当前是否处于任意联机大厅客机会话（中继或 P2P）。
+     * 用于区分"原版多人服务器连接"与"大厅发起的连接"。
+     */
+    public static boolean isInAnySession() {
+        return activeProxy != null || activeP2PProxy != null;
+    }
+
+    /**
+     * 仅断开中继客机会话（activeProxy），保留 P2P 客机会话（activeP2PProxy）。
+     * 用于伪关机时强制断开中继但保留 P2P。
+     */
+    public static void stopRelayProxyIfActive(String reason) {
+        if (activeProxy == null) {
+            return;
+        }
+        activeProxy.stop(reason);
+        activeProxy = null;
+        pendingRoomId = null;
+        pendingGuestSessionId = null;
+        connectingToRelayRoom.set(false);
+        cancelConnectTimeout();
+    }
+
     private static void startProxyAndConnect(Screen parent, RelayLobbyRoom room, String guestSessionId) throws Exception {
+        if (ClientState.serverShutdown) {
+            RelayLobbyState.setStatusMessage("服务器维护中，中继联机已禁用");
+            RelayLobbyWebSocketClient.getInstance().sendControl(
+                    RelayLobbyMessage.guestLeave(room.roomId(), guestSessionId, "server_shutdown")
+            );
+            LOGGER.info("[FireflyMC] 关机维护中，已拒绝中继加入房间: roomId={}", room.roomId());
+            return;
+        }
         if (activeProxy != null) {
             activeProxy.stop();
         }
@@ -185,14 +226,19 @@ public final class RelayGuestJoiner {
         RelayLobbyState.setStatusMessage("正在连接本地代理: " + addressText);
         LOGGER.info("[FireflyMC] 正在通过本地代理加入房间: roomId={}, address={}", room.roomId(), addressText);
 
-        ConnectScreen.startConnecting(
-                parent,
-                Minecraft.getInstance(),
-                address,
-                serverData,
-                false,
-                null
-        );
+        ClientState.isLobbyInitiatedConnection = true;
+        try {
+            ConnectScreen.startConnecting(
+                    parent,
+                    Minecraft.getInstance(),
+                    address,
+                    serverData,
+                    false,
+                    null
+            );
+        } finally {
+            ClientState.isLobbyInitiatedConnection = false;
+        }
     }
 
     private static void scheduleConnectTimeout(RelayGuestProxy proxy) {

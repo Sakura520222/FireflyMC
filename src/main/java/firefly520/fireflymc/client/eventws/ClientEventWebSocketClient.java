@@ -5,6 +5,8 @@ import com.google.gson.JsonParser;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import firefly520.fireflymc.client.ServerShutdownManager;
+
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.WebSocket;
@@ -321,6 +323,10 @@ public final class ClientEventWebSocketClient {
                     String worldTag = obj.has("worldTag") && !obj.get("worldTag").isJsonNull()
                         ? obj.get("worldTag").getAsString() : "";
                     ClientEventNotificationEvents.onMCChatReceived(playerName, message, worldTag);
+                } else if ("server_shutdown".equals(type)) {
+                    ServerShutdownManager.onShutdownStateChanged(true);
+                } else if ("server_startup".equals(type)) {
+                    ServerShutdownManager.onShutdownStateChanged(false);
                 }
             } catch (Exception e) {
                 LOGGER.debug("[FireflyMC] 解析事件通知下行消息失败: {}", e.getMessage());

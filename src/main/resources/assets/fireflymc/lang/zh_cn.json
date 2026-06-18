@@ -69,5 +69,10 @@
   "fireflymc.config.player_auth.max_attempts": "密码最大尝试次数",
   "fireflymc.config.player_auth.max_attempts.tooltip": "超过后踢出",
   "fireflymc.config.player_auth.kick_message_timeout": "验证超时踢出提示",
-  "fireflymc.config.player_auth.kick_message_failed": "密码错误踢出提示"
+  "fireflymc.config.player_auth.kick_message_failed": "密码错误踢出提示",
+
+  "fireflymc.server_shutdown.title": "服务器维护中",
+  "fireflymc.server_shutdown.message": "服务器正在维护，暂无法进入多人服务器。单人 / 局域网 / P2P 联机不受影响。",
+  "fireflymc.server_shutdown.announce": "§c[FireflyMC]§r 服务器已进入维护状态，多人服务器与中继联机已关闭",
+  "fireflymc.server_startup.announce": "§a[FireflyMC]§r 联机服务已恢复"
 }

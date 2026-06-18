@@ -1,5 +1,6 @@
 package firefly520.fireflymc.client.relay.p2p;
 
+import firefly520.fireflymc.client.ClientState;
 import firefly520.fireflymc.client.relay.RelayLobbyMessage;
 import firefly520.fireflymc.client.relay.RelayLobbyWebSocketClient;
 import net.minecraft.client.Minecraft;
@@ -96,7 +97,13 @@ public class P2PGuestProxy {
         String addressText = "127.0.0.1:" + localPort;
         ServerAddress address = ServerAddress.parseString(addressText);
         ServerData serverData = new ServerData("FireflyMC P2P - " + worldName, addressText, ServerData.Type.OTHER);
-        ConnectScreen.startConnecting(parent, Minecraft.getInstance(), address, serverData, false, null);
+        // 标记为联机大厅发起，让 ConnectScreenMixin 放行（关机时仅拦截原版多人菜单连接）
+        ClientState.isLobbyInitiatedConnection = true;
+        try {
+            ConnectScreen.startConnecting(parent, Minecraft.getInstance(), address, serverData, false, null);
+        } finally {
+            ClientState.isLobbyInitiatedConnection = false;
+        }
     }
 
     public void stop() {
