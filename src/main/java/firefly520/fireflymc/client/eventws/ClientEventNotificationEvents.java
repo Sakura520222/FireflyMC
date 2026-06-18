@@ -117,6 +117,31 @@ public final class ClientEventNotificationEvents {
         });
     }
 
+    /**
+     * 收到云端推送的其他 mod 客户端聊天，显示到游戏内聊天框（mod 端互通下行）。
+     */
+    public static void onMCChatReceived(String playerName, String message, String worldTag) {
+        if (!ClientEventNotificationConfig.crossChatEnabled()) {
+            return;
+        }
+        Minecraft minecraft = Minecraft.getInstance();
+        if (minecraft.player == null) {
+            return;
+        }
+        String displayPlayer = (playerName == null || playerName.isBlank()) ? "MC" : playerName;
+        String tag = (worldTag == null || worldTag.isBlank()) ? "" : " (" + worldTag + ")";
+        String safeMessage = message == null ? "" : message;
+        minecraft.execute(() -> {
+            Component text = Component.literal("§a[MC]§r ")
+                .append(Component.literal(displayPlayer))
+                .append(Component.literal(tag + ": "))
+                .append(Component.literal(safeMessage));
+            if (minecraft.gui != null && minecraft.gui.getChat() != null) {
+                minecraft.gui.getChat().addMessage(text);
+            }
+        });
+    }
+
     private static String resolveWorldName(IntegratedServer server) {
         try {
             String name = server.getWorldData().getLevelName();

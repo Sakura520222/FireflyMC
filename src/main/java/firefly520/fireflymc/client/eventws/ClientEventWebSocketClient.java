@@ -313,6 +313,14 @@ public final class ClientEventWebSocketClient {
                     String message = obj.has("message") && !obj.get("message").isJsonNull()
                         ? obj.get("message").getAsString() : "";
                     ClientEventNotificationEvents.onQQChatReceived(sender, message);
+                } else if ("mc_chat".equals(type)) {
+                    String playerName = obj.has("playerName") && !obj.get("playerName").isJsonNull()
+                        ? obj.get("playerName").getAsString() : "";
+                    String message = obj.has("message") && !obj.get("message").isJsonNull()
+                        ? obj.get("message").getAsString() : "";
+                    String worldTag = obj.has("worldTag") && !obj.get("worldTag").isJsonNull()
+                        ? obj.get("worldTag").getAsString() : "";
+                    ClientEventNotificationEvents.onMCChatReceived(playerName, message, worldTag);
                 }
             } catch (Exception e) {
                 LOGGER.debug("[FireflyMC] 解析事件通知下行消息失败: {}", e.getMessage());
