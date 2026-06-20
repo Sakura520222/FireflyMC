@@ -13,6 +13,7 @@ import net.neoforged.neoforge.common.NeoForge;
 import net.neoforged.neoforge.event.server.ServerStartedEvent;
 import net.neoforged.neoforge.event.server.ServerStoppingEvent;
 import firefly520.fireflymc.client.ClientHandler;
+import firefly520.fireflymc.client.TitleWorldRenderer;
 import firefly520.fireflymc.client.UpdateChecker;
 import firefly520.fireflymc.client.TitleScreenDetector;
 import firefly520.fireflymc.client.eventws.ClientEventNotificationEvents;
@@ -26,7 +27,7 @@ import firefly520.fireflymc.util.ServerLanguageLoader;
 @Mod(FireflyMCMod.MODID)
 public class FireflyMCMod {
   public static final String MODID = "fireflymc";
-  public static final String VERSION = "2.5.4";
+  public static final String VERSION = "2.5.5";
 
   public FireflyMCMod(IEventBus modEventBus, ModContainer modContainer) {
     // 1. 注册客户端配置（官方标准写法）
@@ -49,6 +50,8 @@ public class FireflyMCMod {
       );
       // 直接注册渲染事件到 NeoForge 总线
       NeoForge.EVENT_BUS.addListener(ClientHandler::onRenderGui);
+      // 称号头顶渲染（世界空间，独立于实体渲染，兼容其他 mod 的隐身效果）
+      NeoForge.EVENT_BUS.addListener(TitleWorldRenderer::onRenderLevelStage);
       // 注册主菜单更新通知检测器
       NeoForge.EVENT_BUS.addListener(TitleScreenDetector::onScreenRender);
       // 注册单人世界公开联机事件
@@ -74,7 +77,7 @@ public class FireflyMCMod {
     // 5. 检查Mod更新
     UpdateChecker.checkForUpdate();
 
-    System.out.println("Loading FireflyMC 2.5.4");
+    System.out.println("Loading FireflyMC 2.5.5");
   }
 
   // 配置热重载时更新缓存

@@ -1,6 +1,8 @@
 package firefly520.fireflymc.client.eventws;
 
+import firefly520.fireflymc.client.ClientState;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.multiplayer.ServerData;
 import net.minecraft.client.server.IntegratedServer;
 import net.minecraft.network.chat.Component;
 import net.neoforged.neoforge.client.event.ClientChatEvent;
@@ -33,6 +35,12 @@ public final class ClientEventNotificationEvents {
     }
 
     public static void onClientLoggedOut(ClientPlayerNetworkEvent.LoggingOut event) {
+        // 关机维护期间保持事件通知通道，以便接收云端下发的 server_startup 通知。
+        // 否则 WebSocket 关闭后开机下行无法送达，ClientState.serverShutdown 将永久停留为 true，
+        // 玩家无法重新加入多人服务器（ConnectScreenMixin 会持续拦截 startConnecting）。
+        if (ClientState.serverShutdown) {
+            return;
+        }
         ClientEventWebSocketClient.getInstance().close();
     }
 
@@ -131,6 +139,12 @@ public final class ClientEventNotificationEvents {
         String displayPlayer = (playerName == null || playerName.isBlank()) ? "MC" : playerName;
         String tag = (worldTag == null || worldTag.isBlank()) ? "" : " (" + worldTag + ")";
         String safeMessage = message == null ? "" : message;
+        // 同一服务器/世界内的消息，vanilla 聊天已广播给本机玩家，无需再以 [MC] 重复展示；
+        // [MC] 下行仅服务于跨服务器 / 单人 / QQ 互通场景。
+        String localTag = resolveLocalWorldTag(minecraft);
+        if (localTag != null && localTag.equals(worldTag)) {
+            return;
+        }
         minecraft.execute(() -> {
             Component text = Component.literal("§a[MC]§r ")
                 .append(Component.literal(displayPlayer))
@@ -140,6 +154,27 @@ public final class ClientEventNotificationEvents {
                 minecraft.gui.getChat().addMessage(text);
             }
         });
+    }
+
+    /**
+     * 构造本机当前所处世界的标识，格式与云端 worldTag 完全一致
+     * （"多人: &lt;serverName|serverAddress&gt;" 或 "单人: &lt;worldName&gt;"）。
+     * 用于判断收到的 mc_chat 是否来自本机所在的同一会话——若是，vanilla 已显示该消息，
+     * 应跳过 [MC] 下行以避免重复。返回 null 表示本机不在可识别的世界（如主菜单）。
+     */
+    private static String resolveLocalWorldTag(Minecraft minecraft) {
+        ServerData current = minecraft.getCurrentServer();
+        if (current != null) {
+            String server = (current.name != null && !current.name.isBlank()) ? current.name : current.ip;
+            if (server != null && !server.isBlank()) {
+                return "多人: " + server;
+            }
+        }
+        IntegratedServer integrated = minecraft.getSingleplayerServer();
+        if (integrated != null) {
+            return "单人: " + resolveWorldName(integrated);
+        }
+        return null;
     }
 
     private static String resolveWorldName(IntegratedServer server) {
