@@ -68,4 +68,12 @@ public class ClientState {
      * 由调用方在 startConnecting 前置 true、返回后立即复位。
      */
     public static boolean isLobbyInitiatedConnection = false;
+
+    /**
+     * 当前/最近一次由原版多人菜单发起连接的目标服务器地址（ServerData.ip，"host:port"）。
+     * 由 ConnectScreenMixin 在放行 startConnecting 时记录，
+     * 供客户端收到 AuthLockoutPayload 时拼接限流 key 使用。
+     * 单人 / LAN / 大厅代理连接时不更新。
+     */
+    public static String currentServerIp = null;
 }

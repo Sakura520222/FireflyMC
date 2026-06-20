@@ -68,6 +68,13 @@ public class ModNetwork {
                 TitleSyncPayload.STREAM_CODEC,
                 (payload, context) -> handleTitleSyncOnClient(payload, context)
         );
+
+        // 注册服务端→客户端的密码限流包
+        registrar.playToClient(
+                AuthLockoutPayload.TYPE,
+                AuthLockoutPayload.STREAM_CODEC,
+                (payload, context) -> handleAuthLockoutOnClient(payload, context)
+        );
     }
 
     /**
@@ -139,6 +146,25 @@ public class ModNetwork {
                 java.lang.reflect.Method method = handlerClass.getDeclaredMethod(
                     "handleTitleSync",
                     TitleSyncPayload.class,
+                    IPayloadContext.class
+                );
+                method.invoke(null, payload, context);
+            } catch (Exception e) {
+                // 忽略错误
+            }
+        }
+    }
+
+    /**
+     * 使用反射调用客户端密码限流处理器
+     */
+    private static void handleAuthLockoutOnClient(AuthLockoutPayload payload, IPayloadContext context) {
+        if (FMLEnvironment.dist == Dist.CLIENT) {
+            try {
+                Class<?> handlerClass = Class.forName("firefly520.fireflymc.client.ClientPayloadHandler");
+                java.lang.reflect.Method method = handlerClass.getDeclaredMethod(
+                    "handleAuthLockout",
+                    AuthLockoutPayload.class,
                     IPayloadContext.class
                 );
                 method.invoke(null, payload, context);

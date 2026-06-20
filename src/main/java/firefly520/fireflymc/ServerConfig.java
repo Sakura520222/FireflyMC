@@ -30,6 +30,7 @@ public class ServerConfig {
         public final ModConfigSpec.ConfigValue<Integer> playerAuthMaxAttempts;
         public final ModConfigSpec.ConfigValue<String> playerAuthKickMessageTimeout;
         public final ModConfigSpec.ConfigValue<String> playerAuthKickMessageFailed;
+        public final ModConfigSpec.IntValue playerAuthLockoutMinutes;
 
         // AI配置
         public final ModConfigSpec.ConfigValue<String> aiApiUrl;
@@ -121,6 +122,11 @@ public class ServerConfig {
                     .comment("密码错误次数耗尽踢出提示")
                     .translation("fireflymc.config.player_auth.kick_message_failed")
                     .define("kickMessageFailed", "§c[FireflyMC] 密码错误次数过多，请稍后再试");
+
+            playerAuthLockoutMinutes = builder
+                    .comment("密码错误次数耗尽后的限流时长（分钟），0 表示不限流")
+                    .translation("fireflymc.config.player_auth.lockout_minutes")
+                    .defineInRange("lockoutMinutes", 30, 0, 1440);
 
             builder.pop();
 

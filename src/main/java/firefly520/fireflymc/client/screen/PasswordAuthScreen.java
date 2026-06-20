@@ -8,6 +8,7 @@ import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 import net.neoforged.neoforge.network.PacketDistributor;
+import org.lwjgl.glfw.GLFW;
 
 import javax.annotation.Nonnull;
 
@@ -72,6 +73,9 @@ public class PasswordAuthScreen extends Screen {
                         button -> onSubmit()
                 ).bounds(buttonX, buttonY, buttonWidth, buttonHeight).build()
         );
+
+        // 输入框默认聚焦，方便玩家直接输入
+        this.setFocused(this.passwordInput);
     }
 
     @Override
@@ -119,6 +123,11 @@ public class PasswordAuthScreen extends Screen {
             guiGraphics.drawString(this.font, errorMessage, errX, dialogY + 155, 0xFFFF3333, false);
         }
 
+        // 保持输入框始终聚焦（提交按钮的点击事件是即时触发的，不依赖持续焦点，因此不受影响）
+        if (this.passwordInput != null && !this.passwordInput.isFocused()) {
+            this.setFocused(this.passwordInput);
+        }
+
         super.render(guiGraphics, mouseX, mouseY, partialTick);
     }
 
@@ -130,6 +139,16 @@ public class PasswordAuthScreen extends Screen {
     @Override
     public boolean isPauseScreen() {
         return false;
+    }
+
+    @Override
+    public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+        // 回车键一键提交（主键盘回车 + 小键盘回车）
+        if (keyCode == GLFW.GLFW_KEY_ENTER || keyCode == GLFW.GLFW_KEY_KP_ENTER) {
+            onSubmit();
+            return true;
+        }
+        return super.keyPressed(keyCode, scanCode, modifiers);
     }
 
     private void onSubmit() {

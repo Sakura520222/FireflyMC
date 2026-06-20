@@ -1,8 +1,10 @@
 package firefly520.fireflymc.client;
 
 import firefly520.fireflymc.FireflyMCMod;
+import firefly520.fireflymc.client.auth.ClientAuthLockoutManager;
 import firefly520.fireflymc.client.screen.PasswordAuthScreen;
 import firefly520.fireflymc.client.screen.RulesScreen;
+import firefly520.fireflymc.network.AuthLockoutPayload;
 import firefly520.fireflymc.network.ModHandshakePayload;
 import firefly520.fireflymc.network.ModHandshakeReplyPayload;
 import firefly520.fireflymc.network.PasswordPromptPayload;
@@ -63,6 +65,25 @@ public class ClientPayloadHandler {
         context.enqueueWork(() -> {
             ClientState.titleMap.clear();
             ClientState.titleMap.putAll(payload.titles());
+        });
+    }
+
+    /**
+     * 客户端处理服务端发来的密码限流包，记录本地限流。
+     * <p>
+     * 使用 ClientState.currentServerIp（由 ConnectScreenMixin 在放行连接时记录）
+     * 作为服务器地址来源，避免依赖 disconnect 包与 payload 包的处理时序。
+     */
+    public static void handleAuthLockout(AuthLockoutPayload payload, IPayloadContext context) {
+        context.enqueueWork(() -> {
+            Minecraft mc = Minecraft.getInstance();
+            String serverIp = ClientState.currentServerIp;
+            if (serverIp == null || serverIp.isEmpty()) {
+                return;
+            }
+            String playerName = mc.getUser().getName();
+            String key = ClientAuthLockoutManager.buildKey(serverIp, playerName);
+            ClientAuthLockoutManager.getInstance().recordLockout(key, payload.lockoutMinutes());
         });
     }
 }

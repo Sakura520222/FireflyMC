@@ -4,6 +4,7 @@ import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.reflect.TypeToken;
 import firefly520.fireflymc.ServerConfig;
+import firefly520.fireflymc.network.AuthLockoutPayload;
 import firefly520.fireflymc.network.PasswordPromptPayload;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.MinecraftServer;
@@ -226,7 +227,11 @@ public class PlayerPasswordManager {
             } else {
                 session.remainingAttempts--;
                 if (session.remainingAttempts <= 0) {
-                    // 超过最大尝试次数，踢出
+                    // 超过最大尝试次数：先下发限流信号，再踢出
+                    int lockoutMinutes = ServerConfig.SERVER.playerAuthLockoutMinutes.get();
+                    if (lockoutMinutes > 0) {
+                        PacketDistributor.sendToPlayer(player, new AuthLockoutPayload(lockoutMinutes));
+                    }
                     String kickMsg = ServerConfig.SERVER.playerAuthKickMessageFailed.get();
                     player.connection.disconnect(Component.literal(kickMsg));
                     pendingSessions.remove(uuid);
