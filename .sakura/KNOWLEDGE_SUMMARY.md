@@ -121,9 +121,13 @@ FireflyMC 是一个基于 Java 开发的 Minecraft 模组项目，核心功能�
 
 ## 知识文件位置
 
-- **审查规则**：`.sakura/rules/review_rules.md`
+- **审查规则**：`.sakura/rules/review_rules.md`（基础规则）
+- **审查规则 v2**：`.sakura/rules/review_rules_v2.md`（安全、渲染、WebSocket、流程新增规则）
 - **架构文档**：`.sakura/docs/architecture.md`
+- **高风险模块索引**：`.sakura/docs/high_risk_modules.md`
 - **经验教训**：`.sakura/plans/lessons_learned.md`
+- **审查方法论**：`.sakura/plans/review_methodology.md`
+- **技术陷阱**：`.sakura/plans/technical_pitfalls.md`
 - **知识总结**：`.sakura/KNOWLEDGE_SUMMARY.md`
 
 ## 参考资料
@@ -136,9 +140,3 @@ FireflyMC 是一个基于 Java 开发的 Minecraft 模组项目，核心功能�
 - Java 21、NeoForge 1.21.1
 - WebSocket (Java 11 HttpClient)、UDP P2P
 - Gson、ScheduledExecutorService
-
-### 关键模块
-- 中继模块：RelayLobbyWebSocketClient
-- P2P 模块：P2PConnectionManager
-- 认证模块：PlayerPasswordManager
-- 管理模块：ItemCleanupManager、UpdateChecker
