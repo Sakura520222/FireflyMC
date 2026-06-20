@@ -169,8 +169,7 @@ public class ModNetwork {
                 );
                 method.invoke(null, payload, context);
             } catch (Exception e) {
-                private static final String NETWORK_VERSION = "1.0.0";
-                private static final org.slf4j.Logger LOGGER = org.slf4j.LoggerFactory.getLogger(ModNetwork.class);
+                LOGGER.debug("[FireflyMC] 反射调用客户端认证锁定处理器失败", e);
             }
         }
     }
