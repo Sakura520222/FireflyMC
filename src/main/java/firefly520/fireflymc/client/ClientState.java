@@ -60,7 +60,7 @@ public class ClientState {
      * 云端伪关机维护状态（由 QQ 群 /关机 指令触发，经云端下发）。
      * 为 true 时禁止进入多人服务器、禁用中继联机；单人/局域网/P2P 不受影响。
      */
-    public static boolean serverShutdown = false;
+    public static volatile boolean serverShutdown = false;
 
     /**
      * 当前 ConnectScreen.startConnecting 是否由联机大厅发起（P2P/中继本地代理）。

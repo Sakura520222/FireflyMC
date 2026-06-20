@@ -13,11 +13,12 @@ import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
 import firefly520.fireflymc.Config;
+import firefly520.fireflymc.FireflyMCMod;
 
 
 public class HUDRenderer
 {
-  private static final Component SERVER_NAME = Component.literal("FireflyMC 2.5.6");
+  private static final Component SERVER_NAME = Component.literal("FireflyMC " + FireflyMCMod.VERSION);
   private static final Component WEBSITE_URL = Component.literal("https://mc.firefly520.top");
   private static final Component PLAYER_COUNT_PREFIX = Component.literal("在线人数: ");
 
