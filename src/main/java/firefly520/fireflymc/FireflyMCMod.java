@@ -77,7 +77,7 @@ public class FireflyMCMod {
     // 5. 检查Mod更新
     UpdateChecker.checkForUpdate();
 
-    System.out.println("Loading FireflyMC 2.5.6");
+    System.out.println("Loading FireflyMC " + VERSION);
   }
 
   // 配置热重载时更新缓存
