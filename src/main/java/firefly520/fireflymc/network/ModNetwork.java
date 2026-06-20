@@ -169,7 +169,7 @@ public class ModNetwork {
                 );
                 method.invoke(null, payload, context);
             } catch (Exception e) {
-                // 忽略错误
+                LOGGER.debug("[FireflyMC] 反射调用客户端密码限流处理器失败", e);
             }
         }
     }
