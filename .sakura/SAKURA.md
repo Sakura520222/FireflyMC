@@ -51,6 +51,16 @@ Java 21 · Gradle · NeoForge 21.1.219 · Java 11 HttpClient (WebSocket) · UDP 
 | HttpClient 实例必须复用 | minor |
 | 配置开关关闭时流程完整性 | major |
 | 增量审查必须声明边界，扫描同模块历史问题 | process |
+| 安全机制失效默认 major（限流/锁定/认证绕过） | major |
+| 隐私外传配置默认值 false | major |
+| WebSocket 链路审查三件套（重连+线程安全+closeHandler） | major |
+| 长连接兜底路径（超时+fallback+reset） | major |
+| WorldRenderer 强制检查清单（5项） | major |
+| Mixin 移除必须验证功能对等 | major |
+| 同类缺陷强制批量修复（不允许单点修复） | major |
+| 配置变更逐项审查（默认值+边界值+热更新） | major |
+| 网络包客户端防御校验（数值字段范围检查） | major |
+| 新增文件>50行必须有审查意见（正面评价≠意见） | major |
 
 ## 常见错误模式
 - 增量修复隧道视野（忽略同模块遗留风险）
@@ -62,4 +72,4 @@ Java 21 · Gradle · NeoForge 21.1.219 · Java 11 HttpClient (WebSocket) · UDP 
 ## 仓库信息
 - 仓库名: Sakura520222/FireflyMC
 - 语言统计: Java: 536629
-- 累计反思次数: 21
+- 累计反思次数: 30
