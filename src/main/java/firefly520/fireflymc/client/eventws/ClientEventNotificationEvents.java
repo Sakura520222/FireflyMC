@@ -48,6 +48,26 @@ public final class ClientEventNotificationEvents {
         ClientEventWebSocketClient.getInstance().onClientTick();
     }
 
+    /**
+     * 事件通知 WebSocket 连接（含断线重连）成功后回调。
+     * 立即上报当前在线状态（presence），使云端在服务重启或客户端重连后能恢复在线玩家列表。
+     * 此方法可能在 EventNotify 后台线程被调用，内部切换到客户端主线程读取玩家信息。
+     */
+    public static void onEventNotifyConnected() {
+        Minecraft minecraft = Minecraft.getInstance();
+        if (minecraft == null) {
+            return;
+        }
+        minecraft.execute(() -> {
+            if (minecraft.player == null) {
+                return;
+            }
+            ClientEventWebSocketClient.getInstance().send(
+                ClientEventNotificationMessage.presence(minecraft, minecraft.player)
+            );
+        });
+    }
+
     public static void notifyPlayerDeath(Component message) {
         Minecraft minecraft = Minecraft.getInstance();
         if (minecraft.player == null) {

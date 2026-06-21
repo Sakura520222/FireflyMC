@@ -77,6 +77,16 @@ public final class ClientEventNotificationMessage {
             .add("message", message);
     }
 
+    /**
+     * 客户端（重）连接建立后上报的当前在线状态。
+     * 用于服务端在重启或客户端重连后恢复在线玩家列表，本身不携带业务事件语义。
+     */
+    public static ClientEventNotificationMessage presence(Minecraft minecraft, LocalPlayer player) {
+        return create("presence")
+            .addPlayer(player)
+            .addWorldContext(minecraft, resolveWorldType(minecraft));
+    }
+
     public ClientEventNotificationMessage add(String key, String value) {
         if (value != null && !value.isBlank()) {
             this.json.addProperty(key, value);
