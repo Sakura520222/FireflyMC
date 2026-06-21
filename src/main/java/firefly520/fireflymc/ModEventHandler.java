@@ -81,8 +81,8 @@ public class ModEventHandler {
                         if (player != null) {
                             player.connection.disconnect(Component.literal(
                                 "§c你未安装FireflyMC模组，无法进入本服务器！\n" +
-                                "请安装FireflyMC " + FireflyMCMod.VERSION + " 版本后重试。\n" +
-                                "§e下载地址: https://mc.firefly520.top"
+                                "请安装FireflyMC " + FireflyMCMod.VERSION + " 版本后重启客户端重试。\n" +
+                                "§e下载地址: https://github.com/Sakura520222/FireflyMC/releases"
                             ));
                         }
                     }
