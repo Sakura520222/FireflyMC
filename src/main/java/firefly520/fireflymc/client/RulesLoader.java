@@ -4,18 +4,25 @@ import java.io.BufferedReader;
 import java.io.InputStreamReader;
 import java.net.HttpURLConnection;
 import java.net.URI;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
+
+import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
 
 import firefly520.fireflymc.FireflyMCMod;
 
 /**
  * 客户端公告加载器
- * 从 URL 同步加载公告文本并解析（无缓存）
+ * 从官网公告 API（/api/announcements）同步加载公告并解析（无缓存）
  * 网络异常时返回 null，不抛出异常
  */
 public class RulesLoader {
-    private static final String RULES_URL = "https://mc.firefly520.top/FireflyMC_Server_Rules.txt";
+    private static final String ANNOUNCEMENTS_URL = "https://mc.firefly520.top/api/announcements";
+    private static final String WEBSITE_URL = "https://mc.firefly520.top";
     private static final int MAX_RETRIES = 3;
     private static final int RETRY_DELAY_MS = 1000;
 
@@ -27,8 +34,8 @@ public class RulesLoader {
         int attempts = 0;
         while (attempts < MAX_RETRIES) {
             try {
-                String content = fetchFromUrl(RULES_URL);
-                return parseRules(content);
+                String content = fetchFromUrl(ANNOUNCEMENTS_URL);
+                return parseAnnouncements(content);
             } catch (Exception e) {
                 attempts++;
                 if (attempts < MAX_RETRIES) {
@@ -59,7 +66,7 @@ public class RulesLoader {
 
         StringBuilder result = new StringBuilder();
         try (BufferedReader reader = new BufferedReader(
-                new InputStreamReader(conn.getInputStream(), "UTF-8"))) {
+                new InputStreamReader(conn.getInputStream(), StandardCharsets.UTF_8))) {
             String line;
             while ((line = reader.readLine()) != null) {
                 result.append(line).append("\n");
@@ -71,96 +78,37 @@ public class RulesLoader {
     }
 
     /**
-     * 解析公告文本
-     * 格式: # 注释, [SECTION_N] 标题, - 内容
+     * 解析官网公告 JSON 数组
+     * 每条公告映射为一个章节（标题=title，条目=content 按行拆分）
+     * API 已按置顶 + 发布时间排序，直接按返回顺序展示
      */
-    private static RulesContent parseRules(String content) {
-        String version = "";
-        String updateDate = "";
-        String website = "";
-        String description = "";
-        String contact = "";
+    private static RulesContent parseAnnouncements(String json) {
         List<RulesContent.Section> sections = new ArrayList<>();
-
-        String[] lines = content.split("\n");
-        String currentTitle = null;
-        List<String> currentLines = null;
-
-        for (String line : lines) {
-            String trimmedLine = line.trim();
-
-            // 跳过注释分隔符
-            if (trimmedLine.startsWith("# ====") || trimmedLine.startsWith("# -----")) {
+        JsonArray arr = JsonParser.parseString(json).getAsJsonArray();
+        for (JsonElement el : arr) {
+            if (!el.isJsonObject()) {
                 continue;
             }
+            JsonObject obj = el.getAsJsonObject();
+            String title = obj.has("title") && !obj.get("title").isJsonNull()
+                    ? obj.get("title").getAsString() : "";
+            String content = obj.has("content") && !obj.get("content").isJsonNull()
+                    ? obj.get("content").getAsString() : "";
 
-            // 解析版本号: # 版本: V2.1
-            if (trimmedLine.startsWith("# 版本:")) {
-                if (trimmedLine.length() > 5) {  // 检查长度避免 IndexOutOfBoundsException
-                    version = trimmedLine.substring(5).trim();
+            // content 按行拆分为条目，跳过空行
+            List<String> lines = new ArrayList<>();
+            for (String line : content.split("\n")) {
+                String trimmed = line.trim();
+                if (!trimmed.isEmpty()) {
+                    lines.add(trimmed);
                 }
-                continue;
             }
-
-            // 解析更新日期: # 更新日期: 2025.05.24
-            if (trimmedLine.startsWith("# 更新日期:")) {
-                if (trimmedLine.length() > 7) {  // 检查长度
-                    updateDate = trimmedLine.substring(7).trim();
-                }
-                continue;
-            }
-
-            // 解析官网: # 官网: https://mc.firefly520.top/
-            if (trimmedLine.startsWith("# 官网:")) {
-                if (trimmedLine.length() > 5) {
-                    website = trimmedLine.substring(5).trim();
-                }
-                continue;
-            }
-
-            // 解析说明: # 说明: FireflyMC 倡导...
-            if (trimmedLine.startsWith("# 说明:")) {
-                if (trimmedLine.length() > 5) {  // 检查长度
-                    description = trimmedLine.substring(5).trim();
-                }
-                continue;
-            }
-
-            // 解析联系方式: # 联系: 违规举报请联系...
-            if (trimmedLine.startsWith("# 联系:")) {
-                if (trimmedLine.length() > 5) {  // 检查长度
-                    contact = trimmedLine.substring(5).trim();
-                }
-                continue;
-            }
-
-            // 解析章节标题: # [SECTION_1] 行为准则 - 文明交流
-            if (trimmedLine.startsWith("# [SECTION_")) {
-                // 保存上一个章节
-                if (currentTitle != null && currentLines != null) {
-                    sections.add(new RulesContent.Section(currentTitle, new ArrayList<>(currentLines)));
-                }
-
-                // 提取新章节标题
-                int endBracket = trimmedLine.indexOf("]");
-                if (endBracket > 0 && trimmedLine.length() > endBracket + 1) {  // 检查长度
-                    currentTitle = trimmedLine.substring(endBracket + 1).trim();
-                    currentLines = new ArrayList<>();
-                }
-                continue;
-            }
-
-            // 解析内容行: - 禁止任何形式...
-            if (trimmedLine.startsWith("- ") && currentLines != null) {
-                currentLines.add(trimmedLine.substring(2));
+            if (!title.isEmpty() || !lines.isEmpty()) {
+                sections.add(new RulesContent.Section(title, lines));
             }
         }
 
-        // 保存最后一个章节
-        if (currentTitle != null && currentLines != null) {
-            sections.add(new RulesContent.Section(currentTitle, new ArrayList<>(currentLines)));
-        }
-
-        return new RulesContent(version, updateDate, website, description, new ArrayList<>(sections), contact);
+        // version/updateDate/description/contact 无对应数据来源，留空（RulesScreen 自动跳过）
+        return new RulesContent("", "", WEBSITE_URL, "", sections, "");
     }
 }
