@@ -120,9 +120,15 @@ public class RemoveEntitiesFunctionTool implements AIFunctionTool {
         radius = Math.max(MIN_RADIUS, Math.min(MAX_RADIUS, radius));
 
         String typeFilter = FunctionToolHelper.getOptionalString(arguments, TYPE_PARAM, null);
-        ResourceLocation filterId = (typeFilter != null && !typeFilter.isBlank())
-                ? ResourceLocation.tryParse(typeFilter.toLowerCase())
-                : null;
+        ResourceLocation filterId = null;
+        if (typeFilter != null && !typeFilter.isBlank()) {
+            filterId = ResourceLocation.tryParse(typeFilter.toLowerCase());
+            if (filterId == null) {
+                return FunctionCallResult.failure(
+                        FunctionCallResult.ErrorType.INVALID_ARGUMENT,
+                        "无效的实体类型: " + typeFilter);
+            }
+        }
 
         double radiusSq = (double) radius * radius;
         AABB box = AABB.ofSize(target.position(), radius * 2.0, radius * 2.0, radius * 2.0);
