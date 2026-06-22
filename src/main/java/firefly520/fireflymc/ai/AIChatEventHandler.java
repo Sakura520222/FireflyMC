@@ -197,7 +197,8 @@ public class AIChatEventHandler {
             historyManager.addMessage(ChatMessage.of(senderName, prompt, MessageType.PLAYER));
             source.sendSuccess(() -> Component.literal("§a[Server Console] " + prompt), true);
 
-            // 多轮 Agentic 循环（player 为 null 表示控制台）
+            // 多轮 Agentic 循环（player 为 null 表示控制台）。
+            // 产品决策：控制台触发的消息不进入跨级聊天互通——此处不发送 CrossChatRelayPayload。
             ToolContext ctx = new ToolContext(server, null);
             AgenticToolLoop.run(ctx, historyManager, prompt, reply -> broadcastReply(ctx, reply));
         }
@@ -555,10 +556,9 @@ public class AIChatEventHandler {
         }
 
         // 以 AI 名义将回复上行到跨级聊天（QQ 群）：由触发者客户端代为转发。
-        // 服务端无云端 WS 连接，借助已连云端的客户端发 player_chat；console 触发时无客户端可代发，跳过。
-        ServerPlayer relaySource = ctx.player();
-        if (relaySource != null) {
-            PacketDistributor.sendToPlayer(relaySource, new CrossChatRelayPayload(AIConfig.getAiNamePlain(), reply));
+        // 产品决策：控制台触发的 AI 回复不进入互通（运维操作不外溢到 QQ）。
+        if (!ctx.isConsole()) {
+            PacketDistributor.sendToPlayer(ctx.player(), new CrossChatRelayPayload(AIConfig.getAiNamePlain(), reply));
         }
     }
 }
