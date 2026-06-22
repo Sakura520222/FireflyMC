@@ -78,7 +78,7 @@ public class AIApiClient {
             // 创建HTTP请求
             HttpRequest request = HttpRequest.newBuilder()
                     .uri(URI.create(AIConfig.getApiUrl() + "/chat/completions"))
-                    .timeout(Duration.ofSeconds(10))
+                    .timeout(Duration.ofSeconds(90))
                     .header("Content-Type", "application/json")
                     .header("Authorization", "Bearer " + AIConfig.getApiKey())
                     .POST(HttpRequest.BodyPublishers.ofString(GSON.toJson(requestBody)))
@@ -367,7 +367,7 @@ public class AIApiClient {
             // 创建HTTP请求
             HttpRequest request = HttpRequest.newBuilder()
                     .uri(URI.create(AIConfig.getApiUrl() + "/chat/completions"))
-                    .timeout(Duration.ofSeconds(15))
+                    .timeout(Duration.ofSeconds(120))
                     .header("Content-Type", "application/json")
                     .header("Authorization", "Bearer " + AIConfig.getApiKey())
                     .POST(HttpRequest.BodyPublishers.ofString(GSON.toJson(requestBody)))
