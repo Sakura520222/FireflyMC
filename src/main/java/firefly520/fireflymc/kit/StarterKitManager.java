@@ -162,12 +162,12 @@ public class StarterKitManager {
     /**
      * 领取记录
      */
+    @SuppressWarnings("unused") // Gson serialization
     private static class ClaimRecord {
         String uuid;
         String playerName;
         String claimedAt;
 
-        @SuppressWarnings("unused")
         public ClaimRecord() {}
 
         public ClaimRecord(String uuid, String playerName, String claimedAt) {

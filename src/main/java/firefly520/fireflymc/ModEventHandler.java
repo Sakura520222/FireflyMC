@@ -6,7 +6,6 @@ import firefly520.fireflymc.network.ModHandshakePayload;
 import firefly520.fireflymc.network.ModPayloadHandler;
 import firefly520.fireflymc.network.ShowRulesPayload;
 import firefly520.fireflymc.network.TitleSyncPayload;
-import firefly520.fireflymc.title.TitleCommandHandler;
 import firefly520.fireflymc.title.TitleManager;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.MinecraftServer;

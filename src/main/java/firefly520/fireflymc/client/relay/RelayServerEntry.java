@@ -23,7 +23,6 @@ import java.util.List;
 public class RelayServerEntry extends ServerSelectionList.Entry {
 
     private static final int ACCENT_PRIMARY = 0xFFFF69B4;
-    private static final int ACCENT_SECONDARY = 0xFFFF1493;
     private static final int TEXT_SECONDARY = 0xFF888888;
 
     private final JoinMultiplayerScreen screen;

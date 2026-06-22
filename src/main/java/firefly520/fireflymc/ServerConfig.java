@@ -235,7 +235,7 @@ public class ServerConfig {
             aiDisabledTools = builder
                     .comment("禁用的工具名称列表（如 [\"spawn_entities\"]），为空表示全部启用")
                     .translation("fireflymc.config.ai.disabled_tools")
-                    .defineList("disabledTools", List.of(), o -> o instanceof String);
+                    .defineListAllowEmpty("disabledTools", () -> List.<String>of(), () -> "", o -> o instanceof String);
 
             builder.pop();
 

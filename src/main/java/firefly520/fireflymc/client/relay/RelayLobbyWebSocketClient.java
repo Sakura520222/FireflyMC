@@ -1,6 +1,5 @@
 package firefly520.fireflymc.client.relay;
 
-import firefly520.fireflymc.client.relay.RelayConfig;
 import firefly520.fireflymc.client.relay.p2p.P2PConnectionManager;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

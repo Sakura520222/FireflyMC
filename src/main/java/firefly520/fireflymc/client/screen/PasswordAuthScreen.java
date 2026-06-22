@@ -1,7 +1,6 @@
 package firefly520.fireflymc.client.screen;
 
 import firefly520.fireflymc.network.PasswordSubmitPayload;
-import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.EditBox;

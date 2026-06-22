@@ -36,8 +36,6 @@ import net.minecraft.network.chat.contents.TranslatableContents;
 import firefly520.fireflymc.network.CrossChatRelayPayload;
 import firefly520.fireflymc.util.ServerLanguageLoader;
 import net.neoforged.neoforge.network.PacketDistributor;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 /**
  * AI 聊天事件处理器。
@@ -54,7 +52,6 @@ import org.slf4j.LoggerFactory;
  */
 @EventBusSubscriber(modid = "fireflymc", value = Dist.DEDICATED_SERVER)
 public class AIChatEventHandler {
-    private static final Logger LOGGER = LoggerFactory.getLogger(AIChatEventHandler.class);
 
     // 每个服务器实例一个历史管理器
     private static final ConcurrentHashMap<MinecraftServer, ChatHistoryManager> HISTORY_MANAGERS = new ConcurrentHashMap<>();

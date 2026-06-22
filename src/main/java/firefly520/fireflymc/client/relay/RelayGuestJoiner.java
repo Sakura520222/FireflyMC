@@ -1,7 +1,6 @@
 package firefly520.fireflymc.client.relay;
 
 import firefly520.fireflymc.client.ClientState;
-import firefly520.fireflymc.client.relay.RelayConfig;
 import firefly520.fireflymc.client.relay.p2p.P2PConnectionManager;
 import firefly520.fireflymc.client.relay.p2p.P2PGuestProxy;
 import firefly520.fireflymc.client.relay.p2p.P2PJoinInfo;
@@ -10,7 +9,6 @@ import net.minecraft.client.gui.screens.ConnectScreen;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.multiplayer.ServerData;
 import net.minecraft.client.multiplayer.resolver.ServerAddress;
-import net.minecraft.network.chat.Component;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 

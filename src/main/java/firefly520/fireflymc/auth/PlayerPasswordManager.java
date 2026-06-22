@@ -41,7 +41,6 @@ public class PlayerPasswordManager {
 
     private Map<String, PasswordRecord> passwords = new ConcurrentHashMap<>();
     private Path dataFile;
-    private boolean loaded = false;
 
     // 待验证玩家会话：UUID -> 会话状态
     private final Map<UUID, AuthSession> pendingSessions = new ConcurrentHashMap<>();
@@ -71,7 +70,6 @@ public class PlayerPasswordManager {
                 LOGGER.error("[FireflyMC] 加载密码记录失败", e);
             }
         }
-        this.loaded = true;
     }
 
     private synchronized void saveData() {
@@ -288,6 +286,7 @@ public class PlayerPasswordManager {
 
     // ========== 内部数据类 ==========
 
+    @SuppressWarnings("unused") // Gson serialization
     private static class PasswordRecord {
         String passwordHash;
         String salt;
@@ -296,7 +295,6 @@ public class PlayerPasswordManager {
         String lastSeenUuid;
         String lastSeenName;
 
-        @SuppressWarnings("unused") // Gson deserialization
         public PasswordRecord() {}
 
         public PasswordRecord(String passwordHash, String salt, String createdAt,

@@ -1,6 +1,5 @@
 package firefly520.fireflymc.client.screen;
 
-import firefly520.fireflymc.Config;
 import firefly520.fireflymc.client.ClientState;
 import firefly520.fireflymc.client.relay.SingleplayerRelayManager;
 import net.minecraft.client.Minecraft;
