@@ -93,9 +93,8 @@ public class AgenticToolLoop {
                 calls = calls.subList(0, remaining);
             }
 
-            // OpenAI 规范：assistant 发起的 tool_calls 必须入历史，tool 结果紧随其后
             history.addMessage(ChatMessage.toolCall(
-                    AIApiClient.buildToolCallsJson(response.toolCalls()),
+                    AIApiClient.buildToolCallsJson(calls),
                     response.content()));
 
             // 串行执行全部 tool_call（主线程）
