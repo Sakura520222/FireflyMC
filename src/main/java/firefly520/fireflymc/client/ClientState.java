@@ -75,5 +75,5 @@ public class ClientState {
      * 供客户端收到 AuthLockoutPayload 时拼接限流 key 使用。
      * 单人 / LAN / 大厅代理连接时不更新。
      */
-    public static String currentServerIp = null;
+    public static volatile String currentServerIp = null;
 }
