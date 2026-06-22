@@ -24,12 +24,18 @@ public record ApiMessage(
         if (role == null) {
             role = "user";
         }
-        // 空 content / 空 name 一律归一为 null，便于 Gson 省略，避免本地端点对空字符串报错
-        if (content == null || content.isEmpty()) {
-            content = null;
-        }
         if (name != null && name.isEmpty()) {
             name = null;
+        }
+        // assistant 携带 tool_calls 的消息必须含 content 字段（部分 provider 如 GLM/月之暗面
+        // 要求 assistant tool_calls 消息有 content，即使为空字符串，否则报「messages 参数非法」）；
+        // 其它消息的空 content 仍归一为 null 由 Gson 省略
+        if (toolCalls != null) {
+            if (content == null) {
+                content = "";
+            }
+        } else if (content != null && content.isEmpty()) {
+            content = null;
         }
     }
 

@@ -1,5 +1,6 @@
 package firefly520.fireflymc.ai;
 
+import net.minecraft.core.BlockPos;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 
@@ -13,8 +14,19 @@ import net.minecraft.server.level.ServerPlayer;
  *
  * @param server Minecraft 服务器实例（永不为 null）
  * @param player 触发工具的玩家；控制台调用时为 null
+ * @param anchor 建造坐标基准锚点。玩家触发时在触发瞬间锁定为玩家脚下位置，
+ *               之后整个对话期间保持不变（即使玩家移动），使 fill_blocks /
+ *               place_block / get_blocks 的相对坐标始终对齐同一原点；
+ *               控制台触发时为 null（此时用目标玩家实时位置）
  */
-public record ToolContext(MinecraftServer server, ServerPlayer player) {
+public record ToolContext(MinecraftServer server, ServerPlayer player, BlockPos anchor) {
+
+    /**
+     * 兼容构造：锚点默认锁定为玩家当前位置（触发瞬间）。
+     */
+    public ToolContext(MinecraftServer server, ServerPlayer player) {
+        this(server, player, player != null ? player.blockPosition() : null);
+    }
 
     /**
      * 是否由服务器控制台触发。

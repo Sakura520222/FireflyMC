@@ -337,7 +337,7 @@ public class AIApiClient {
                     .collect(Collectors.toList());
 
             // 添加系统提示（工具定义已通过 tools 字段规范传递，无需在 prompt 文本里重复）
-            String systemPrompt = SYSTEM_PROMPT + "\n\n玩家 [" + playerName + "] 刚刚发了消息，messages数组中的最后一条就是他/她发送的，请回复最后一条消息。";
+            String systemPrompt = SYSTEM_PROMPT + "\n\n你正在与玩家 [" + playerName + "] 对话。请基于 messages 数组中的历史回复；若末尾是工具调用结果，请结合结果继续作答或发起下一步调用。";
             messages.add(0, new ApiMessage("system", null, systemPrompt));
 
             // 转换为JSON

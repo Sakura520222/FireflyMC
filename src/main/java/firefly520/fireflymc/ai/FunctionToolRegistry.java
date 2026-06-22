@@ -45,6 +45,11 @@ public class FunctionToolRegistry {
         // 实体查询/移除类
         registerTool(new GetNearbyEntitiesFunctionTool());
         registerTool(new RemoveEntitiesFunctionTool());
+
+        // 建造类
+        registerTool(new FillBlocksFunctionTool());
+        registerTool(new PlaceBlockFunctionTool());
+        registerTool(new GetBlocksFunctionTool());
     }
 
     /**

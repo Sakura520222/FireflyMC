@@ -218,14 +218,14 @@ public class ServerConfig {
                     .defineInRange("functionsRequireOpLevel", 4, 0, 4);
 
             aiMaxToolRounds = builder
-                    .comment("AI多轮工具调用最大轮次（防止失控）")
+                    .comment("AI多轮工具调用最大轮次（防止失控，建议保持合理值）")
                     .translation("fireflymc.config.ai.max_tool_rounds")
-                    .defineInRange("maxToolRounds", 5, 1, 20);
+                    .defineInRange("maxToolRounds", 5, 1, Integer.MAX_VALUE);
 
             aiMaxToolCalls = builder
-                    .comment("单次对话累计工具调用上限（防止失控）")
+                    .comment("单次对话累计工具调用上限（防止失控，建议保持合理值）")
                     .translation("fireflymc.config.ai.max_tool_calls")
-                    .defineInRange("maxToolCalls", 10, 1, 50);
+                    .defineInRange("maxToolCalls", 10, 1, Integer.MAX_VALUE);
 
             aiParallelToolCalls = builder
                     .comment("是否启用并行工具调用（部分本地模型/LM Studio不支持，默认关闭）")
