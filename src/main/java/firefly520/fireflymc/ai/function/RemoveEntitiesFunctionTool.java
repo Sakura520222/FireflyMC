@@ -122,7 +122,7 @@ public class RemoveEntitiesFunctionTool implements AIFunctionTool {
         String typeFilter = FunctionToolHelper.getOptionalString(arguments, TYPE_PARAM, null);
         ResourceLocation parsedFilterId = null;
         if (typeFilter != null && !typeFilter.isBlank()) {
-            parsedFilterId = ResourceLocation.tryParse(typeFilter.toLowerCase());
+            parsedFilterId = ResourceLocation.tryParse(typeFilter.toLowerCase(java.util.Locale.ROOT));
             if (parsedFilterId == null) {
                 return FunctionCallResult.failure(
                         FunctionCallResult.ErrorType.INVALID_ARGUMENT,
