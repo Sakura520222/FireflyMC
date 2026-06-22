@@ -75,6 +75,13 @@ public class ModNetwork {
                 AuthLockoutPayload.STREAM_CODEC,
                 (payload, context) -> handleAuthLockoutOnClient(payload, context)
         );
+
+        // 注册服务端→客户端的跨级聊天代发包（客户端代为上行 AI 回复 / 玩家命令消息）
+        registrar.playToClient(
+                CrossChatRelayPayload.TYPE,
+                CrossChatRelayPayload.STREAM_CODEC,
+                (payload, context) -> handleCrossChatRelayOnClient(payload, context)
+        );
     }
 
     /**
@@ -165,6 +172,25 @@ public class ModNetwork {
                 java.lang.reflect.Method method = handlerClass.getDeclaredMethod(
                     "handleAuthLockout",
                     AuthLockoutPayload.class,
+                    IPayloadContext.class
+                );
+                method.invoke(null, payload, context);
+            } catch (Exception e) {
+                // 忽略错误
+            }
+        }
+    }
+
+    /**
+     * 使用反射调用客户端跨级聊天代发处理器
+     */
+    private static void handleCrossChatRelayOnClient(CrossChatRelayPayload payload, IPayloadContext context) {
+        if (FMLEnvironment.dist == Dist.CLIENT) {
+            try {
+                Class<?> handlerClass = Class.forName("firefly520.fireflymc.client.ClientPayloadHandler");
+                java.lang.reflect.Method method = handlerClass.getDeclaredMethod(
+                    "handleCrossChatRelay",
+                    CrossChatRelayPayload.class,
                     IPayloadContext.class
                 );
                 method.invoke(null, payload, context);

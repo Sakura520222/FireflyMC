@@ -2,8 +2,12 @@ package firefly520.fireflymc.client;
 
 import firefly520.fireflymc.FireflyMCMod;
 import firefly520.fireflymc.client.auth.ClientAuthLockoutManager;
+import firefly520.fireflymc.client.eventws.ClientEventNotificationConfig;
+import firefly520.fireflymc.client.eventws.ClientEventNotificationMessage;
+import firefly520.fireflymc.client.eventws.ClientEventWebSocketClient;
 import firefly520.fireflymc.client.screen.PasswordAuthScreen;
 import firefly520.fireflymc.client.screen.RulesScreen;
+import firefly520.fireflymc.network.CrossChatRelayPayload;
 import firefly520.fireflymc.network.AuthLockoutPayload;
 import firefly520.fireflymc.network.ModHandshakePayload;
 import firefly520.fireflymc.network.ModHandshakeReplyPayload;
@@ -84,6 +88,27 @@ public class ClientPayloadHandler {
             String playerName = mc.getUser().getName();
             String key = ClientAuthLockoutManager.buildKey(serverIp, playerName);
             ClientAuthLockoutManager.getInstance().recordLockout(key, payload.lockoutMinutes());
+        });
+    }
+
+    /**
+     * 客户端处理服务端发来的跨级聊天代发包，以指定发送者名义上行到云端/QQ 群。
+     * <p>
+     * 服务端无云端 WebSocket 连接，AI 回复、{@code /ai} 命令的玩家消息等无法走
+     * ClientChatEvent 上行，由服务端通过本 payload 委托已连云端的客户端代发 player_chat。
+     */
+    public static void handleCrossChatRelay(CrossChatRelayPayload payload, IPayloadContext context) {
+        context.enqueueWork(() -> {
+            if (!ClientEventNotificationConfig.crossChatEnabled()) {
+                return;
+            }
+            Minecraft minecraft = Minecraft.getInstance();
+            if (minecraft.player == null) {
+                return;
+            }
+            ClientEventWebSocketClient.getInstance().send(
+                ClientEventNotificationMessage.crossChatRelay(minecraft, payload.senderName(), payload.message())
+            );
         });
     }
 }

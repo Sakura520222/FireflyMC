@@ -37,9 +37,10 @@ public class FunctionToolRegistry {
         registerTool(new TeleportPlayerFunctionTool());
         registerTool(new SummonPlayerFunctionTool());
 
-        // 物品/效果类（clear_inventory 已移除：清空物品栏风险过高）
+        // 物品/效果/清理类（clear_inventory 已移除：清空物品栏风险过高）
         registerTool(new GiveEffectFunctionTool());
         registerTool(new GiveItemFunctionTool());
+        registerTool(new ClearDroppedItemsFunctionTool());
     }
 
     /**

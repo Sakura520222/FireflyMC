@@ -33,7 +33,9 @@ import net.minecraft.advancements.Advancement;
 import net.minecraft.advancements.DisplayInfo;
 import net.minecraft.network.chat.contents.TranslatableContents;
 
+import firefly520.fireflymc.network.CrossChatRelayPayload;
 import firefly520.fireflymc.util.ServerLanguageLoader;
+import net.neoforged.neoforge.network.PacketDistributor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -182,6 +184,9 @@ public class AIChatEventHandler {
 
             // 广播玩家消息到聊天区（与普通聊天格式一致）
             broadcastPlayerMessage(server, player.getName().getString(), prompt);
+
+            // 玩家的触发消息也上行到跨级聊天（/ai 命令不经 ClientChatEvent，需显式代发）
+            PacketDistributor.sendToPlayer(player, new CrossChatRelayPayload(player.getName().getString(), prompt));
 
             // 多轮 Agentic 循环（player 为触发者）
             ToolContext ctx = new ToolContext(server, player);
@@ -547,6 +552,13 @@ public class AIChatEventHandler {
             }
         } else if (ctx.player() != null) {
             ctx.player().displayClientMessage(fullChatMessage, false);
+        }
+
+        // 以 AI 名义将回复上行到跨级聊天（QQ 群）：由触发者客户端代为转发。
+        // 服务端无云端 WS 连接，借助已连云端的客户端发 player_chat；console 触发时无客户端可代发，跳过。
+        ServerPlayer relaySource = ctx.player();
+        if (relaySource != null) {
+            PacketDistributor.sendToPlayer(relaySource, new CrossChatRelayPayload(AIConfig.getAiNamePlain(), reply));
         }
     }
 }
