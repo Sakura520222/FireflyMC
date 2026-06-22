@@ -1,85 +1,71 @@
 # FireflyMC 项目概述
 
 ## 项目简介
-FireflyMC 是基于 Java 的 Minecraft 模组（NeoForge，MC 1.21.1），核心功能为 WebSocket 中继和 P2P UDP 打洞联机，附带 AI 聊天、称号系统、在线时长限制、掉落物清理、新手福利包、更新检查等。
+FireflyMC 是基于 Java 的 Minecraft 模组（NeoForge，MC 1.21.1），核心功能为 WebSocket 中继/P2P UDP 联机、AI Agent 聊天（tool calling）、认证锁定、称号/时长限制/掉落清理等。
 
 ## 技术栈
-Java 21 · Gradle · NeoForge 21.1.219 · Java 11 HttpClient (WebSocket) · UDP P2P · Gson · GitHub Actions
+Java 21 · Gradle · NeoForge 21.1.219 · Java HttpClient(WS) · UDP P2P · Gson · OpenAI API · GitHub Actions
 
 ## 架构设计
-- **中继模块**: `RelayLobbyWebSocketClient`，管理房间/成员
-- **P2P 模块**: `P2PConnectionManager` + `ReliableUdpChannel`（SendWindow + ReorderBuffer），支持 IPv6 双栈
-- **会话管理**: `ClientEventWebSocketClient`，含会话生命周期与连接代际
-- **认证锁定**: `ClientAuthLockoutManager`（服务端判定→Payload同步→客户端拦截）
-- **管理器层**: `TitleManager`（称号）、`ItemCleanupManager`（清理倒计时）、`PlayerPasswordManager`（密码）等单例
-- **线程模型**: 异步线程 → `server.execute()` → 主线程；虚拟线程用于网络请求
-- **日志脱敏**: 统一 `sanitizeRelayJsonForLog()`
+- **中继/P2P**: `RelayLobbyWebSocketClient` + `P2PConnectionManager`(SendWindow+ReorderBuffer)
+- **AI Agent**: `AgenticToolLoop`(tool calling) + FunctionTool注册表 + `ToolContext`统一上下文
+- **认证锁定**: `ClientAuthLockoutManager`(JSON持久化) + `PlayerPasswordManager`
+- **会话**: `ClientEventWebSocketClient`，含连接代际
+- **管理器**: `TitleManager`/`ItemCleanupManager`/`ChatHistoryManager`(热重载)等单例
+- **命令**: 统一前缀 `fireflymc <sub>`
 
 ## 已知问题
 
 ### 严重
-- **线程安全**: `RelayLobbyWebSocketClient` 多线程未同步；`textAccumulator` 非线程安全
-- **Executor 内部阻塞**: `SingleThreadExecutor` 内 `Future.join()` 退化为同步
-- **断线重连缺失**: WebSocket 无自动重连
-- **静态状态膨胀**: `RelayGuestJoiner` 等无生命周期重置
-- **密码安全**: 纯数字密码 + SHA-256 弱哈希
-- **TOCTOU 竞态**: ConcurrentHashMap 组合操作（更新+持久化+同步）缺 synchronized
-- **closeHandler 链断裂**: 资源清理链未覆盖所有异常断开路径
+- **ModNetwork 空 catch**: 4+轮未修🔴，根源在反射分发器，需资深介入
+- **线程安全**: `RelayLobbyWebSocketClient`多线程未同步；`ClientState`静态膨胀缺volatile
+- **Auth锁定**: 纯客户端可删文件绕过；lockoutMinutes缺校验；disconnect包序竞态
+- **AgenticToolLoop**: tool_calls截断后历史未同步致API拒绝
 
 ### 设计缺陷
-- **上帝类**: `RelayLobbyMessage` 职责过多
-- **忙轮询**: `while(isFull()) sleep(5)` 应改 `Condition.await()`
-- **反射静默失败**: 空 catch 块无日志；`ModNetwork.java` 6处空catch经三轮修复仍失败，标记🔴需资深开发者介入
-- **IPv6 敏感地址**: 可能上报 link-local/ULA
-- **Mixin 兼容性**: SRG/Intermediary 映射未验证
+- **AI Tool安全**: 缺参数校验框架，破坏性操作无额外安全层
+- **上帝类**: `RelayLobbyMessage`职责过多
+- **密码安全**: 纯数字+SHA-256弱哈希
 
 ## 审查规则
 | 规则 | 级别 |
 |------|------|
 | 日志脱敏全级别统一 | major |
-| 单线程 executor 禁止内部 join | major |
-| WebSocket/HTTP 回调共享状态必须同步 | major |
-| 长连接缺失重连→拒绝合并 | blocker |
-| 反射 catch 必须记录日志 | major |
-| 组合操作(状态+副作用)须 synchronized | major |
-| join() 必须配套 orTimeout() | major |
-| 静态可变状态: volatile + reset() | major |
-| 跨线程静态布尔标志用 AtomicBoolean | major |
-
-| 忙轮询 while+sleep 标记 suggestion | suggestion |
-| 新增 Mixin 必须评估兼容性与冲突 | major |
-| 用户输入(命令/配置)边界校验 | major |
-| HttpClient 实例必须复用 | minor |
-| 配置开关关闭时流程完整性 | major |
-| 增量审查必须声明边界，扫描同模块历史问题 | process |
-| 安全机制失效默认 major（限流/锁定/认证绕过） | major |
-| 隐私外传配置默认值 false | major |
-| WebSocket 链路审查三件套（重连+线程安全+closeHandler） | major |
-| 长连接兜底路径（超时+fallback+reset） | major |
-| WorldRenderer 强制检查清单（5项） | major |
-| Mixin 移除必须验证功能对等 | major |
-| 同类缺陷强制批量修复（不允许单点修复） | major |
-| 配置变更逐项审查（默认值+边界值+热更新） | major |
-| 网络包客户端防御校验（数值字段范围检查） | major |
-| 新增文件>50行必须有审查意见（正面评价≠意见） | major |
-| 修复类PR强制本地编译，CI绿色或截图 | major |
-| 同一PR连续两轮评分下降→建议更换修复者 | process |
-| 开发者暴露语法缺陷时审查必须给可复制模板 | major |
-| 全量审查按功能链路组织（配置→触发→传输→处理→展示→清理） | process |
-| 正面评价不替代审查意见（新增核心文件至少1条改进建议） | major |
+| 单线程executor禁止内部join | major |
+| WS/HTTP回调共享状态须同步 | major |
+| 长连接缺重连→blocker | blocker |
+| 组合操作须synchronized | major |
+| join()须配orTimeout() | major |
+| 静态可变: volatile+reset() | major |
+| 网络包客户端防御校验 | major |
+| 安全机制失效默认major(含AI) | major |
+| 新文件>50行须有意见 | major |
+| 同类缺陷>2轮未修→阻断 | major |
+| 🔴模块增量提升一级 | major |
+| AI破坏性操作须白名单 | major |
+| AI查询结果强制截断≤50 | major |
+| 发包后disconnect须包序原子 | major |
+| 安全功能须服务端全覆盖 | major |
+| 删除>50行须确认校验迁移 | major |
+| Mixin兼容性逐个验证 | major |
+| 配置热重载三要素 | major |
+| tryParse()强制判空 | major |
+| toLowerCase须Locale.ROOT | minor |
+| PR描述不符→minor | minor |
+| major→须request_changes | process |
+| 增量审查文件覆盖率约束 | process |
+| 全量两阶段(链路+清单) | process |
+| 增量评分锚定基线 | process |
 
 ## 常见错误模式
-- 增量修复隧道视野（忽略同模块遗留风险）
-- 静态状态缺 volatile/AtomicBoolean
-- 网络请求非200静默丢弃
-- 变量名与单位脱节（含 Seconds 用 MINUTES）
-- 大版本更新分特性审查不足
-- 修复能力断层：开发者不理解"修什么"，将审查意见当单行任务执行，非全局模式修复
-- 新代码偏见：对写得好的新代码放松审查（正面评价≠审查意见）
-- 全量审查≠逐文件扫读，应按链路组织
-- 安全审查缺乏攻击者视角：安全控制能否被绕过
+- **增量隧道视野**: 大PR增量覆盖微量，结构风险不可达
+- **评分漂移**: 局部高分稀释遗留问题紧迫感
+- **备注≠行动**: ≥3轮备注为免责须阻断
+- **静默失败>异常**: tryParse返回null须强制处理
+- **AI Tool错误=安全边界**: 错误响应喂养AI决策
+- **防御编程缺失**: 网络/反射/HTTP均缺防御
 
 ## 仓库信息
 - 仓库名: Sakura520222/FireflyMC
 - 语言统计: Java: 573458
-- 累计反思次数: 31
+- 累计反思次数: 41
