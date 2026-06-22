@@ -220,9 +220,7 @@ public class AIChatEventHandler {
      * 获取或创建历史管理器
      */
     private static ChatHistoryManager getHistoryManager(MinecraftServer server) {
-        return HISTORY_MANAGERS.computeIfAbsent(server, s -> new ChatHistoryManager(
-                AIConfig.getMaxHistorySize()
-        ));
+        return HISTORY_MANAGERS.computeIfAbsent(server, s -> new ChatHistoryManager());
     }
 
     /**

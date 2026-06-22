@@ -40,6 +40,8 @@
   "fireflymc.config.singleplayer_relay.p2p_retransmit_millis.tooltip": "Reliable UDP retransmission interval in milliseconds",
   "fireflymc.config.singleplayer_relay.p2p_window_size": "P2P Sliding Window Size",
   "fireflymc.config.singleplayer_relay.p2p_window_size.tooltip": "Reliable UDP sliding window size in packets",
+  "fireflymc.config.singleplayer_relay.p2p_ipv6_enabled": "Enable P2P IPv6 Direct Connection",
+  "fireflymc.config.singleplayer_relay.p2p_ipv6_enabled.tooltip": "Try direct IPv6 connection first when both peers have public IPv6 addresses",
 
   "fireflymc.configuration.event_notification": "Client Event Notifications",
   "fireflymc.configuration.event_notification.button": "Client Event Notifications",
