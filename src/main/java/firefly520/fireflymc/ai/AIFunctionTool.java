@@ -1,75 +1,46 @@
 package firefly520.fireflymc.ai;
 
 import com.google.gson.JsonObject;
-import net.minecraft.server.MinecraftServer;
-import net.minecraft.server.level.ServerPlayer;
 
 /**
- * AI函数工具接口
+ * AI 函数工具接口。
  * <p>
- * 用于定义可被AI助手调用的函数工具，遵循OpenAI Function Calling规范
+ * 遵循 OpenAI Function Calling 规范，定义可被 AI 助手调用的工具。
+ * 工具实现只需提供唯一的 {@link #execute(ToolContext, JsonObject)}，
+ * 通过 {@link ToolContext} 同时覆盖「玩家触发」与「控制台触发」两条路径。
+ * <p>
+ * 权限校验与启用开关由调度层（{@code AgenticToolLoop}）统一完成，
+ * 工具实现聚焦业务逻辑，不再各自做前置检查。
  */
 public interface AIFunctionTool {
+
     /**
-     * 获取函数名称
-     * <p>
-     * 用于在API调用中标识该函数
-     *
-     * @return 函数名称（如 "spawn_entities"）
+     * 获取函数名称（如 "spawn_entities"），用于在 API 调用中标识该函数。
      */
     String getName();
 
     /**
-     * 获取函数描述
-     * <p>
-     * AI会根据此描述理解函数的用途，并决定何时调用
-     *
-     * @return 函数描述
+     * 获取函数描述，AI 据此判断何时调用该函数。
      */
     String getDescription();
 
     /**
-     * 获取参数JSON Schema
-     * <p>
-     * 遵循JSON Schema规范，定义函数接受的参数结构
-     *
-     * @return 参数Schema的JsonObject
+     * 获取参数 JSON Schema（遵循 JSON Schema 规范）。
      */
     JsonObject getParametersSchema();
 
     /**
-     * 获取所需权限等级（0-4）
-     * <p>
-     * 0 = 无权限要求
-     * 4 = OP权限等级4（最高）
-     *
-     * @return 所需权限等级
+     * 获取所需权限等级（0-4）。0 = 无要求，4 = 最高 OP。
+     * 控制台触发时视为 4 级，始终满足。
      */
     int getRequiredPermissionLevel();
 
     /**
-     * 执行函数（玩家触发）
+     * 执行函数。
      *
-     * @param player    触发此函数调用的玩家（用于权限验证）
-     * @param arguments AI传递的函数参数
-     * @return 执行结果
+     * @param ctx       执行上下文（含 server 与可选 player；控制台触发时 player 为 null）
+     * @param arguments AI 传递的函数参数
+     * @return 执行结果（成功/失败 + 消息）
      */
-    FunctionCallResult execute(ServerPlayer player, JsonObject arguments);
-
-    /**
-     * 执行函数（服务器控制台触发）
-     * <p>
-     * 从控制台触发时具有最高权限（4级OP），无需玩家上下文。
-     * 默认实现返回不支持提示，需要各工具自行覆写以支持控制台调用。
-     *
-     * @param server    Minecraft服务器实例
-     * @param arguments AI传递的函数参数
-     * @return 执行结果
-     */
-    default FunctionCallResult execute(MinecraftServer server, JsonObject arguments) {
-        return FunctionCallResult.failure(
-                FunctionCallResult.ErrorType.EXECUTION_FAILED,
-                "此工具不支持从服务器控制台调用"
-        );
-    }
+    FunctionCallResult execute(ToolContext ctx, JsonObject arguments);
 }

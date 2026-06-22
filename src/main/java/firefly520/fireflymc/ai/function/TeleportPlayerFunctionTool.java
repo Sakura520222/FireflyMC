@@ -4,14 +4,17 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import firefly520.fireflymc.ai.AIFunctionTool;
 import firefly520.fireflymc.ai.FunctionCallResult;
+import firefly520.fireflymc.ai.ToolContext;
 import net.minecraft.server.level.ServerLevel;
-import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 
 /**
- * 传送到玩家的函数工具
+ * 将一个玩家传送到另一个玩家位置的函数工具。
  */
 public class TeleportPlayerFunctionTool implements AIFunctionTool {
+
+    private static final String TARGET_PARAM = "target_player";
+    private static final String DEST_PARAM = "destination_player";
 
     @Override
     public String getName() {
@@ -30,22 +33,20 @@ public class TeleportPlayerFunctionTool implements AIFunctionTool {
 
         JsonObject properties = new JsonObject();
 
-        // targetPlayer 参数（被传送的玩家）
-        JsonObject targetPlayerParam = new JsonObject();
-        targetPlayerParam.addProperty("type", "string");
-        targetPlayerParam.addProperty("description", "被传送的玩家名称，默认为执行者");
-        properties.add("targetPlayer", targetPlayerParam);
+        JsonObject targetParam = new JsonObject();
+        targetParam.addProperty("type", "string");
+        targetParam.addProperty("description", "被传送的玩家名称，默认为执行者（控制台调用时必填）");
+        properties.add(TARGET_PARAM, targetParam);
 
-        // destinationPlayer 参数（目标玩家）
-        JsonObject destinationPlayerParam = new JsonObject();
-        destinationPlayerParam.addProperty("type", "string");
-        destinationPlayerParam.addProperty("description", "目标玩家名称（传送到该玩家位置）");
-        properties.add("destinationPlayer", destinationPlayerParam);
+        JsonObject destParam = new JsonObject();
+        destParam.addProperty("type", "string");
+        destParam.addProperty("description", "目标玩家名称（被传送者将到达该玩家位置）");
+        properties.add(DEST_PARAM, destParam);
 
         schema.add("properties", properties);
 
         JsonArray required = new JsonArray();
-        required.add("destinationPlayer");
+        required.add(DEST_PARAM);
         schema.add("required", required);
 
         return schema;
@@ -53,57 +54,32 @@ public class TeleportPlayerFunctionTool implements AIFunctionTool {
 
     @Override
     public int getRequiredPermissionLevel() {
-        return 3;  // 3级OP权限
+        return 3;
     }
 
     @Override
-    public FunctionCallResult execute(ServerPlayer player, JsonObject arguments) {
-        FunctionCallResult checkResult = FunctionToolHelper.checkPreconditions(player, this);
-        if (checkResult != null) return checkResult;
-
-        var server = player.getServer();
-
-        // 解析被传送的玩家（默认为执行者）
-        var targetResult = FunctionToolHelper.getOptionalTargetPlayer(server, arguments, "targetPlayer", player);
+    public FunctionCallResult execute(ToolContext ctx, JsonObject arguments) {
+        var targetResult = FunctionToolHelper.getOptionalTargetPlayer(ctx, arguments, TARGET_PARAM);
         if (targetResult.hasError()) return targetResult.error();
 
-        // 解析目的地玩家
-        var destResult = FunctionToolHelper.getRequiredTargetPlayer(server, arguments, "destinationPlayer");
+        var destResult = FunctionToolHelper.getRequiredTargetPlayer(ctx, arguments, DEST_PARAM);
         if (destResult.hasError()) return destResult.error();
 
         return teleportToPlayer(targetResult.player(), destResult.player());
     }
 
-    @Override
-    public FunctionCallResult execute(MinecraftServer server, JsonObject arguments) {
-        if (!arguments.has("targetPlayer")) {
-            return FunctionCallResult.failure(FunctionCallResult.ErrorType.INVALID_ARGUMENT, "从控制台执行必须指定 targetPlayer");
-        }
+    private FunctionCallResult teleportToPlayer(ServerPlayer target, ServerPlayer dest) {
+        ServerLevel destLevel = dest.serverLevel();
+        double x = dest.getX();
+        double y = dest.getY();
+        double z = dest.getZ();
+        float yaw = dest.getYRot();
+        float pitch = dest.getXRot();
 
-        var targetResult = FunctionToolHelper.getRequiredTargetPlayer(server, arguments, "targetPlayer");
-        if (targetResult.hasError()) return targetResult.error();
+        target.teleportTo(destLevel, x, y, z, yaw, pitch);
 
-        var destResult = FunctionToolHelper.getRequiredTargetPlayer(server, arguments, "destinationPlayer");
-        if (destResult.hasError()) return destResult.error();
-
-        return teleportToPlayer(targetResult.player(), destResult.player());
-    }
-
-    /**
-     * 共享的传送逻辑
-     */
-    private FunctionCallResult teleportToPlayer(ServerPlayer targetPlayer, ServerPlayer destPlayer) {
-        ServerLevel destLevel = destPlayer.serverLevel();
-        double x = destPlayer.getX();
-        double y = destPlayer.getY();
-        double z = destPlayer.getZ();
-        float yaw = destPlayer.getYRot();
-        float pitch = destPlayer.getXRot();
-
-        targetPlayer.teleportTo(destLevel, x, y, z, yaw, pitch);
-
-        String targetName = targetPlayer.getGameProfile().getName();
-        String destName = destPlayer.getGameProfile().getName();
+        String targetName = target.getGameProfile().getName();
+        String destName = dest.getGameProfile().getName();
         String dimensionName = destLevel.dimension().location().toString();
         return FunctionCallResult.success(
                 String.format("已将 %s 传送到 %s 的位置 %s", targetName, destName, dimensionName));

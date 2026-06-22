@@ -342,14 +342,8 @@ public class AIApiClient {
                     .map(ChatMessage::toApiMessage)
                     .collect(Collectors.toList());
 
-            // 添加系统提示
+            // 添加系统提示（工具定义已通过 tools 字段规范传递，无需在 prompt 文本里重复）
             String systemPrompt = SYSTEM_PROMPT + "\n\n玩家 [" + playerName + "] 刚刚发了消息，messages数组中的最后一条就是他/她发送的，请回复最后一条消息。";
-            if (tools != null && !tools.isEmpty()) {
-                systemPrompt += "\n\n你可以使用以下工具来帮助玩家：";
-                for (var tool : tools) {
-                    systemPrompt += "\n- " + tool.getName() + ": " + tool.getDescription();
-                }
-            }
             messages.add(0, new ApiMessage("system", null, systemPrompt));
 
             // 转换为JSON
@@ -370,8 +364,10 @@ public class AIApiClient {
                     toolsArray.add(toolObject);
                 }
                 requestBody.add("tools", toolsArray);
-                // 启用并行函数调用
-                requestBody.addProperty("parallel_tool_calls", true);
+                // 并行工具调用：本地模型/LM Studio 多不支持，由配置控制（默认 false）
+                if (AIConfig.getParallelToolCalls()) {
+                    requestBody.addProperty("parallel_tool_calls", true);
+                }
             }
 
             // 创建HTTP请求
@@ -414,24 +410,29 @@ public class AIApiClient {
                         .get(0).getAsJsonObject()
                         .getAsJsonObject("message");
 
-                // 检查是否有工具调用
+                // 检查是否有工具调用。
+                // 注意：部分本地后端（如 LM Studio）即使未调用工具也会返回空 tool_calls 数组，
+                // 必须判断数组非空，否则会误走此分支并丢弃 content，导致用户收不到任何回复。
                 if (message.has("tool_calls") && message.get("tool_calls").isJsonArray()) {
                     JsonArray toolCallsArray = message.getAsJsonArray("tool_calls");
-                    java.util.List<FunctionCallRequest> toolCalls = new java.util.ArrayList<>();
+                    if (!toolCallsArray.isEmpty()) {
+                        java.util.List<FunctionCallRequest> toolCalls = new java.util.ArrayList<>();
 
-                    for (JsonElement element : toolCallsArray) {
-                        JsonObject toolCall = element.getAsJsonObject();
-                        String id = toolCall.get("id").getAsString();
-                        JsonObject function = toolCall.getAsJsonObject("function");
-                        String name = function.get("name").getAsString();
-                        String argumentsStr = function.get("arguments").getAsString();
+                        for (JsonElement element : toolCallsArray) {
+                            JsonObject toolCall = element.getAsJsonObject();
+                            String id = toolCall.get("id").getAsString();
+                            JsonObject function = toolCall.getAsJsonObject("function");
+                            String name = function.get("name").getAsString();
+                            String argumentsStr = function.get("arguments").getAsString();
 
-                        // 解析参数字符串为JsonObject
-                        JsonObject arguments = GSON.fromJson(argumentsStr, JsonObject.class);
-                        toolCalls.add(new FunctionCallRequest(id, name, arguments));
+                            // 解析参数字符串为JsonObject
+                            JsonObject arguments = GSON.fromJson(argumentsStr, JsonObject.class);
+                            toolCalls.add(new FunctionCallRequest(id, name, arguments));
+                        }
+
+                        return AIWithToolsResponse.withToolCalls(toolCalls);
                     }
-
-                    return AIWithToolsResponse.withToolCalls(toolCalls);
+                    // 空 tool_calls 数组：继续走下方文本响应分支
                 }
 
                 // 普通文本响应
@@ -473,5 +474,31 @@ public class AIApiClient {
         // 其他错误
         LOGGER.error("[FireflyMC] AI API返回错误: {} {}", statusCode, response.body());
         return AIWithToolsResponse.error(ErrorType.API_ERROR);
+    }
+
+    /**
+     * 将工具调用列表重建为 OpenAI 规范的 tool_calls JSON 数组。
+     * <p>
+     * 用于把 AI 发起的 tool_calls 存入聊天历史（TOOL_CALL 消息），
+     * 以便下一轮请求能正确还原 assistant 消息结构，满足多轮循环的规范约束：
+     * 每条 role:tool 结果必须紧跟在携带其 tool_call_id 的 assistant 消息之后。
+     *
+     * @param toolCalls AI 返回的工具调用列表
+     * @return OpenAI 规范的 tool_calls JSON 数组
+     */
+    public static JsonArray buildToolCallsJson(List<FunctionCallRequest> toolCalls) {
+        JsonArray array = new JsonArray();
+        for (FunctionCallRequest call : toolCalls) {
+            JsonObject toolCall = new JsonObject();
+            toolCall.addProperty("id", call.id());
+            toolCall.addProperty("type", "function");
+            JsonObject function = new JsonObject();
+            function.addProperty("name", call.name());
+            // OpenAI 规范要求 arguments 为 JSON 字符串
+            function.addProperty("arguments", call.arguments() == null ? "{}" : GSON.toJson(call.arguments()));
+            toolCall.add("function", function);
+            array.add(toolCall);
+        }
+        return array;
     }
 }

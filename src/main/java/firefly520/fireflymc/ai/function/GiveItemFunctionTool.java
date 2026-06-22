@@ -4,22 +4,24 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import firefly520.fireflymc.ai.AIFunctionTool;
 import firefly520.fireflymc.ai.FunctionCallResult;
+import firefly520.fireflymc.ai.ToolContext;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
-import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.item.Item;
-import net.minecraft.world.item.Items;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
 
 /**
- * 给予物品的函数工具
+ * 给予物品的函数工具。
  */
 public class GiveItemFunctionTool implements AIFunctionTool {
 
     private static final int MIN_COUNT = 1;
     private static final int MAX_COUNT = 64;
     private static final int DEFAULT_COUNT = 1;
+
+    private static final String TARGET_PARAM = "target_player";
 
     @Override
     public String getName() {
@@ -38,13 +40,11 @@ public class GiveItemFunctionTool implements AIFunctionTool {
 
         JsonObject properties = new JsonObject();
 
-        // item 参数
         JsonObject itemParam = new JsonObject();
         itemParam.addProperty("type", "string");
         itemParam.addProperty("description", "物品ID，如 'minecraft:diamond'、'minecraft:iron_sword' 等");
         properties.add("item", itemParam);
 
-        // count 参数
         JsonObject countParam = new JsonObject();
         countParam.addProperty("type", "integer");
         countParam.addProperty("description", "物品数量");
@@ -53,11 +53,10 @@ public class GiveItemFunctionTool implements AIFunctionTool {
         countParam.addProperty("maximum", MAX_COUNT);
         properties.add("count", countParam);
 
-        // targetPlayer 参数
-        JsonObject targetPlayerParam = new JsonObject();
-        targetPlayerParam.addProperty("type", "string");
-        targetPlayerParam.addProperty("description", "目标玩家名称，默认为执行者");
-        properties.add("targetPlayer", targetPlayerParam);
+        JsonObject targetParam = new JsonObject();
+        targetParam.addProperty("type", "string");
+        targetParam.addProperty("description", "目标玩家名称，默认为执行者（控制台调用时必填）");
+        properties.add(TARGET_PARAM, targetParam);
 
         schema.add("properties", properties);
 
@@ -70,54 +69,31 @@ public class GiveItemFunctionTool implements AIFunctionTool {
 
     @Override
     public int getRequiredPermissionLevel() {
-        return 4;  // 4级OP权限
+        return 4;
     }
 
     @Override
-    public FunctionCallResult execute(ServerPlayer player, JsonObject arguments) {
-        FunctionCallResult checkResult = FunctionToolHelper.checkPreconditions(player, this);
-        if (checkResult != null) return checkResult;
-
-        var server = player.getServer();
-
+    public FunctionCallResult execute(ToolContext ctx, JsonObject arguments) {
         var itemResult = FunctionToolHelper.getRequiredString(arguments, "item");
-        if (itemResult.hasError()) return itemResult.error();
-        String itemStr = itemResult.value().toLowerCase();
-
-        int count = FunctionToolHelper.getOptionalInt(arguments, "count", DEFAULT_COUNT);
-        count = Math.max(MIN_COUNT, Math.min(MAX_COUNT, count));
-
-        var targetResult = FunctionToolHelper.getOptionalTargetPlayer(server, arguments, "targetPlayer", player);
-        if (targetResult.hasError()) return targetResult.error();
-
-        String targetName = targetResult.player().getGameProfile().getName();
-        return giveItem(targetResult.player(), targetName, itemStr, count);
-    }
-
-    @Override
-    public FunctionCallResult execute(MinecraftServer server, JsonObject arguments) {
-        if (!arguments.has("targetPlayer")) {
-            return FunctionCallResult.failure(FunctionCallResult.ErrorType.INVALID_ARGUMENT, "从控制台执行必须指定 targetPlayer");
+        if (itemResult.hasError()) {
+            return itemResult.error();
         }
-
-        var itemResult = FunctionToolHelper.getRequiredString(arguments, "item");
-        if (itemResult.hasError()) return itemResult.error();
         String itemStr = itemResult.value().toLowerCase();
 
         int count = FunctionToolHelper.getOptionalInt(arguments, "count", DEFAULT_COUNT);
         count = Math.max(MIN_COUNT, Math.min(MAX_COUNT, count));
 
-        var targetResult = FunctionToolHelper.getRequiredTargetPlayer(server, arguments, "targetPlayer");
-        if (targetResult.hasError()) return targetResult.error();
+        var targetResult = FunctionToolHelper.getOptionalTargetPlayer(ctx, arguments, TARGET_PARAM);
+        if (targetResult.hasError()) {
+            return targetResult.error();
+        }
+        ServerPlayer target = targetResult.player();
+        String targetName = target.getGameProfile().getName();
 
-        String targetName = targetResult.player().getGameProfile().getName();
-        return giveItem(targetResult.player(), targetName, itemStr, count);
+        return giveItem(target, targetName, itemStr, count);
     }
 
-    /**
-     * 共享的物品给予逻辑
-     */
-    private FunctionCallResult giveItem(ServerPlayer targetPlayer, String targetName, String itemStr, int count) {
+    private FunctionCallResult giveItem(ServerPlayer target, String targetName, String itemStr, int count) {
         ResourceLocation itemId = ResourceLocation.tryParse(itemStr);
         if (itemId == null) {
             return FunctionCallResult.failure(
@@ -132,14 +108,14 @@ public class GiveItemFunctionTool implements AIFunctionTool {
         }
 
         ItemStack itemStack = new ItemStack(item, count);
-        boolean added = targetPlayer.getInventory().add(itemStack);
+        boolean added = target.getInventory().add(itemStack);
         if (!added) {
-            targetPlayer.drop(itemStack, false);
+            target.drop(itemStack, false);
             return FunctionCallResult.success(
                     String.format("已给予 %s %dx %s（背包已满，物品掉落在地上）",
-                            targetName, count, itemId.toString()));
+                            targetName, count, itemId));
         }
         return FunctionCallResult.success(
-                String.format("已给予 %s %dx %s", targetName, count, itemId.toString()));
+                String.format("已给予 %s %dx %s", targetName, count, itemId));
     }
 }

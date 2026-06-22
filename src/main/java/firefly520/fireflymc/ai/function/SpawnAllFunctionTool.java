@@ -4,24 +4,25 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import firefly520.fireflymc.ai.AIFunctionTool;
 import firefly520.fireflymc.ai.FunctionCallResult;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.stream.Collectors;
+import firefly520.fireflymc.ai.ToolContext;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
-import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.MobSpawnType;
 import net.minecraft.world.level.levelgen.Heightmap;
 
+import java.util.ArrayList;
+import java.util.List;
+import java.util.stream.Collectors;
+
 /**
- * spawnall命令的函数工具实现
+ * 在玩家附近生成生物的函数工具。
  * <p>
- * 允许AI助手在所有在线玩家附近生成指定生物
+ * 玩家触发时默认作用于除执行者外的所有在线玩家；控制台触发时默认作用于所有在线玩家。
  */
 public class SpawnAllFunctionTool implements AIFunctionTool {
 
@@ -39,7 +40,7 @@ public class SpawnAllFunctionTool implements AIFunctionTool {
 
     @Override
     public String getDescription() {
-        return "在指定玩家附近生成指定生物。未指定目标时，默认为除了执行者以外的所有在线玩家。需要4级OP权限。";
+        return "在指定玩家附近生成指定生物。未指定目标时，玩家触发默认作用于除执行者外的所有在线玩家，控制台触发默认作用于所有在线玩家。需要4级OP权限。";
     }
 
     @Override
@@ -49,14 +50,12 @@ public class SpawnAllFunctionTool implements AIFunctionTool {
 
         JsonObject properties = new JsonObject();
 
-        // entityType 参数
         JsonObject entityType = new JsonObject();
         entityType.addProperty("type", "string");
         entityType.addProperty("description",
                 "生物类型的资源位置，如 'minecraft:zombie'、'minecraft:skeleton'、'minecraft:creeper' 等，支持原版和模组生物");
         properties.add("entityType", entityType);
 
-        // count 参数
         JsonObject count = new JsonObject();
         count.addProperty("type", "integer");
         count.addProperty("description", "每个玩家附近生成的生物数量");
@@ -65,7 +64,6 @@ public class SpawnAllFunctionTool implements AIFunctionTool {
         count.addProperty("maximum", MAX_COUNT);
         properties.add("count", count);
 
-        // radius 参数
         JsonObject radius = new JsonObject();
         radius.addProperty("type", "integer");
         radius.addProperty("description", "生成距离玩家的最大半径（方块）");
@@ -74,11 +72,9 @@ public class SpawnAllFunctionTool implements AIFunctionTool {
         radius.addProperty("maximum", MAX_RADIUS);
         properties.add("radius", radius);
 
-        // targets 参数
         JsonObject targetsParam = new JsonObject();
         targetsParam.addProperty("type", "array");
-        targetsParam.addProperty("description", "目标玩家名称列表，如 [\"player1\", \"player2\"]。未提供或为空时，默认为除了执行者以外的所有玩家");
-
+        targetsParam.addProperty("description", "目标玩家名称列表，如 [\"player1\", \"player2\"]。未提供或为空时使用默认目标");
         JsonObject items = new JsonObject();
         items.addProperty("type", "string");
         targetsParam.add("items", items);
@@ -86,7 +82,6 @@ public class SpawnAllFunctionTool implements AIFunctionTool {
 
         schema.add("properties", properties);
 
-        // required
         JsonArray required = new JsonArray();
         required.add("entityType");
         schema.add("required", required);
@@ -96,49 +91,37 @@ public class SpawnAllFunctionTool implements AIFunctionTool {
 
     @Override
     public int getRequiredPermissionLevel() {
-        return 4;  // 4级OP权限
+        return 4;
     }
 
     @Override
-    public FunctionCallResult execute(ServerPlayer player, JsonObject arguments) {
-        FunctionCallResult checkResult = FunctionToolHelper.checkPreconditions(player, this);
-        if (checkResult != null) return checkResult;
-
-        var server = player.getServer();
+    public FunctionCallResult execute(ToolContext ctx, JsonObject arguments) {
+        var server = ctx.server();
         var allPlayers = server.getPlayerList().getPlayers();
         if (allPlayers.isEmpty()) {
             return FunctionCallResult.failure(FunctionCallResult.ErrorType.EXECUTION_FAILED, "当前没有在线玩家");
         }
 
-        // 默认排除执行者
-        List<ServerPlayer> defaultTargets = allPlayers.stream()
-                .filter(p -> !p.getUUID().equals(player.getUUID()))
-                .collect(Collectors.toList());
+        // 默认目标：控制台=所有玩家；玩家=除执行者外所有玩家
+        List<ServerPlayer> defaultTargets;
+        if (ctx.isConsole()) {
+            defaultTargets = new ArrayList<>(allPlayers);
+        } else {
+            ServerPlayer executor = ctx.player();
+            defaultTargets = allPlayers.stream()
+                    .filter(p -> !p.getUUID().equals(executor.getUUID()))
+                    .collect(Collectors.toList());
+        }
 
         var targetResult = parseTargetPlayers(allPlayers, arguments, defaultTargets);
-        if (targetResult.error != null) return targetResult.error;
-
-        return executeSpawn(targetResult.players, arguments);
-    }
-
-    @Override
-    public FunctionCallResult execute(MinecraftServer server, JsonObject arguments) {
-        var allPlayers = server.getPlayerList().getPlayers();
-        if (allPlayers.isEmpty()) {
-            return FunctionCallResult.failure(FunctionCallResult.ErrorType.EXECUTION_FAILED, "当前没有在线玩家");
+        if (targetResult.error != null) {
+            return targetResult.error;
         }
-
-        // 控制台不排除任何人
-        var targetResult = parseTargetPlayers(allPlayers, arguments, new ArrayList<>(allPlayers));
-        if (targetResult.error != null) return targetResult.error;
-
         return executeSpawn(targetResult.players, arguments);
     }
 
-    /**
-     * 解析目标玩家列表
-     */
-    private record TargetListResult(List<ServerPlayer> players, FunctionCallResult error) {}
+    private record TargetListResult(List<ServerPlayer> players, FunctionCallResult error) {
+    }
 
     private TargetListResult parseTargetPlayers(List<ServerPlayer> allPlayers, JsonObject arguments, List<ServerPlayer> defaultTargets) {
         if (!arguments.has("targets") || !arguments.get("targets").isJsonArray()) {
@@ -163,12 +146,11 @@ public class SpawnAllFunctionTool implements AIFunctionTool {
         return new TargetListResult(targetPlayers, null);
     }
 
-    /**
-     * 共享的生成执行逻辑
-     */
     private FunctionCallResult executeSpawn(List<ServerPlayer> targetPlayers, JsonObject arguments) {
         var entityTypeResult = FunctionToolHelper.getRequiredString(arguments, "entityType");
-        if (entityTypeResult.hasError()) return entityTypeResult.error();
+        if (entityTypeResult.hasError()) {
+            return entityTypeResult.error();
+        }
         String entityTypeStr = entityTypeResult.value();
 
         ResourceLocation entityId = ResourceLocation.tryParse(entityTypeStr);
@@ -208,13 +190,13 @@ public class SpawnAllFunctionTool implements AIFunctionTool {
             if (spawnedForPlayer > 0) {
                 playersProcessed++;
                 targetPlayer.sendSystemMessage(Component.literal(String.format(
-                        "§e你的附近生成了 §a%d §e只 §b%s", spawnedForPlayer, entityId.toString())));
+                        "§e你的附近生成了 §a%d §e只 §b%s", spawnedForPlayer, entityId)));
             }
         }
 
         if (totalSpawned > 0) {
             return FunctionCallResult.success(String.format(
-                    "成功在 %d 名玩家附近生成 %d 只 %s", playersProcessed, totalSpawned, entityId.toString()));
+                    "成功在 %d 名玩家附近生成 %d 只 %s", playersProcessed, totalSpawned, entityId));
         }
         return FunctionCallResult.failure(FunctionCallResult.ErrorType.EXECUTION_FAILED, "未能生成任何生物，可能位置不适合");
     }

@@ -3,6 +3,8 @@ package firefly520.fireflymc;
 import net.neoforged.neoforge.common.ModConfigSpec;
 import org.apache.commons.lang3.tuple.Pair;
 
+import java.util.List;
+
 /**
  * 服务端配置
  */
@@ -53,6 +55,11 @@ public class ServerConfig {
         // AI函数调用配置
         public final ModConfigSpec.BooleanValue aiFunctionsEnabled;
         public final ModConfigSpec.IntValue aiFunctionsRequireOpLevel;
+        // 多轮工具调用配置
+        public final ModConfigSpec.IntValue aiMaxToolRounds;
+        public final ModConfigSpec.IntValue aiMaxToolCalls;
+        public final ModConfigSpec.BooleanValue aiParallelToolCalls;
+        public final ModConfigSpec.ConfigValue<List<?>> aiDisabledTools;
 
         // 新手福利包配置
         public final ModConfigSpec.BooleanValue enableStarterKit;
@@ -215,6 +222,26 @@ public class ServerConfig {
                     .comment("AI函数调用所需的最低OP等级（0-4）")
                     .translation("fireflymc.config.ai.functions_require_op_level")
                     .defineInRange("functionsRequireOpLevel", 4, 0, 4);
+
+            aiMaxToolRounds = builder
+                    .comment("AI多轮工具调用最大轮次（防止失控）")
+                    .translation("fireflymc.config.ai.max_tool_rounds")
+                    .defineInRange("maxToolRounds", 5, 1, 20);
+
+            aiMaxToolCalls = builder
+                    .comment("单次对话累计工具调用上限（防止失控）")
+                    .translation("fireflymc.config.ai.max_tool_calls")
+                    .defineInRange("maxToolCalls", 10, 1, 50);
+
+            aiParallelToolCalls = builder
+                    .comment("是否启用并行工具调用（部分本地模型/LM Studio不支持，默认关闭）")
+                    .translation("fireflymc.config.ai.parallel_tool_calls")
+                    .define("parallelToolCalls", false);
+
+            aiDisabledTools = builder
+                    .comment("禁用的工具名称列表（如 [\"spawn_entities\"]），为空表示全部启用")
+                    .translation("fireflymc.config.ai.disabled_tools")
+                    .defineList("disabledTools", List.of(), o -> o instanceof String);
 
             builder.pop();
 

@@ -2,13 +2,22 @@ package firefly520.fireflymc.ai;
 
 import firefly520.fireflymc.ServerConfig;
 
+import java.util.List;
+import java.util.Objects;
 import java.util.UUID;
 
 /**
- * AI聊天配置 - 从服务端配置读取
+ * AI 配置门面。
+ * <p>
+ * 所有 getter 直接委托 {@link ServerConfig} 的配置项动态读取，配置文件热重载后立即生效，
+ * 不再有类加载期固化的快照常量。
+ * <p>
+ * 旧版的 11 个 {@code @Deprecated static final} 常量（API_URL / MODEL / AI_UUID / ENABLED 等）
+ * 已移除——它们在类加载时一次性快照，无法跟随配置热重载，是潜在 bug 源；经全项目检索确认无引用。
  */
 public class AIConfig {
-    // API配置
+
+    // ===== API 配置 =====
     public static String getApiUrl() {
         return ServerConfig.SERVER.aiApiUrl.get();
     }
@@ -21,7 +30,7 @@ public class AIConfig {
         return ServerConfig.SERVER.aiModel.get();
     }
 
-    // 显示配置
+    // ===== 显示配置 =====
     public static String getAiName() {
         return ServerConfig.SERVER.aiName.get();
     }
@@ -34,12 +43,12 @@ public class AIConfig {
         try {
             return UUID.fromString(ServerConfig.SERVER.aiUuid.get());
         } catch (IllegalArgumentException e) {
-            // 如果配置的UUID格式无效，使用默认值
+            // 配置的 UUID 格式无效时使用默认值
             return UUID.fromString("00000000-0000-4000-8000-000000000001");
         }
     }
 
-    // 行为配置
+    // ===== 行为配置 =====
     public static int getMaxHistorySize() {
         return ServerConfig.SERVER.aiMaxHistorySize.get();
     }
@@ -60,7 +69,7 @@ public class AIConfig {
         return ServerConfig.SERVER.aiEnabled.get();
     }
 
-    // 主动回复配置
+    // ===== 主动回复配置 =====
     public static boolean getProactiveEnabled() {
         return ServerConfig.SERVER.aiProactiveEnabled.get();
     }
@@ -73,7 +82,7 @@ public class AIConfig {
         return ServerConfig.SERVER.aiProactiveTimeout.get();
     }
 
-    // 函数调用配置
+    // ===== 函数调用配置 =====
     public static boolean getFunctionsEnabled() {
         return ServerConfig.SERVER.aiFunctionsEnabled.get();
     }
@@ -82,73 +91,41 @@ public class AIConfig {
         return ServerConfig.SERVER.aiFunctionsRequireOpLevel.get();
     }
 
-    // ========== 兼容性常量（已废弃，请使用getter方法） ==========
+    // ===== 多轮工具调用配置（新增） =====
+
+    /** 多轮 Agentic 循环的最大轮次。 */
+    public static int getMaxToolRounds() {
+        return ServerConfig.SERVER.aiMaxToolRounds.get();
+    }
+
+    /** 单次对话累计工具调用上限。 */
+    public static int getMaxToolCalls() {
+        return ServerConfig.SERVER.aiMaxToolCalls.get();
+    }
+
+    /** 是否启用并行工具调用（本地模型兼容性开关）。 */
+    public static boolean getParallelToolCalls() {
+        return ServerConfig.SERVER.aiParallelToolCalls.get();
+    }
 
     /**
-     * @deprecated 使用 {@link #getApiUrl()} 替代
+     * 被禁用的工具名称列表（已 trim、去空），默认空表示全部启用。
      */
-    @Deprecated
-    public static final String API_URL = getApiUrl();
-
-    /**
-     * @deprecated 使用 {@link #getApiKey()} 替代
-     */
-    @Deprecated
-    public static final String API_KEY = getApiKey();
-
-    /**
-     * @deprecated 使用 {@link #getModel()} 替代
-     */
-    @Deprecated
-    public static final String MODEL = getModel();
-
-    /**
-     * @deprecated 使用 {@link #getAiName()} 替代
-     */
-    @Deprecated
-    public static final String AI_NAME = getAiName();
-
-    /**
-     * @deprecated 使用 {@link #getAiNamePlain()} 替代
-     */
-    @Deprecated
-    public static final String AI_NAME_PLAIN = getAiNamePlain();
-
-    /**
-     * @deprecated 使用 {@link #getAiUuid()} 替代
-     */
-    @Deprecated
-    public static final UUID AI_UUID = getAiUuid();
-
-    /**
-     * @deprecated 使用 {@link #getMaxHistorySize()} 替代
-     */
-    @Deprecated
-    public static final int MAX_HISTORY_SIZE = getMaxHistorySize();
-
-    /**
-     * @deprecated 使用 {@link #getMaxResponseLength()} 替代
-     */
-    @Deprecated
-    public static final int MAX_RESPONSE_LENGTH = getMaxResponseLength();
-
-    /**
-     * @deprecated 使用 {@link #getCooldownSeconds()} 替代
-     */
-    @Deprecated
-    public static final int COOLDOWN_SECONDS = getCooldownSeconds();
-
-    /**
-     * @deprecated 使用 {@link #getBroadcastToAll()} 替代
-     */
-    @Deprecated
-    public static final boolean BROADCAST_TO_ALL = getBroadcastToAll();
-
-    /**
-     * @deprecated 使用 {@link #getEnabled()} 替代
-     */
-    @Deprecated
-    public static final boolean ENABLED = getEnabled();
+    public static List<String> getDisabledTools() {
+        try {
+            List<?> raw = ServerConfig.SERVER.aiDisabledTools.get();
+            if (raw == null || raw.isEmpty()) {
+                return List.of();
+            }
+            return raw.stream()
+                    .filter(Objects::nonNull)
+                    .map(o -> String.valueOf(o).trim())
+                    .filter(s -> !s.isEmpty())
+                    .toList();
+        } catch (Exception e) {
+            return List.of();
+        }
+    }
 
     private AIConfig() {
         // 防止实例化
