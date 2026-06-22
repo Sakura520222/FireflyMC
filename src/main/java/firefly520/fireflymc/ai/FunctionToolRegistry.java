@@ -41,6 +41,10 @@ public class FunctionToolRegistry {
         registerTool(new GiveEffectFunctionTool());
         registerTool(new GiveItemFunctionTool());
         registerTool(new ClearDroppedItemsFunctionTool());
+
+        // 实体查询/移除类
+        registerTool(new GetNearbyEntitiesFunctionTool());
+        registerTool(new RemoveEntitiesFunctionTool());
     }
 
     /**
