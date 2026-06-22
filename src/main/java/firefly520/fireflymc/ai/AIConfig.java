@@ -53,10 +53,6 @@ public class AIConfig {
         return ServerConfig.SERVER.aiMaxHistorySize.get();
     }
 
-    public static int getMaxResponseLength() {
-        return ServerConfig.SERVER.aiMaxResponseLength.get();
-    }
-
     public static int getCooldownSeconds() {
         return ServerConfig.SERVER.aiCooldownSeconds.get();
     }

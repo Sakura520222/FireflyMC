@@ -42,7 +42,6 @@ public class ServerConfig {
         public final ModConfigSpec.ConfigValue<String> aiNamePlain;
         public final ModConfigSpec.ConfigValue<String> aiUuid;
         public final ModConfigSpec.IntValue aiMaxHistorySize;
-        public final ModConfigSpec.IntValue aiMaxResponseLength;
         public final ModConfigSpec.IntValue aiCooldownSeconds;
         public final ModConfigSpec.BooleanValue aiBroadcastToAll;
         public final ModConfigSpec.BooleanValue aiEnabled;
@@ -176,11 +175,6 @@ public class ServerConfig {
                     .comment("聊天历史记录最大条数")
                     .translation("fireflymc.config.ai.max_history_size")
                     .defineInRange("maxHistorySize", 30, 1, 100);
-
-            aiMaxResponseLength = builder
-                    .comment("AI回复最大长度")
-                    .translation("fireflymc.config.ai.max_response_length")
-                    .defineInRange("maxResponseLength", 200, 50, 1000);
 
             aiCooldownSeconds = builder
                     .comment("命令冷却时间（秒），0表示无冷却")

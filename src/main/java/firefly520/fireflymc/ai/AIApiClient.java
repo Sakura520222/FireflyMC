@@ -240,12 +240,6 @@ public class AIApiClient {
         // 移除多余空格
         message = message.replaceAll(" +", " ").trim();
 
-        // 限制最大长度
-        int maxLength = AIConfig.getMaxResponseLength();
-        if (message.length() > maxLength) {
-            message = message.substring(0, maxLength - 3) + "...";
-        }
-
         return message;
     }
 
