@@ -3,6 +3,7 @@ package firefly520.fireflymc.ai.function;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import firefly520.fireflymc.ai.AIFunctionTool;
+import firefly520.fireflymc.ai.BuildAnchorManager;
 import firefly520.fireflymc.ai.FunctionCallResult;
 import firefly520.fireflymc.ai.ToolContext;
 import net.minecraft.core.BlockPos;
@@ -139,9 +140,16 @@ public class FillBlocksFunctionTool implements AIFunctionTool {
                             + "），请缩小范围或分多次填充");
         }
 
-        // 建造以触发瞬间锁定的锚点为基准（玩家移动不影响相对坐标对齐）
-        BlockPos base = ctx.anchor() != null ? ctx.anchor() : target.blockPosition();
-        ServerLevel level = target.serverLevel();
+        // 建造以玩家持久建造锚点为基准（玩家后续移动/追加需求不影响相对坐标对齐）
+        var anchor = BuildAnchorManager.getOrCreate(target);
+        var anchorLevel = anchor.level(ctx.server());
+        if (anchorLevel.isEmpty()) {
+            return FunctionCallResult.failure(
+                    FunctionCallResult.ErrorType.EXECUTION_FAILED,
+                    "建造锚点所在维度不存在: " + anchor.dimension().location());
+        }
+        BlockPos base = anchor.pos();
+        ServerLevel level = anchorLevel.get();
         int count = 0;
         for (int dx = minX; dx <= maxX; dx++) {
             for (int dy = minY; dy <= maxY; dy++) {

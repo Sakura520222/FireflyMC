@@ -3,6 +3,7 @@ package firefly520.fireflymc.ai.function;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import firefly520.fireflymc.ai.AIFunctionTool;
+import firefly520.fireflymc.ai.BuildAnchorManager;
 import firefly520.fireflymc.ai.FunctionCallResult;
 import firefly520.fireflymc.ai.ToolContext;
 import net.minecraft.core.BlockPos;
@@ -126,10 +127,17 @@ public class PlaceBlockFunctionTool implements AIFunctionTool {
             state = applyState(state, arguments.getAsJsonObject(STATE_PARAM));
         }
 
-        // 建造以触发瞬间锁定的锚点为基准（玩家移动不影响相对坐标对齐）
-        BlockPos base = ctx.anchor() != null ? ctx.anchor() : target.blockPosition();
+        // 建造以玩家持久建造锚点为基准（玩家后续移动/追加需求不影响相对坐标对齐）
+        var anchor = BuildAnchorManager.getOrCreate(target);
+        var anchorLevel = anchor.level(ctx.server());
+        if (anchorLevel.isEmpty()) {
+            return FunctionCallResult.failure(
+                    FunctionCallResult.ErrorType.EXECUTION_FAILED,
+                    "建造锚点所在维度不存在: " + anchor.dimension().location());
+        }
+        BlockPos base = anchor.pos();
         BlockPos pos = base.offset(x, y, z);
-        target.serverLevel().setBlock(pos, state, Block.UPDATE_ALL);
+        anchorLevel.get().setBlock(pos, state, Block.UPDATE_ALL);
 
         return FunctionCallResult.success(String.format(
                 "已在 %s 相对(%d,%d,%d) 放置 %s",

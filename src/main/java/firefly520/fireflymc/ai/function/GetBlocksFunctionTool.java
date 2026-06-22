@@ -2,6 +2,7 @@ package firefly520.fireflymc.ai.function;
 
 import com.google.gson.JsonObject;
 import firefly520.fireflymc.ai.AIFunctionTool;
+import firefly520.fireflymc.ai.BuildAnchorManager;
 import firefly520.fireflymc.ai.FunctionCallResult;
 import firefly520.fireflymc.ai.ToolContext;
 import net.minecraft.core.BlockPos;
@@ -101,9 +102,16 @@ public class GetBlocksFunctionTool implements AIFunctionTool {
                     "区域过大: " + volume + " 个方块（上限 " + MAX_VOLUME + "），请缩小范围");
         }
 
-        // 建造以触发瞬间锁定的锚点为基准（玩家移动不影响相对坐标对齐）
-        BlockPos base = ctx.anchor() != null ? ctx.anchor() : target.blockPosition();
-        var level = target.serverLevel();
+        // 建造以玩家持久建造锚点为基准（玩家后续移动/追加需求不影响相对坐标对齐）
+        var anchor = BuildAnchorManager.getOrCreate(target);
+        var anchorLevel = anchor.level(ctx.server());
+        if (anchorLevel.isEmpty()) {
+            return FunctionCallResult.failure(
+                    FunctionCallResult.ErrorType.EXECUTION_FAILED,
+                    "建造锚点所在维度不存在: " + anchor.dimension().location());
+        }
+        BlockPos base = anchor.pos();
+        var level = anchorLevel.get();
 
         StringBuilder sb = new StringBuilder();
         sb.append(String.format("%s 周围 (%d,%d,%d)-(%d,%d,%d) 方块：",

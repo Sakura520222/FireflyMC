@@ -50,6 +50,7 @@ public class FunctionToolRegistry {
         registerTool(new FillBlocksFunctionTool());
         registerTool(new PlaceBlockFunctionTool());
         registerTool(new GetBlocksFunctionTool());
+        registerTool(new SetBuildAnchorFunctionTool());
     }
 
     /**
