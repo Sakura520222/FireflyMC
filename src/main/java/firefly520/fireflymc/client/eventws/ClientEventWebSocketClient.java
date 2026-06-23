@@ -368,6 +368,7 @@ public final class ClientEventWebSocketClient {
                 reconnectScheduled.set(false);
                 LOGGER.info("[FireflyMC] 事件通知 WebSocket 连接成功");
                 startHeartbeat();
+                ClientEventNotificationEvents.onEventNotifyConnected();
                 flushPendingMessages();
             });
             webSocket.request(1);

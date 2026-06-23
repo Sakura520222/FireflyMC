@@ -4,15 +4,14 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import firefly520.fireflymc.ai.AIFunctionTool;
 import firefly520.fireflymc.ai.FunctionCallResult;
-import net.minecraft.server.MinecraftServer;
+import firefly520.fireflymc.ai.ToolContext;
 import net.minecraft.server.level.ServerLevel;
-import net.minecraft.server.level.ServerPlayer;
 
 import java.util.HashMap;
 import java.util.Map;
 
 /**
- * 设置游戏时间的函数工具
+ * 设置游戏时间的函数工具。
  */
 public class SetTimeFunctionTool implements AIFunctionTool {
 
@@ -45,7 +44,7 @@ public class SetTimeFunctionTool implements AIFunctionTool {
 
         JsonObject properties = new JsonObject();
 
-        // time 参数
+        // time 参数（关键字或数字字符串）
         JsonObject timeParam = new JsonObject();
         timeParam.addProperty("type", "string");
         timeParam.addProperty("description", "时间设置：支持关键字(day/night/noon/midnight/sunrise/sunset/afternoon)或数字(0-24000)");
@@ -60,7 +59,7 @@ public class SetTimeFunctionTool implements AIFunctionTool {
         timeParam.add("enum", enumValues);
         properties.add("time", timeParam);
 
-        // timeValue 参数（备用数字）
+        // timeValue 参数（备用纯数字）
         JsonObject timeValueParam = new JsonObject();
         timeValueParam.addProperty("type", "integer");
         timeValueParam.addProperty("description", "具体时间值(0-24000)，当time参数为数字时使用");
@@ -75,45 +74,31 @@ public class SetTimeFunctionTool implements AIFunctionTool {
 
     @Override
     public int getRequiredPermissionLevel() {
-        return 3;  // 3级OP权限
+        return 3;
     }
 
     @Override
-    public FunctionCallResult execute(ServerPlayer player, JsonObject arguments) {
-        FunctionCallResult checkResult = FunctionToolHelper.checkPreconditions(player, this);
-        if (checkResult != null) return checkResult;
-
-        var result = parseTimeArgument(arguments);
-        if (result.error != null) return result.error;
-
-        for (ServerLevel level : player.getServer().getAllLevels()) {
+    public FunctionCallResult execute(ToolContext ctx, JsonObject arguments) {
+        TimeResult result = parseTimeArgument(arguments);
+        if (result.error != null) {
+            return result.error;
+        }
+        for (ServerLevel level : ctx.server().getAllLevels()) {
             level.setDayTime(result.timeValue);
         }
-
         return FunctionCallResult.success("已将时间设置为 " + getTimeDescription(result.timeValue));
     }
 
-    @Override
-    public FunctionCallResult execute(MinecraftServer server, JsonObject arguments) {
-        var result = parseTimeArgument(arguments);
-        if (result.error != null) return result.error;
-
-        for (ServerLevel level : server.getAllLevels()) {
-            level.setDayTime(result.timeValue);
-        }
-
-        return FunctionCallResult.success("已将时间设置为 " + getTimeDescription(result.timeValue));
+    private record TimeResult(long timeValue, FunctionCallResult error) {
     }
-
-    private record TimeResult(long timeValue, FunctionCallResult error) {}
 
     private TimeResult parseTimeArgument(JsonObject arguments) {
         if (arguments.has("time") && !arguments.get("time").isJsonNull()) {
-            var validationResult = FunctionToolHelper.validateStringType(arguments.get("time"), "time");
-            if (validationResult != null) return new TimeResult(0, validationResult);
-
+            FunctionCallResult validationResult = FunctionToolHelper.validateStringType(arguments.get("time"), "time");
+            if (validationResult != null) {
+                return new TimeResult(0, validationResult);
+            }
             String timeStr = arguments.get("time").getAsString().toLowerCase().trim();
-
             if (TIME_KEYWORDS.containsKey(timeStr)) {
                 return new TimeResult(TIME_KEYWORDS.get(timeStr), null);
             }

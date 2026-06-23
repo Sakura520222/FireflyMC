@@ -40,6 +40,8 @@
   "fireflymc.config.singleplayer_relay.p2p_retransmit_millis.tooltip": "可靠 UDP 数据包的重传间隔",
   "fireflymc.config.singleplayer_relay.p2p_window_size": "P2P 滑动窗口大小",
   "fireflymc.config.singleplayer_relay.p2p_window_size.tooltip": "可靠 UDP 滑动窗口中的数据包数量",
+  "fireflymc.config.singleplayer_relay.p2p_ipv6_enabled": "启用 P2P IPv6 直连",
+  "fireflymc.config.singleplayer_relay.p2p_ipv6_enabled.tooltip": "当双方都有公网 IPv6 地址时，优先尝试 IPv6 直连",
 
   "fireflymc.configuration.event_notification": "客户端事件通知",
   "fireflymc.configuration.event_notification.button": "客户端事件通知",
@@ -70,6 +72,10 @@
   "fireflymc.config.player_auth.max_attempts.tooltip": "超过后踢出",
   "fireflymc.config.player_auth.kick_message_timeout": "验证超时踢出提示",
   "fireflymc.config.player_auth.kick_message_failed": "密码错误踢出提示",
+  "fireflymc.config.player_auth.lockout_minutes": "密码错误限流时长（分钟）",
+  "fireflymc.config.player_auth.lockout_minutes.tooltip": "密码错误次数耗尽后，客户端限流该时长（0=不限流）",
+  "fireflymc.auth_lockout.title": "登录已被限制",
+  "fireflymc.auth_lockout.message": "密码错误次数过多，已被临时限制登录。请约 %s 分钟后再试。",
 
   "fireflymc.server_shutdown.title": "服务器维护中",
   "fireflymc.server_shutdown.message": "服务器正在维护，暂无法进入多人服务器。单人 / 局域网 / P2P 联机不受影响。",

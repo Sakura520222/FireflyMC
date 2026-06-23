@@ -2,7 +2,7 @@
 
 FireflyMC 是一个面向 FireflyMC 服务器生态的 Minecraft 模组，基于 **Minecraft 1.21.1** 与 **NeoForge 21.1.219** 开发。
 
-当前版本：`2.5.5`  
+当前版本：`2.5.6`  
 Mod ID：`fireflymc`
 
 ## 功能特性
@@ -69,29 +69,29 @@ Mod ID：`fireflymc`
 ### 在线时长管理
 
 ```text
-/playtime check
-/playtime check <玩家>
-/playtime reset <玩家>
-/playtime resetdaily
+/fireflymc playtime check
+/fireflymc playtime check <玩家>
+/fireflymc playtime reset <玩家>
+/fireflymc playtime resetdaily
 ```
 
-- `/playtime check`：查看自己的剩余在线时长。
-- `/playtime check <玩家>`：查看其他玩家剩余在线时长，需要 OP 2。
-- `/playtime reset <玩家>`：重置指定玩家每日在线时长，需要 OP 4。
-- `/playtime resetdaily`：重置所有玩家每日在线时长，需要 OP 4。
+- `/fireflymc playtime check`：查看自己的剩余在线时长。
+- `/fireflymc playtime check <玩家>`：查看其他玩家剩余在线时长，需要 OP 2。
+- `/fireflymc playtime reset <玩家>`：重置指定玩家每日在线时长，需要 OP 4。
+- `/fireflymc playtime resetdaily`：重置所有玩家每日在线时长，需要 OP 4。
 
 ### 玩家密码验证
 
 ```text
-/fireflyauth reset <玩家名>
+/fireflymc auth reset <玩家名>
 ```
 
-- `/fireflyauth reset <玩家名>`：重置指定玩家的密码，下次加入时重新设置。需要 OP 4。
+- `/fireflymc auth reset <玩家名>`：重置指定玩家的密码，下次加入时重新设置。需要 OP 4。
 
 ### 生成生物
 
 ```text
-/spawnall <生物类型> [targets] [数量] [半径]
+/fireflymc spawnall <生物类型> [targets] [数量] [半径]
 ```
 
 在目标玩家附近批量生成指定类型生物。

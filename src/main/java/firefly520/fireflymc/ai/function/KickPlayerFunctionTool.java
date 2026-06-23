@@ -4,15 +4,16 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import firefly520.fireflymc.ai.AIFunctionTool;
 import firefly520.fireflymc.ai.FunctionCallResult;
+import firefly520.fireflymc.ai.ToolContext;
 import net.minecraft.network.chat.Component;
-import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 
 /**
- * 踢出玩家的函数工具
+ * 踢出玩家的函数工具。
  */
 public class KickPlayerFunctionTool implements AIFunctionTool {
 
+    private static final String TARGET_PARAM = "target_player";
     private static final String DEFAULT_REASON = "被管理员踢出";
 
     @Override
@@ -32,13 +33,11 @@ public class KickPlayerFunctionTool implements AIFunctionTool {
 
         JsonObject properties = new JsonObject();
 
-        // playerName 参数
-        JsonObject playerNameParam = new JsonObject();
-        playerNameParam.addProperty("type", "string");
-        playerNameParam.addProperty("description", "要踢出的玩家名称");
-        properties.add("playerName", playerNameParam);
+        JsonObject targetParam = new JsonObject();
+        targetParam.addProperty("type", "string");
+        targetParam.addProperty("description", "要踢出的玩家名称");
+        properties.add(TARGET_PARAM, targetParam);
 
-        // reason 参数
         JsonObject reasonParam = new JsonObject();
         reasonParam.addProperty("type", "string");
         reasonParam.addProperty("description", "踢出原因");
@@ -48,7 +47,7 @@ public class KickPlayerFunctionTool implements AIFunctionTool {
         schema.add("properties", properties);
 
         JsonArray required = new JsonArray();
-        required.add("playerName");
+        required.add(TARGET_PARAM);
         schema.add("required", required);
 
         return schema;
@@ -56,60 +55,28 @@ public class KickPlayerFunctionTool implements AIFunctionTool {
 
     @Override
     public int getRequiredPermissionLevel() {
-        return 4;  // 4级OP权限
+        return 4;
     }
 
     @Override
-    public FunctionCallResult execute(ServerPlayer player, JsonObject arguments) {
-        // 检查前置条件
-        FunctionCallResult checkResult = FunctionToolHelper.checkPreconditions(player, this);
-        if (checkResult != null) {
-            return checkResult;
+    public FunctionCallResult execute(ToolContext ctx, JsonObject arguments) {
+        var targetResult = FunctionToolHelper.getRequiredTargetPlayer(ctx, arguments, TARGET_PARAM);
+        if (targetResult.hasError()) {
+            return targetResult.error();
         }
+        ServerPlayer target = targetResult.player();
 
-        var server = player.getServer();
-
-        // 解析必需参数
-        var playerNameResult = FunctionToolHelper.getRequiredString(arguments, "playerName");
-        if (playerNameResult.hasError()) {
-            return playerNameResult.error();
-        }
-        String targetName = playerNameResult.value();
-
-        // 检查是否尝试踢出自己
-        if (targetName.equals(player.getGameProfile().getName())) {
+        // 玩家触发时不允许踢出自己
+        if (!ctx.isConsole() && target.getUUID().equals(ctx.player().getUUID())) {
             return FunctionCallResult.failure(
                     FunctionCallResult.ErrorType.INVALID_ARGUMENT,
-                    "不能踢出自己"
-            );
+                    "不能踢出自己");
         }
 
         String reason = FunctionToolHelper.getOptionalString(arguments, "reason", DEFAULT_REASON);
+        String targetName = target.getGameProfile().getName();
+        target.connection.disconnect(Component.literal(reason));
 
-        // 查找目标玩家
-        ServerPlayer targetPlayer = server.getPlayerList().getPlayerByName(targetName);
-        if (targetPlayer == null) {
-            return FunctionCallResult.failure(
-                    FunctionCallResult.ErrorType.EXECUTION_FAILED,
-                    "玩家 " + targetName + " 不在线"
-            );
-        }
-
-        // 踢出玩家
-        targetPlayer.connection.disconnect(Component.literal(reason));
-
-        return FunctionCallResult.success("已踢出玩家 " + targetName + "，原因: " + reason);
-    }
-
-    @Override
-    public FunctionCallResult execute(MinecraftServer server, JsonObject arguments) {
-        var targetResult = FunctionToolHelper.getRequiredTargetPlayer(server, arguments, "playerName");
-        if (targetResult.hasError()) return targetResult.error();
-
-        String targetName = targetResult.player().getGameProfile().getName();
-        String reason = FunctionToolHelper.getOptionalString(arguments, "reason", DEFAULT_REASON);
-
-        targetResult.player().connection.disconnect(Component.literal(reason));
         return FunctionCallResult.success("已踢出玩家 " + targetName + "，原因: " + reason);
     }
 }

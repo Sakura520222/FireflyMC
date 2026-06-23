@@ -31,6 +31,9 @@ import org.joml.Matrix4f;
  */
 public final class TitleWorldRenderer {
 
+    /** 原版 nameTag 渲染距离上限的平方（64 格）。超出此距离的玩家称号不渲染。 */
+    private static final double NAME_TAG_RENDER_DISTANCE_SQ = 64.0 * 64.0;
+
     private TitleWorldRenderer() {
     }
 
@@ -61,6 +64,14 @@ public final class TitleWorldRenderer {
         for (Player player : level.players()) {
             // 第一人称时绘制自己的称号没有意义（看不到自己），与原版 nameTag 行为一致
             if (player == mc.player && !cameraDetached) {
+                continue;
+            }
+
+            // 距离裁剪：与原版 nameTag 一致，超出 64 格的玩家不渲染称号，避免无谓的 GPU 提交
+            double dx = player.getX() - camX;
+            double dy = player.getY() - camY;
+            double dz = player.getZ() - camZ;
+            if (dx * dx + dy * dy + dz * dz > NAME_TAG_RENDER_DISTANCE_SQ) {
                 continue;
             }
 

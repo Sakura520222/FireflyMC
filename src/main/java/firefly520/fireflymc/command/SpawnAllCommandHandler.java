@@ -27,7 +27,7 @@ import net.neoforged.neoforge.event.RegisterCommandsEvent;
 /**
  * SpawnAll命令处理器
  * <p>
- * 用法: /spawnall <生物类型> [targets] [数量] [半径]
+ * 用法: /fireflymc spawnall <生物类型> [targets] [数量] [半径]
  * <p>
  * 在指定玩家附近生成指定数量的生物，未指定时默认为除执行者外的所有玩家
  * 支持原版全部生物 + 其他模组生物
@@ -71,30 +71,31 @@ public class SpawnAllCommandHandler {
     public static void onRegisterCommands(RegisterCommandsEvent event) {
         CommandDispatcher<CommandSourceStack> dispatcher = event.getDispatcher();
 
-        dispatcher.register(Commands.literal("spawnall")
-                .requires(source -> source.hasPermission(4))  // 4级OP权限
-                .then(Commands.argument("entity", ResourceLocationArgument.id())
-                        .suggests(ENTITY_TYPE_SUGGESTIONS)
-                        // 不带 targets 参数，默认行为（除执行者外）
-                        .executes(context -> spawnEntities(context, null, DEFAULT_COUNT, DEFAULT_RADIUS))
-                        .then(Commands.argument("count", IntegerArgumentType.integer(MIN_COUNT, MAX_COUNT))
-                                .executes(context -> spawnEntities(context, null,
-                                        IntegerArgumentType.getInteger(context, "count"), DEFAULT_RADIUS))
-                                .then(Commands.argument("radius", IntegerArgumentType.integer(MIN_RADIUS, MAX_RADIUS))
-                                        .executes(context -> spawnEntities(context, null,
-                                                IntegerArgumentType.getInteger(context, "count"),
-                                                IntegerArgumentType.getInteger(context, "radius")))))
-                        // 添加 targets 分支（与 count 分支并列）
-                        .then(Commands.argument("targets", EntityArgument.players())
-                                .executes(context -> spawnEntities(context, EntityArgument.getPlayers(context, "targets"), DEFAULT_COUNT, DEFAULT_RADIUS))
+        dispatcher.register(Commands.literal("fireflymc")
+                .then(Commands.literal("spawnall")
+                        .requires(source -> source.hasPermission(4))  // 4级OP权限
+                        .then(Commands.argument("entity", ResourceLocationArgument.id())
+                                .suggests(ENTITY_TYPE_SUGGESTIONS)
+                                // 不带 targets 参数，默认行为（除执行者外）
+                                .executes(context -> spawnEntities(context, null, DEFAULT_COUNT, DEFAULT_RADIUS))
                                 .then(Commands.argument("count", IntegerArgumentType.integer(MIN_COUNT, MAX_COUNT))
-                                        .executes(context -> spawnEntities(context, EntityArgument.getPlayers(context, "targets"),
+                                        .executes(context -> spawnEntities(context, null,
                                                 IntegerArgumentType.getInteger(context, "count"), DEFAULT_RADIUS))
                                         .then(Commands.argument("radius", IntegerArgumentType.integer(MIN_RADIUS, MAX_RADIUS))
-                                                .executes(context -> spawnEntities(context, EntityArgument.getPlayers(context, "targets"),
+                                                .executes(context -> spawnEntities(context, null,
                                                         IntegerArgumentType.getInteger(context, "count"),
-                                                        IntegerArgumentType.getInteger(context, "radius")))))))
-                .executes(SpawnAllCommandHandler::sendHelp));
+                                                        IntegerArgumentType.getInteger(context, "radius")))))
+                                // 添加 targets 分支（与 count 分支并列）
+                                .then(Commands.argument("targets", EntityArgument.players())
+                                        .executes(context -> spawnEntities(context, EntityArgument.getPlayers(context, "targets"), DEFAULT_COUNT, DEFAULT_RADIUS))
+                                        .then(Commands.argument("count", IntegerArgumentType.integer(MIN_COUNT, MAX_COUNT))
+                                                .executes(context -> spawnEntities(context, EntityArgument.getPlayers(context, "targets"),
+                                                        IntegerArgumentType.getInteger(context, "count"), DEFAULT_RADIUS))
+                                                .then(Commands.argument("radius", IntegerArgumentType.integer(MIN_RADIUS, MAX_RADIUS))
+                                                        .executes(context -> spawnEntities(context, EntityArgument.getPlayers(context, "targets"),
+                                                                IntegerArgumentType.getInteger(context, "count"),
+                                                                IntegerArgumentType.getInteger(context, "radius")))))))
+                        .executes(SpawnAllCommandHandler::sendHelp)));
     }
 
     /**
@@ -221,7 +222,7 @@ public class SpawnAllCommandHandler {
      */
     private static int sendHelp(CommandContext<CommandSourceStack> context) {
         Component helpMessage = Component.literal(
-                "§e用法: /spawnall <生物类型> [targets] [数量] [半径]\n" +
+                "§e用法: /fireflymc spawnall <生物类型> [targets] [数量] [半径]\n" +
                         "§7生物类型: 例如 zombie、skeleton、creeper 等，支持原版全部生物和模组生物\n" +
                         "§7targets: 目标玩家（使用 @a、@p、玩家名等选择器），默认为除执行者外的所有玩家\n" +
                         "§7数量: 每个玩家附近生成的生物数量 (默认: 1, 范围: 1-50)\n" +

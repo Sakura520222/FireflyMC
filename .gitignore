@@ -48,4 +48,5 @@ repo/
 CLAUDE.md
 docs/client-event-websocket-protocol.md
 .codegraph/
+.superpowers/
 日志.log

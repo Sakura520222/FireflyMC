@@ -4,6 +4,7 @@ import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.reflect.TypeToken;
 import firefly520.fireflymc.ServerConfig;
+import firefly520.fireflymc.network.AuthLockoutPayload;
 import firefly520.fireflymc.network.PasswordPromptPayload;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.MinecraftServer;
@@ -40,7 +41,6 @@ public class PlayerPasswordManager {
 
     private Map<String, PasswordRecord> passwords = new ConcurrentHashMap<>();
     private Path dataFile;
-    private boolean loaded = false;
 
     // 待验证玩家会话：UUID -> 会话状态
     private final Map<UUID, AuthSession> pendingSessions = new ConcurrentHashMap<>();
@@ -70,7 +70,6 @@ public class PlayerPasswordManager {
                 LOGGER.error("[FireflyMC] 加载密码记录失败", e);
             }
         }
-        this.loaded = true;
     }
 
     private synchronized void saveData() {
@@ -226,7 +225,11 @@ public class PlayerPasswordManager {
             } else {
                 session.remainingAttempts--;
                 if (session.remainingAttempts <= 0) {
-                    // 超过最大尝试次数，踢出
+                    // 超过最大尝试次数：先下发限流信号，再踢出
+                    int lockoutMinutes = ServerConfig.SERVER.playerAuthLockoutMinutes.get();
+                    if (lockoutMinutes > 0) {
+                        PacketDistributor.sendToPlayer(player, new AuthLockoutPayload(lockoutMinutes));
+                    }
                     String kickMsg = ServerConfig.SERVER.playerAuthKickMessageFailed.get();
                     player.connection.disconnect(Component.literal(kickMsg));
                     pendingSessions.remove(uuid);
@@ -283,6 +286,7 @@ public class PlayerPasswordManager {
 
     // ========== 内部数据类 ==========
 
+    @SuppressWarnings("unused") // Gson serialization
     private static class PasswordRecord {
         String passwordHash;
         String salt;
@@ -291,7 +295,6 @@ public class PlayerPasswordManager {
         String lastSeenUuid;
         String lastSeenName;
 
-        @SuppressWarnings("unused") // Gson deserialization
         public PasswordRecord() {}
 
         public PasswordRecord(String passwordHash, String salt, String createdAt,

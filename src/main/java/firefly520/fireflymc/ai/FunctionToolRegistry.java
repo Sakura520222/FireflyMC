@@ -1,24 +1,24 @@
 package firefly520.fireflymc.ai;
 
 import firefly520.fireflymc.ai.function.*;
-import net.minecraft.server.level.ServerPlayer;
 
 import java.util.Collection;
 import java.util.Collections;
+import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.Map;
 
 /**
- * AI函数工具注册中心
+ * AI 函数工具注册中心。
  * <p>
- * 管理所有可被AI助手调用的函数工具
+ * 管理所有可被 AI 助手调用的函数工具，并提供基于配置的启用开关。
  */
 public class FunctionToolRegistry {
     private static final Map<String, AIFunctionTool> TOOLS = new ConcurrentHashMap<>();
 
     static {
-        // 注册所有函数工具
+        // 实体生成
         registerTool(new SpawnAllFunctionTool());
 
         // 信息查询类
@@ -37,62 +37,73 @@ public class FunctionToolRegistry {
         registerTool(new TeleportPlayerFunctionTool());
         registerTool(new SummonPlayerFunctionTool());
 
-        // 物品/效果类
-        registerTool(new ClearInventoryFunctionTool());
+        // 物品/效果/清理类（clear_inventory 已移除：清空物品栏风险过高）
         registerTool(new GiveEffectFunctionTool());
         registerTool(new GiveItemFunctionTool());
+        registerTool(new ClearDroppedItemsFunctionTool());
+
+        // 实体查询/移除类
+        registerTool(new GetNearbyEntitiesFunctionTool());
+        registerTool(new RemoveEntitiesFunctionTool());
+
+        // 建造类
+        registerTool(new FillBlocksFunctionTool());
+        registerTool(new PlaceBlockFunctionTool());
+        registerTool(new GetBlocksFunctionTool());
+        registerTool(new SetBuildAnchorFunctionTool());
     }
 
     /**
-     * 注册函数工具
-     *
-     * @param tool 要注册的工具
+     * 注册函数工具。
      */
     public static void registerTool(AIFunctionTool tool) {
         TOOLS.put(tool.getName(), tool);
     }
 
     /**
-     * 获取所有函数工具
-     *
-     * @return 所有已注册的工具的不可修改集合
+     * 获取所有已注册工具（不含启用过滤）。
      */
     public static Collection<AIFunctionTool> getAllTools() {
         return Collections.unmodifiableCollection(TOOLS.values());
     }
 
     /**
-     * 根据名称获取函数工具
-     *
-     * @param name 函数名称
-     * @return 包含工具的Optional，如果不存在则为空
+     * 返回当前启用的工具列表（排除配置禁用名单中的工具）。
+     * 此列表用于构造发给 AI 的 tools 定义。
+     */
+    public static List<AIFunctionTool> getEnabledTools() {
+        return TOOLS.values().stream()
+                .filter(FunctionToolRegistry::isEnabled)
+                .toList();
+    }
+
+    /**
+     * 工具是否被配置启用（未出现在禁用名单中）。
+     */
+    public static boolean isEnabled(AIFunctionTool tool) {
+        return !AIConfig.getDisabledTools().contains(tool.getName());
+    }
+
+    /**
+     * 根据名称获取工具。
      */
     public static Optional<AIFunctionTool> getTool(String name) {
         return Optional.ofNullable(TOOLS.get(name));
     }
 
     /**
-     * 检查玩家是否有权限执行指定工具
-     *
-     * @param player   要检查的玩家
-     * @param toolName 工具名称
-     * @return 如果玩家有权限则返回true
+     * 检查上下文是否具备执行指定工具的权限。
      */
-    public static boolean hasPermissionForTool(ServerPlayer player, String toolName) {
-        Optional<AIFunctionTool> toolOpt = getTool(toolName);
-        if (toolOpt.isEmpty()) {
-            return false;
-        }
-        AIFunctionTool tool = toolOpt.get();
-        // 通过玩家的CommandSourceStack检查权限
-        return player.createCommandSourceStack().hasPermission(tool.getRequiredPermissionLevel());
+    public static boolean hasPermissionForTool(ToolContext ctx, String toolName) {
+        return getTool(toolName)
+                .map(tool -> ctx.hasPermission(tool.getRequiredPermissionLevel()))
+                .orElse(false);
     }
 
     /**
-     * 获取工具所需的权限等级
+     * 获取工具所需的权限等级（用于权限不足时的提示）。
      *
-     * @param toolName 工具名称
-     * @return 权限等级，如果工具不存在则返回-1
+     * @return 权限等级；工具不存在返回 -1
      */
     public static int getRequiredPermissionLevel(String toolName) {
         return getTool(toolName)

@@ -3,6 +3,8 @@ package firefly520.fireflymc;
 import net.neoforged.neoforge.common.ModConfigSpec;
 import org.apache.commons.lang3.tuple.Pair;
 
+import java.util.List;
+
 /**
  * 服务端配置
  */
@@ -30,6 +32,7 @@ public class ServerConfig {
         public final ModConfigSpec.ConfigValue<Integer> playerAuthMaxAttempts;
         public final ModConfigSpec.ConfigValue<String> playerAuthKickMessageTimeout;
         public final ModConfigSpec.ConfigValue<String> playerAuthKickMessageFailed;
+        public final ModConfigSpec.IntValue playerAuthLockoutMinutes;
 
         // AI配置
         public final ModConfigSpec.ConfigValue<String> aiApiUrl;
@@ -39,7 +42,6 @@ public class ServerConfig {
         public final ModConfigSpec.ConfigValue<String> aiNamePlain;
         public final ModConfigSpec.ConfigValue<String> aiUuid;
         public final ModConfigSpec.IntValue aiMaxHistorySize;
-        public final ModConfigSpec.IntValue aiMaxResponseLength;
         public final ModConfigSpec.IntValue aiCooldownSeconds;
         public final ModConfigSpec.BooleanValue aiBroadcastToAll;
         public final ModConfigSpec.BooleanValue aiEnabled;
@@ -52,6 +54,11 @@ public class ServerConfig {
         // AI函数调用配置
         public final ModConfigSpec.BooleanValue aiFunctionsEnabled;
         public final ModConfigSpec.IntValue aiFunctionsRequireOpLevel;
+        // 多轮工具调用配置
+        public final ModConfigSpec.IntValue aiMaxToolRounds;
+        public final ModConfigSpec.IntValue aiMaxToolCalls;
+        public final ModConfigSpec.BooleanValue aiParallelToolCalls;
+        public final ModConfigSpec.ConfigValue<List<?>> aiDisabledTools;
 
         // 新手福利包配置
         public final ModConfigSpec.BooleanValue enableStarterKit;
@@ -122,6 +129,11 @@ public class ServerConfig {
                     .translation("fireflymc.config.player_auth.kick_message_failed")
                     .define("kickMessageFailed", "§c[FireflyMC] 密码错误次数过多，请稍后再试");
 
+            playerAuthLockoutMinutes = builder
+                    .comment("密码错误次数耗尽后的限流时长（分钟），0 表示不限流")
+                    .translation("fireflymc.config.player_auth.lockout_minutes")
+                    .defineInRange("lockoutMinutes", 30, 0, 1440);
+
             builder.pop();
 
             // AI配置
@@ -164,11 +176,6 @@ public class ServerConfig {
                     .translation("fireflymc.config.ai.max_history_size")
                     .defineInRange("maxHistorySize", 30, 1, 100);
 
-            aiMaxResponseLength = builder
-                    .comment("AI回复最大长度")
-                    .translation("fireflymc.config.ai.max_response_length")
-                    .defineInRange("maxResponseLength", 200, 50, 1000);
-
             aiCooldownSeconds = builder
                     .comment("命令冷却时间（秒），0表示无冷却")
                     .translation("fireflymc.config.ai.cooldown_seconds")
@@ -209,6 +216,26 @@ public class ServerConfig {
                     .comment("AI函数调用所需的最低OP等级（0-4）")
                     .translation("fireflymc.config.ai.functions_require_op_level")
                     .defineInRange("functionsRequireOpLevel", 4, 0, 4);
+
+            aiMaxToolRounds = builder
+                    .comment("AI多轮工具调用最大轮次（防止失控，建议保持合理值）")
+                    .translation("fireflymc.config.ai.max_tool_rounds")
+                    .defineInRange("maxToolRounds", 5, 1, Integer.MAX_VALUE);
+
+            aiMaxToolCalls = builder
+                    .comment("单次对话累计工具调用上限（防止失控，建议保持合理值）")
+                    .translation("fireflymc.config.ai.max_tool_calls")
+                    .defineInRange("maxToolCalls", 10, 1, Integer.MAX_VALUE);
+
+            aiParallelToolCalls = builder
+                    .comment("是否启用并行工具调用（部分本地模型/LM Studio不支持，默认关闭）")
+                    .translation("fireflymc.config.ai.parallel_tool_calls")
+                    .define("parallelToolCalls", false);
+
+            aiDisabledTools = builder
+                    .comment("禁用的工具名称列表（如 [\"spawn_entities\"]），为空表示全部启用")
+                    .translation("fireflymc.config.ai.disabled_tools")
+                    .defineListAllowEmpty("disabledTools", () -> List.<String>of(), () -> "", o -> o instanceof String);
 
             builder.pop();
 

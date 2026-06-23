@@ -14,7 +14,7 @@ import net.neoforged.neoforge.event.RegisterCommandsEvent;
 /**
  * 玩家密码管理命令
  * <p>
- * /fireflyauth reset &lt;playerName&gt; — 重置指定玩家密码（OP4）
+ * /fireflymc auth reset &lt;playerName&gt; — 重置指定玩家密码（OP4）
  */
 @EventBusSubscriber(modid = "fireflymc", value = Dist.DEDICATED_SERVER)
 public class PlayerPasswordCommandHandler {
@@ -23,13 +23,14 @@ public class PlayerPasswordCommandHandler {
     public static void onRegisterCommands(RegisterCommandsEvent event) {
         CommandDispatcher<CommandSourceStack> dispatcher = event.getDispatcher();
 
-        dispatcher.register(Commands.literal("fireflyauth")
-                .then(Commands.literal("reset")
-                        .requires(source -> source.hasPermission(4))
-                        .then(Commands.argument("playerName", StringArgumentType.word())
-                                .executes(PlayerPasswordCommandHandler::resetPassword)))
-                .executes(PlayerPasswordCommandHandler::sendHelp)
-        );
+        dispatcher.register(Commands.literal("fireflymc")
+                .then(Commands.literal("auth")
+                        .then(Commands.literal("reset")
+                                .requires(source -> source.hasPermission(4))
+                                .then(Commands.argument("playerName", StringArgumentType.word())
+                                        .executes(PlayerPasswordCommandHandler::resetPassword)))
+                        .executes(PlayerPasswordCommandHandler::sendHelp)
+        ));
     }
 
     private static int resetPassword(CommandContext<CommandSourceStack> context) {
@@ -50,7 +51,7 @@ public class PlayerPasswordCommandHandler {
     private static int sendHelp(CommandContext<CommandSourceStack> context) {
         context.getSource().sendSuccess(() -> Component.literal(
                 "§e[FireflyMC] 密码管理命令:\n" +
-                "§7  /fireflyauth reset <玩家名> §f— 重置指定玩家密码 (需OP4)"
+                "§7  /fireflymc auth reset <玩家名> §f— 重置指定玩家密码 (需OP4)"
         ), false);
         return 1;
     }

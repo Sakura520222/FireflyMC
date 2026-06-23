@@ -33,14 +33,18 @@ import net.minecraft.advancements.Advancement;
 import net.minecraft.advancements.DisplayInfo;
 import net.minecraft.network.chat.contents.TranslatableContents;
 
+import firefly520.fireflymc.network.CrossChatRelayPayload;
 import firefly520.fireflymc.util.ServerLanguageLoader;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import net.neoforged.neoforge.network.PacketDistributor;
 
 /**
- * AI聊天事件处理器
+ * AI 聊天事件处理器。
+ * <p>
+ * 负责事件入口、命令注册、冷却与主动回复判断、聊天历史记录、消息广播。
+ * AI 调用与多轮工具循环交由 {@link AgenticToolLoop} 统一承载，玩家与控制台触发
+ * 通过 {@link ToolContext} 合并为同一条路径。
  *
- * 使用 /ai <消息> 命令与AI对话
+ * 使用 /ai <消息> 命令与AI对话。
  *
  * ⚠️ 规范说明：
  * - value = Dist.DEDICATED_SERVER 确保仅在服务端加载
@@ -48,7 +52,6 @@ import org.slf4j.LoggerFactory;
  */
 @EventBusSubscriber(modid = "fireflymc", value = Dist.DEDICATED_SERVER)
 public class AIChatEventHandler {
-    private static final Logger LOGGER = LoggerFactory.getLogger(AIChatEventHandler.class);
 
     // 每个服务器实例一个历史管理器
     private static final ConcurrentHashMap<MinecraftServer, ChatHistoryManager> HISTORY_MANAGERS = new ConcurrentHashMap<>();
@@ -106,7 +109,7 @@ public class AIChatEventHandler {
         var historyManager = getHistoryManager(server);
 
         // 记录玩家聊天消息到AI历史
-        historyManager.addMessage(new ChatMessage(
+        historyManager.addMessage(ChatMessage.of(
                 player.getGameProfile().getName(),
                 message,
                 MessageType.PLAYER
@@ -115,7 +118,8 @@ public class AIChatEventHandler {
         // 检测唤醒词：消息包含"小樱"时自动触发AI回复
         if (message.contains("小樱") && !isOnCooldown(player)) {
             recordTrigger(player);
-            callAIAsync(server, player, historyManager, message, false);
+            ToolContext ctx = new ToolContext(server, player);
+            AgenticToolLoop.run(ctx, historyManager, message, reply -> broadcastReply(ctx, reply));
             return; // 唤醒词触发后跳过主动回复判断
         }
 
@@ -154,8 +158,7 @@ public class AIChatEventHandler {
         var historyManager = getHistoryManager(server);
 
         if (player != null) {
-            // 玩家执行路径（保持原有逻辑）
-            // 检查冷却时间
+            // 玩家执行路径：检查冷却
             if (isOnCooldown(player)) {
                 long elapsed = (System.currentTimeMillis() -
                         PLAYER_COOLDOWNS.get(player.getUUID())) / 1000;
@@ -167,11 +170,10 @@ public class AIChatEventHandler {
                 return 0;
             }
 
-            // 记录触发时间
             recordTrigger(player);
 
             // 记录玩家消息到历史
-            historyManager.addMessage(new ChatMessage(
+            historyManager.addMessage(ChatMessage.of(
                     player.getName().getString(),
                     prompt,
                     MessageType.PLAYER
@@ -180,14 +182,22 @@ public class AIChatEventHandler {
             // 广播玩家消息到聊天区（与普通聊天格式一致）
             broadcastPlayerMessage(server, player.getName().getString(), prompt);
 
-            // 异步调用AI
-            callAIAsync(server, player, historyManager, prompt, false);
+            // 玩家的触发消息也上行到跨级聊天（/ai 命令不经 ClientChatEvent，需显式代发）
+            PacketDistributor.sendToPlayer(player, new CrossChatRelayPayload(player.getName().getString(), prompt));
+
+            // 多轮 Agentic 循环（player 为触发者）
+            ToolContext ctx = new ToolContext(server, player);
+            AgenticToolLoop.run(ctx, historyManager, prompt, reply -> broadcastReply(ctx, reply));
         } else {
-            // 终端执行路径（新增，跳过冷却）
+            // 终端执行路径（跳过冷却）
             String senderName = "Server Console";
-            historyManager.addMessage(new ChatMessage(senderName, prompt, MessageType.PLAYER));
+            historyManager.addMessage(ChatMessage.of(senderName, prompt, MessageType.PLAYER));
             source.sendSuccess(() -> Component.literal("§a[Server Console] " + prompt), true);
-            callAIAsyncConsole(source.getServer(), historyManager, prompt);
+
+            // 多轮 Agentic 循环（player 为 null 表示控制台）。
+            // 产品决策：控制台触发的消息不进入跨级聊天互通——此处不发送 CrossChatRelayPayload。
+            ToolContext ctx = new ToolContext(server, null);
+            AgenticToolLoop.run(ctx, historyManager, prompt, reply -> broadcastReply(ctx, reply));
         }
 
         return 1;
@@ -207,9 +217,7 @@ public class AIChatEventHandler {
      * 获取或创建历史管理器
      */
     private static ChatHistoryManager getHistoryManager(MinecraftServer server) {
-        return HISTORY_MANAGERS.computeIfAbsent(server, s -> new ChatHistoryManager(
-                AIConfig.getMaxHistorySize()
-        ));
+        return HISTORY_MANAGERS.computeIfAbsent(server, s -> new ChatHistoryManager());
     }
 
     /**
@@ -282,7 +290,8 @@ public class AIChatEventHandler {
                 if (response.shouldReply()) {
                     recordTrigger(player);
                     String prompt = "[主动回复] " + response.reason();
-                    callAIAsync(server, player, historyManager, prompt, false);
+                    ToolContext ctx = new ToolContext(server, player);
+                    AgenticToolLoop.run(ctx, historyManager, prompt, reply -> broadcastReply(ctx, reply));
                 }
             });
         });
@@ -300,7 +309,7 @@ public class AIChatEventHandler {
         var server = event.getEntity().getServer();
         if (isMultiplayerServer(server)) {
             var historyManager = getHistoryManager(server);
-            historyManager.addMessage(new ChatMessage(
+            historyManager.addMessage(ChatMessage.of(
                     "Server",
                     event.getEntity().getName().getString() + " 加入了游戏",
                     MessageType.SYSTEM
@@ -321,7 +330,7 @@ public class AIChatEventHandler {
         var server = event.getEntity().getServer();
         if (isMultiplayerServer(server)) {
             var historyManager = getHistoryManager(server);
-            historyManager.addMessage(new ChatMessage(
+            historyManager.addMessage(ChatMessage.of(
                     "Server",
                     event.getEntity().getName().getString() + " 离开了游戏",
                     MessageType.SYSTEM
@@ -370,7 +379,7 @@ public class AIChatEventHandler {
 
         // 记录到 AI 历史（系统消息）
         var historyManager = getHistoryManager(server);
-        historyManager.addMessage(new ChatMessage(
+        historyManager.addMessage(ChatMessage.of(
                 "Server",
                 player.getGameProfile().getName() + " " + deathMessage,
                 MessageType.SYSTEM
@@ -453,7 +462,7 @@ public class AIChatEventHandler {
 
         // 记录到 AI 历史（系统消息）
         var historyManager = getHistoryManager(server);
-        historyManager.addMessage(new ChatMessage(
+        historyManager.addMessage(ChatMessage.of(
                 "Server",
                 player.getGameProfile().getName() + " 解锁了成就: " + advancementTitle,
                 MessageType.SYSTEM
@@ -469,6 +478,7 @@ public class AIChatEventHandler {
         HISTORY_MANAGERS.remove(server);
         PLAYER_COOLDOWNS.clear();
         MESSAGE_COUNTERS.remove(server);
+        BuildAnchorManager.clear();
     }
 
     /**
@@ -481,116 +491,6 @@ public class AIChatEventHandler {
         // 严谨判断：单人模式、局域网都排除
         return server.isDedicatedServer() ||
                (!server.isSingleplayer() && server.getPlayerList().getPlayerCount() > 1);
-    }
-
-    /**
-     * 异步调用AI API
-     *
-     * ⚠️ 关键：网络请求必须在异步线程执行，否则服务器会卡死
-     * 广播消息必须回到主线程执行，否则线程不安全
-     *
-     * @param hasExecutedFunction 当前轮次是否已执行过函数调用
-     */
-    private static void callAIAsync(MinecraftServer server, ServerPlayer player,
-                                     ChatHistoryManager historyManager, String prompt,
-                                     boolean hasExecutedFunction) {
-        String playerName = player.getName().getString();
-
-        CompletableFuture.supplyAsync(() -> {
-            // 异步线程：执行网络请求
-            var history = List.copyOf(historyManager.getHistory());
-            // 获取启用的函数工具
-            List<AIFunctionTool> tools = AIConfig.getFunctionsEnabled()
-                    ? new java.util.ArrayList<>(FunctionToolRegistry.getAllTools())
-                    : null;
-            return AIApiClient.callAIWithFunctions(history, prompt, playerName, tools);
-        }).thenAccept(response -> {
-            // 回到主线程：发送游戏消息
-            server.execute(() -> {
-                if (!response.isSuccess()) {
-                    // 发送错误提示
-                    player.sendSystemMessage(AIApiClient.getErrorComponent(response.errorType()));
-                    return;
-                }
-
-                if (response.hasToolCalls()) {
-                    if (hasExecutedFunction) {
-                        // 已经执行过函数调用，不再执行，要求AI用文字回复
-                        callAIAsync(server, player, historyManager,
-                                   "[请直接用文字回复玩家，不要再调用函数]", true);
-                    } else {
-                        // 首次执行函数调用
-                        handleToolCalls(server, player, historyManager, response.toolCalls());
-                    }
-                } else if (response.content() != null && !response.content().isEmpty()) {
-                    // 成功获取回复
-                    broadcastReply(server, player, response.content());
-
-                    // 添加AI回复到历史
-                    historyManager.addMessage(new ChatMessage(
-                            AIConfig.getAiNamePlain(),
-                            response.content(),
-                            MessageType.ASSISTANT
-                    ));
-                }
-            });
-        });
-    }
-
-    /**
-     * 处理AI返回的工具调用
-     * 每次只执行第一个函数调用
-     */
-    private static void handleToolCalls(MinecraftServer server, ServerPlayer player,
-                                        ChatHistoryManager historyManager,
-                                        java.util.List<FunctionCallRequest> toolCalls) {
-        if (toolCalls.isEmpty()) {
-            return;
-        }
-
-        // 只执行第一个函数调用
-        var call = toolCalls.get(0);
-
-        // 验证权限
-        if (!FunctionToolRegistry.hasPermissionForTool(player, call.name())) {
-            // 权限不足，通知AI
-            sendToolCallResultToAI(server, player, historyManager, call.id(),
-                    FunctionCallResult.failure(FunctionCallResult.ErrorType.PERMISSION_DENIED,
-                            "权限不足：需要" + FunctionToolRegistry.getRequiredPermissionLevel(call.name()) + "级OP权限"));
-        } else {
-            // 执行函数
-            FunctionToolRegistry.getTool(call.name()).ifPresent(tool -> {
-                FunctionCallResult result = tool.execute(player, call.arguments());
-                sendToolCallResultToAI(server, player, historyManager, call.id(), result);
-            });
-        }
-
-        // 继续调用AI获取最终回复
-        callAIAsync(server, player, historyManager,
-                   "[函数调用已完成，请根据结果回复玩家]", true);
-    }
-
-    /**
-     * 将工具执行结果发送给AI
-     * 通过添加一条系统消息到历史记录中
-     */
-    private static void sendToolCallResultToAI(MinecraftServer server, ServerPlayer player,
-                                               ChatHistoryManager historyManager,
-                                               String callId, FunctionCallResult result) {
-        // 将工具调用结果添加到历史记录
-        String resultMessage;
-        if (result.isSuccess()) {
-            resultMessage = "工具调用成功：" + result.getMessage();
-        } else {
-            resultMessage = "工具调用失败：" + result.getMessage();
-        }
-
-        // 添加为系统消息（工具结果），避免最后一条是assistant角色
-        historyManager.addMessage(new ChatMessage(
-                "System",
-                resultMessage,
-                MessageType.SYSTEM
-        ));
     }
 
     /**
@@ -608,12 +508,15 @@ public class AIChatEventHandler {
     }
 
     /**
-     * 广播AI回复（玩家样式聊天消息，非系统消息）
+     * 广播AI回复（玩家样式聊天消息，非系统消息）。
+     * <p>
+     * 合并了原 broadcastReply / broadcastReplyNoPlayer：通过 {@link ToolContext} 区分触发来源。
+     * 控制台触发或配置广播开关开启时，发送给所有在线玩家；否则仅发送给触发玩家。
      *
-     * 使用 displayClientMessage() 发送，避免 UUID 验证问题
-     * 手动构建 <名称> 消息 格式，与玩家聊天一致
+     * @param ctx   执行上下文（console 时 player 为 null）
+     * @param reply AI 回复内容
      */
-    private static void broadcastReply(MinecraftServer server, ServerPlayer triggerPlayer, String reply) {
+    private static void broadcastReply(ToolContext ctx, String reply) {
         // 樱花粉颜色 #FFB7C5
         final TextColor SAKURA_PINK = TextColor.fromRgb(0xFFB7C5);
 
@@ -639,116 +542,19 @@ public class AIChatEventHandler {
             .append("> ")
             .append(Component.literal(reply));
 
-        // 发送给目标玩家（overlay=false 表示进入聊天窗口，不是动作栏）
-        if (AIConfig.getBroadcastToAll()) {
-            for (ServerPlayer player : server.getPlayerList().getPlayers()) {
+        // 控制台触发或广播开关开启：发送给所有人；否则仅发给触发玩家
+        if (AIConfig.getBroadcastToAll() || ctx.isConsole()) {
+            for (ServerPlayer player : ctx.server().getPlayerList().getPlayers()) {
                 player.displayClientMessage(fullChatMessage, false);
             }
-        } else {
-            triggerPlayer.displayClientMessage(fullChatMessage, false);
-        }
-    }
-
-    /**
-     * 异步调用AI API（服务器终端触发版本）
-     */
-    private static void callAIAsyncConsole(MinecraftServer server,
-                                           ChatHistoryManager historyManager,
-                                           String prompt) {
-        CompletableFuture.supplyAsync(() -> {
-            var history = List.copyOf(historyManager.getHistory());
-            List<AIFunctionTool> tools = AIConfig.getFunctionsEnabled()
-                    ? new java.util.ArrayList<>(FunctionToolRegistry.getAllTools())
-                    : null;
-            return AIApiClient.callAIWithFunctions(history, prompt, "Server Console", tools);
-        }).thenAccept(response -> {
-            server.execute(() -> {
-                if (!response.isSuccess()) {
-                    LOGGER.error("[FireflyMC] 终端AI请求失败: {}", response.errorType());
-                    return;
-                }
-
-                if (response.hasToolCalls()) {
-                    handleToolCallsConsole(server, historyManager, response.toolCalls());
-                } else if (response.content() != null && !response.content().isEmpty()) {
-                    broadcastReplyNoPlayer(server, response.content());
-                    historyManager.addMessage(new ChatMessage(
-                            AIConfig.getAiNamePlain(),
-                            response.content(),
-                            MessageType.ASSISTANT
-                    ));
-                }
-            });
-        });
-    }
-
-    /**
-     * 处理AI返回的工具调用（服务器终端版本，4级OP权限）
-     */
-    private static void handleToolCallsConsole(MinecraftServer server,
-                                               ChatHistoryManager historyManager,
-                                               java.util.List<FunctionCallRequest> toolCalls) {
-        if (toolCalls.isEmpty()) {
-            return;
+        } else if (ctx.player() != null) {
+            ctx.player().displayClientMessage(fullChatMessage, false);
         }
 
-        var call = toolCalls.get(0);
-
-        FunctionToolRegistry.getTool(call.name()).ifPresent(tool -> {
-            FunctionCallResult result = tool.execute(server, call.arguments());
-            sendToolCallResultToAIConsole(server, historyManager, call.id(), result);
-        });
-
-        callAIAsyncConsole(server, historyManager,
-                   "[函数调用已完成，请根据结果回复]");
-    }
-
-    /**
-     * 将工具执行结果发送给AI（服务器终端版本）
-     */
-    private static void sendToolCallResultToAIConsole(MinecraftServer server,
-                                                      ChatHistoryManager historyManager,
-                                                      String callId, FunctionCallResult result) {
-        String resultMessage;
-        if (result.isSuccess()) {
-            resultMessage = "工具调用成功：" + result.getMessage();
-        } else {
-            resultMessage = "工具调用失败：" + result.getMessage();
-        }
-
-        historyManager.addMessage(new ChatMessage(
-                "System",
-                resultMessage,
-                MessageType.SYSTEM
-        ));
-    }
-
-    /**
-     * 广播AI回复（无触发玩家版本）
-     */
-    private static void broadcastReplyNoPlayer(MinecraftServer server, String reply) {
-        final TextColor SAKURA_PINK = TextColor.fromRgb(0xFFB7C5);
-
-        Component aiNameComponent = Component.literal(AIConfig.getAiNamePlain())
-            .withStyle(style -> style
-                .withColor(SAKURA_PINK)
-                .withHoverEvent(new HoverEvent(
-                    HoverEvent.Action.SHOW_TEXT,
-                    Component.literal(AIConfig.getAiNamePlain())
-                        .withStyle(s -> s.withColor(SAKURA_PINK))
-                        .append(Component.literal("\n类型: FireflyMC-AI助手")
-                            .withStyle(ChatFormatting.GRAY))
-                ))
-                .withClickEvent(new ClickEvent(ClickEvent.Action.SUGGEST_COMMAND, "/msg " + AIConfig.getAiNamePlain() + " "))
-            );
-
-        Component fullChatMessage = Component.literal("<")
-            .append(aiNameComponent)
-            .append("> ")
-            .append(Component.literal(reply));
-
-        for (ServerPlayer player : server.getPlayerList().getPlayers()) {
-            player.displayClientMessage(fullChatMessage, false);
+        // 以 AI 名义将回复上行到跨级聊天（QQ 群）：由触发者客户端代为转发。
+        // 产品决策：控制台触发的 AI 回复不进入互通（运维操作不外溢到 QQ）。
+        if (!ctx.isConsole()) {
+            PacketDistributor.sendToPlayer(ctx.player(), new CrossChatRelayPayload(AIConfig.getAiNamePlain(), reply));
         }
     }
 }

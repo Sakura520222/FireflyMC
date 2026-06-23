@@ -1,14 +1,14 @@
 package firefly520.fireflymc.ai.function;
 
-import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import firefly520.fireflymc.ai.AIFunctionTool;
 import firefly520.fireflymc.ai.FunctionCallResult;
+import firefly520.fireflymc.ai.ToolContext;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 
 /**
- * 获取在线玩家列表的函数工具
+ * 获取在线玩家列表的函数工具。
  */
 public class ListPlayersFunctionTool implements AIFunctionTool {
 
@@ -29,7 +29,6 @@ public class ListPlayersFunctionTool implements AIFunctionTool {
 
         JsonObject properties = new JsonObject();
 
-        // includeDetails 参数
         JsonObject includeDetails = new JsonObject();
         includeDetails.addProperty("type", "boolean");
         includeDetails.addProperty("description", "是否包含详细信息（游戏模式、位置等）");
@@ -43,27 +42,15 @@ public class ListPlayersFunctionTool implements AIFunctionTool {
 
     @Override
     public int getRequiredPermissionLevel() {
-        return 0;  // 无权限要求
+        return 0;
     }
 
     @Override
-    public FunctionCallResult execute(ServerPlayer player, JsonObject arguments) {
-        FunctionCallResult checkResult = FunctionToolHelper.checkServerReady(player);
-        if (checkResult != null) return checkResult;
-
+    public FunctionCallResult execute(ToolContext ctx, JsonObject arguments) {
         boolean includeDetails = FunctionToolHelper.getOptionalBoolean(arguments, "includeDetails", false);
-        return buildPlayerList(player.getServer(), includeDetails);
+        return buildPlayerList(ctx.server(), includeDetails);
     }
 
-    @Override
-    public FunctionCallResult execute(MinecraftServer server, JsonObject arguments) {
-        boolean includeDetails = FunctionToolHelper.getOptionalBoolean(arguments, "includeDetails", false);
-        return buildPlayerList(server, includeDetails);
-    }
-
-    /**
-     * 共享的玩家列表构建逻辑
-     */
     private FunctionCallResult buildPlayerList(MinecraftServer server, boolean includeDetails) {
         var players = server.getPlayerList().getPlayers();
         int maxPlayers = server.getPlayerList().getMaxPlayers();

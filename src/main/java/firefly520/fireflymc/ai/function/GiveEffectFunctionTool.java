@@ -4,14 +4,14 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import firefly520.fireflymc.ai.AIFunctionTool;
 import firefly520.fireflymc.ai.FunctionCallResult;
+import firefly520.fireflymc.ai.ToolContext;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
-import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.effect.MobEffectInstance;
 
 /**
- * 给予药水效果的函数工具
+ * 给予药水效果的函数工具。
  */
 public class GiveEffectFunctionTool implements AIFunctionTool {
 
@@ -20,6 +20,8 @@ public class GiveEffectFunctionTool implements AIFunctionTool {
     private static final int DEFAULT_DURATION = 60;
     private static final int DEFAULT_AMPLIFIER = 0;
     private static final int MAX_AMPLIFIER = 255;
+
+    private static final String TARGET_PARAM = "target_player";
 
     @Override
     public String getName() {
@@ -38,13 +40,11 @@ public class GiveEffectFunctionTool implements AIFunctionTool {
 
         JsonObject properties = new JsonObject();
 
-        // effect 参数
         JsonObject effectParam = new JsonObject();
         effectParam.addProperty("type", "string");
         effectParam.addProperty("description", "效果ID，如 'speed'、'strength'、'regeneration'、'jump_boost'、'night_vision' 等");
         properties.add("effect", effectParam);
 
-        // duration 参数
         JsonObject durationParam = new JsonObject();
         durationParam.addProperty("type", "integer");
         durationParam.addProperty("description", "持续时间(秒)");
@@ -53,7 +53,6 @@ public class GiveEffectFunctionTool implements AIFunctionTool {
         durationParam.addProperty("maximum", MAX_DURATION);
         properties.add("duration", durationParam);
 
-        // amplifier 参数
         JsonObject amplifierParam = new JsonObject();
         amplifierParam.addProperty("type", "integer");
         amplifierParam.addProperty("description", "效果强度(0为等级I，1为等级II，依此类推)");
@@ -62,11 +61,10 @@ public class GiveEffectFunctionTool implements AIFunctionTool {
         amplifierParam.addProperty("maximum", MAX_AMPLIFIER);
         properties.add("amplifier", amplifierParam);
 
-        // targetPlayer 参数
-        JsonObject targetPlayerParam = new JsonObject();
-        targetPlayerParam.addProperty("type", "string");
-        targetPlayerParam.addProperty("description", "目标玩家名称，默认为执行者");
-        properties.add("targetPlayer", targetPlayerParam);
+        JsonObject targetParam = new JsonObject();
+        targetParam.addProperty("type", "string");
+        targetParam.addProperty("description", "目标玩家名称，默认为执行者（控制台调用时必填）");
+        properties.add(TARGET_PARAM, targetParam);
 
         schema.add("properties", properties);
 
@@ -79,118 +77,48 @@ public class GiveEffectFunctionTool implements AIFunctionTool {
 
     @Override
     public int getRequiredPermissionLevel() {
-        return 4;  // 4级OP权限
+        return 4;
     }
 
     @Override
-    public FunctionCallResult execute(ServerPlayer player, JsonObject arguments) {
-        // 检查前置条件
-        FunctionCallResult checkResult = FunctionToolHelper.checkPreconditions(player, this);
-        if (checkResult != null) {
-            return checkResult;
-        }
-
-        var server = player.getServer();
-
-        // 解析必需参数
+    public FunctionCallResult execute(ToolContext ctx, JsonObject arguments) {
         var effectResult = FunctionToolHelper.getRequiredString(arguments, "effect");
         if (effectResult.hasError()) {
             return effectResult.error();
         }
         String effectStr = effectResult.value().toLowerCase();
 
-        // 解析可选参数
         int duration = FunctionToolHelper.getOptionalInt(arguments, "duration", DEFAULT_DURATION);
         int amplifier = FunctionToolHelper.getOptionalInt(arguments, "amplifier", DEFAULT_AMPLIFIER);
-
-        // 验证范围
         duration = Math.max(MIN_DURATION, Math.min(MAX_DURATION, duration));
         amplifier = Math.max(0, Math.min(MAX_AMPLIFIER, amplifier));
 
-        // 确定目标玩家
-        ServerPlayer targetPlayer = player;
-        String targetName = player.getGameProfile().getName();
-
-        String targetPlayerName = FunctionToolHelper.getOptionalString(arguments, "targetPlayer", null);
-        if (targetPlayerName != null && !targetPlayerName.isBlank()) {
-            targetPlayer = server.getPlayerList().getPlayerByName(targetPlayerName);
-            if (targetPlayer == null) {
-                return FunctionCallResult.failure(
-                        FunctionCallResult.ErrorType.EXECUTION_FAILED,
-                        "玩家 " + targetPlayerName + " 不在线"
-                );
-            }
-            targetName = targetPlayerName;
+        var targetResult = FunctionToolHelper.getOptionalTargetPlayer(ctx, arguments, TARGET_PARAM);
+        if (targetResult.hasError()) {
+            return targetResult.error();
         }
+        ServerPlayer target = targetResult.player();
+        String targetName = target.getGameProfile().getName();
 
-        // 解析效果ID（尝试添加minecraft:前缀）
+        // 解析效果ID（尝试补 minecraft: 前缀）
         ResourceLocation effectId = ResourceLocation.tryParse(effectStr);
         if (effectId == null) {
             effectId = ResourceLocation.tryParse("minecraft:" + effectStr);
             if (effectId == null) {
                 return FunctionCallResult.failure(
                         FunctionCallResult.ErrorType.INVALID_ARGUMENT,
-                        "无效的效果ID: " + effectStr
-                );
+                        "无效的效果ID: " + effectStr);
             }
         }
-
         var effectHolder = BuiltInRegistries.MOB_EFFECT.getHolder(effectId);
         if (effectHolder.isEmpty()) {
             return FunctionCallResult.failure(
                     FunctionCallResult.ErrorType.INVALID_ARGUMENT,
-                    "未知的效果: " + effectStr
-            );
-        }
-
-        // 给予效果
-        int durationTicks = duration * 20;
-        targetPlayer.addEffect(new MobEffectInstance(effectHolder.get(), durationTicks, amplifier, false, true));
-
-        // 获取效果显示名称
-        String effectName = effectId.getPath().replace("_", " ");
-
-        return FunctionCallResult.success(
-                String.format("已给予 %s %d级%s效果，持续%d秒",
-                        targetName, amplifier + 1, effectName, duration)
-        );
-    }
-
-    @Override
-    public FunctionCallResult execute(MinecraftServer server, JsonObject arguments) {
-        if (!arguments.has("targetPlayer")) {
-            return FunctionCallResult.failure(FunctionCallResult.ErrorType.INVALID_ARGUMENT, "从控制台执行必须指定 targetPlayer");
-        }
-
-        var effectResult = FunctionToolHelper.getRequiredString(arguments, "effect");
-        if (effectResult.hasError()) return effectResult.error();
-        String effectStr = effectResult.value().toLowerCase();
-
-        int duration = FunctionToolHelper.getOptionalInt(arguments, "duration", DEFAULT_DURATION);
-        int amplifier = FunctionToolHelper.getOptionalInt(arguments, "amplifier", DEFAULT_AMPLIFIER);
-        duration = Math.max(MIN_DURATION, Math.min(MAX_DURATION, duration));
-        amplifier = Math.max(0, Math.min(MAX_AMPLIFIER, amplifier));
-
-        var targetResult = FunctionToolHelper.getRequiredTargetPlayer(server, arguments, "targetPlayer");
-        if (targetResult.hasError()) return targetResult.error();
-        String targetName = targetResult.player().getGameProfile().getName();
-        ServerPlayer targetPlayer = targetResult.player();
-
-        ResourceLocation effectId = ResourceLocation.tryParse(effectStr);
-        if (effectId == null) {
-            effectId = ResourceLocation.tryParse("minecraft:" + effectStr);
-            if (effectId == null) {
-                return FunctionCallResult.failure(FunctionCallResult.ErrorType.INVALID_ARGUMENT, "无效的效果ID: " + effectStr);
-            }
-        }
-
-        var effectHolder = BuiltInRegistries.MOB_EFFECT.getHolder(effectId);
-        if (effectHolder.isEmpty()) {
-            return FunctionCallResult.failure(FunctionCallResult.ErrorType.INVALID_ARGUMENT, "未知的效果: " + effectStr);
+                    "未知的效果: " + effectStr);
         }
 
         int durationTicks = duration * 20;
-        targetPlayer.addEffect(new MobEffectInstance(effectHolder.get(), durationTicks, amplifier, false, true));
+        target.addEffect(new MobEffectInstance(effectHolder.get(), durationTicks, amplifier, false, true));
 
         String effectName = effectId.getPath().replace("_", " ");
         return FunctionCallResult.success(

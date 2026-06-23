@@ -165,7 +165,7 @@ public class RulesScreen extends Screen {
 
         // 绘制标题
         Component title;
-        if (rulesLoaded && rules != null) {
+        if (rulesLoaded && rules != null && !rules.version().isEmpty()) {
             title = Component.literal("FireflyMC 服务器公告 " + rules.version());
         } else {
             title = Component.literal("FireflyMC 服务器公告");
@@ -232,6 +232,16 @@ public class RulesScreen extends Screen {
             int errorX = this.width / 2 - this.font.width(errorText) / 2;
             guiGraphics.drawString(this.font, errorText.getVisualOrderText(),
                     (float)errorX, (float)(separatorY + 30), 0xFFFF0000, false);
+            super.render(guiGraphics, mouseX, mouseY, partialTick);
+            return;
+        }
+
+        // 无公告时提示，避免内容区空白
+        if (rules.sections().isEmpty()) {
+            Component emptyText = Component.literal("§7暂无公告");
+            int emptyX = this.width / 2 - this.font.width(emptyText) / 2;
+            guiGraphics.drawString(this.font, emptyText.getVisualOrderText(),
+                    (float)emptyX, (float)(separatorY + 30), TEXT_SECONDARY, false);
             super.render(guiGraphics, mouseX, mouseY, partialTick);
             return;
         }

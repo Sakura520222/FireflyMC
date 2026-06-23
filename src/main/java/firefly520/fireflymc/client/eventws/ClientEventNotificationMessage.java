@@ -77,6 +77,31 @@ public final class ClientEventNotificationMessage {
             .add("message", message);
     }
 
+    /**
+     * 跨级聊天代发：以指定发送者名义构造 player_chat 消息上行到云端/QQ 群。
+     * <p>
+     * 用于服务端发起/转发的聊天内容（AI 回复、{@code /ai} 命令的玩家消息等）——
+     * 这些内容不经客户端 ClientChatEvent，需由服务端通过 payload 委托客户端代发。
+     *
+     * @param senderName 发送者显示名（AI 名或玩家名）
+     */
+    public static ClientEventNotificationMessage crossChatRelay(Minecraft minecraft, String senderName, String message) {
+        return create("player_chat")
+            .add("playerName", senderName)
+            .addWorldContext(minecraft, resolveWorldType(minecraft))
+            .add("message", message);
+    }
+
+    /**
+     * 客户端（重）连接建立后上报的当前在线状态。
+     * 用于服务端在重启或客户端重连后恢复在线玩家列表，本身不携带业务事件语义。
+     */
+    public static ClientEventNotificationMessage presence(Minecraft minecraft, LocalPlayer player) {
+        return create("presence")
+            .addPlayer(player)
+            .addWorldContext(minecraft, resolveWorldType(minecraft));
+    }
+
     public ClientEventNotificationMessage add(String key, String value) {
         if (value != null && !value.isBlank()) {
             this.json.addProperty(key, value);

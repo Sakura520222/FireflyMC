@@ -4,19 +4,15 @@ import java.util.Queue;
 import java.util.concurrent.ConcurrentLinkedQueue;
 
 /**
- * 聊天历史管理器 - 线程安全
+ * 聊天历史管理器 - 线程安全。
+ * <p>
+ * 容量上限每次 {@link #addMessage} 时从 {@link AIConfig} 实时读取，
+ * 使 {@code maxHistorySize} 配置支持热重载（改 toml 后立即生效，无需重启服务器）。
  */
 public class ChatHistoryManager {
-    private static final int DEFAULT_MAX_SIZE = 30;
-    private final int maxSize;
     private final Queue<ChatMessage> history;
 
     public ChatHistoryManager() {
-        this(DEFAULT_MAX_SIZE);
-    }
-
-    public ChatHistoryManager(int maxSize) {
-        this.maxSize = maxSize;
         this.history = new ConcurrentLinkedQueue<>();
     }
 
@@ -28,8 +24,16 @@ public class ChatHistoryManager {
             return;
         }
         history.offer(message);
-        // 超过限制时移除最旧的
+        // 实时读取配置，支持热重载
+        int maxSize = AIConfig.getMaxHistorySize();
         while (history.size() > maxSize) {
+            history.poll();
+        }
+        // 裁剪后若开头是 tool 结果，说明它对应的 assistant tool_calls 已被裁掉（孤立），
+        // 必须一并删除——否则发送时 messages 会以 tool 结果开头，违反 OpenAI 规范：
+        // 每条 role:tool 必须紧跟携带对应 tool_call_id 的 assistant tool_calls。
+        // 严格 provider（GLM/月之暗面等）会因此报「messages 参数非法」。
+        while (!history.isEmpty() && history.peek().type() == MessageType.TOOL_RESULT) {
             history.poll();
         }
     }

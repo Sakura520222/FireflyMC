@@ -18,9 +18,9 @@ import java.util.UUID;
 /**
  * 在线时长管理命令
  * <p>
- * /playtime check [player] — 查看剩余时间
- * /playtime reset <player> — 重置指定玩家每日时间
- * /playtime resetdaily     — 重置所有玩家每日时间
+ * /fireflymc playtime check [player] — 查看剩余时间
+ * /fireflymc playtime reset <player> — 重置指定玩家每日时间
+ * /fireflymc playtime resetdaily     — 重置所有玩家每日时间
  */
 @EventBusSubscriber(modid = "fireflymc", value = Dist.DEDICATED_SERVER)
 public class PlaytimeCommandHandler {
@@ -29,21 +29,22 @@ public class PlaytimeCommandHandler {
     public static void onRegisterCommands(RegisterCommandsEvent event) {
         CommandDispatcher<CommandSourceStack> dispatcher = event.getDispatcher();
 
-        dispatcher.register(Commands.literal("playtime")
-                .then(Commands.literal("check")
-                        .executes(PlaytimeCommandHandler::checkSelf)
-                        .then(Commands.argument("player", EntityArgument.player())
-                                .requires(source -> source.hasPermission(2))
-                                .executes(PlaytimeCommandHandler::checkOther)))
-                .then(Commands.literal("reset")
-                        .requires(source -> source.hasPermission(4))
-                        .then(Commands.argument("player", EntityArgument.player())
-                                .executes(PlaytimeCommandHandler::resetPlayer)))
-                .then(Commands.literal("resetdaily")
-                        .requires(source -> source.hasPermission(4))
-                        .executes(PlaytimeCommandHandler::resetAll))
-                .executes(PlaytimeCommandHandler::sendHelp)
-        );
+        dispatcher.register(Commands.literal("fireflymc")
+                .then(Commands.literal("playtime")
+                        .then(Commands.literal("check")
+                                .executes(PlaytimeCommandHandler::checkSelf)
+                                .then(Commands.argument("player", EntityArgument.player())
+                                        .requires(source -> source.hasPermission(2))
+                                        .executes(PlaytimeCommandHandler::checkOther)))
+                        .then(Commands.literal("reset")
+                                .requires(source -> source.hasPermission(4))
+                                .then(Commands.argument("player", EntityArgument.player())
+                                        .executes(PlaytimeCommandHandler::resetPlayer)))
+                        .then(Commands.literal("resetdaily")
+                                .requires(source -> source.hasPermission(4))
+                                .executes(PlaytimeCommandHandler::resetAll))
+                        .executes(PlaytimeCommandHandler::sendHelp)
+        ));
     }
 
     private static int checkSelf(CommandContext<CommandSourceStack> context) throws CommandSyntaxException {
@@ -106,10 +107,10 @@ public class PlaytimeCommandHandler {
     private static int sendHelp(CommandContext<CommandSourceStack> context) {
         Component help = Component.literal(
                 "§e[FireflyMC] 在线时长管理命令:\n" +
-                "§7  /playtime check §f— 查看自己的剩余时间\n" +
-                "§7  /playtime check <玩家> §f— 查看他人剩余时间 (需OP2)\n" +
-                "§7  /playtime reset <玩家> §f— 重置指定玩家每日时间 (需OP4)\n" +
-                "§7  /playtime resetdaily §f— 重置所有玩家每日时间 (需OP4)"
+                "§7  /fireflymc playtime check §f— 查看自己的剩余时间\n" +
+                "§7  /fireflymc playtime check <玩家> §f— 查看他人剩余时间 (需OP2)\n" +
+                "§7  /fireflymc playtime reset <玩家> §f— 重置指定玩家每日时间 (需OP4)\n" +
+                "§7  /fireflymc playtime resetdaily §f— 重置所有玩家每日时间 (需OP4)"
         );
         context.getSource().sendSuccess(() -> help, false);
         return 1;

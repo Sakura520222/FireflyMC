@@ -3,14 +3,16 @@ package firefly520.fireflymc.ai.function;
 import com.google.gson.JsonObject;
 import firefly520.fireflymc.ai.AIFunctionTool;
 import firefly520.fireflymc.ai.FunctionCallResult;
+import firefly520.fireflymc.ai.ToolContext;
 import net.minecraft.core.BlockPos;
-import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 
 /**
- * 获取玩家详细信息的函数工具
+ * 获取玩家详细信息的函数工具。
  */
 public class GetPlayerInfoFunctionTool implements AIFunctionTool {
+
+    private static final String TARGET_PARAM = "target_player";
 
     @Override
     public String getName() {
@@ -29,11 +31,10 @@ public class GetPlayerInfoFunctionTool implements AIFunctionTool {
 
         JsonObject properties = new JsonObject();
 
-        // playerName 参数
-        JsonObject playerName = new JsonObject();
-        playerName.addProperty("type", "string");
-        playerName.addProperty("description", "玩家名称，不填则查询执行者");
-        properties.add("playerName", playerName);
+        JsonObject targetParam = new JsonObject();
+        targetParam.addProperty("type", "string");
+        targetParam.addProperty("description", "目标玩家名称，不填则查询执行者（控制台调用时必填）");
+        properties.add(TARGET_PARAM, targetParam);
 
         schema.add("properties", properties);
 
@@ -42,44 +43,30 @@ public class GetPlayerInfoFunctionTool implements AIFunctionTool {
 
     @Override
     public int getRequiredPermissionLevel() {
-        return 0;  // 无权限要求
+        return 0;
     }
 
     @Override
-    public FunctionCallResult execute(ServerPlayer player, JsonObject arguments) {
-        // 检查服务器就绪状态
-        FunctionCallResult checkResult = FunctionToolHelper.checkServerReady(player);
-        if (checkResult != null) {
-            return checkResult;
+    public FunctionCallResult execute(ToolContext ctx, JsonObject arguments) {
+        var targetResult = FunctionToolHelper.getOptionalTargetPlayer(ctx, arguments, TARGET_PARAM);
+        if (targetResult.hasError()) {
+            return targetResult.error();
         }
+        return buildPlayerInfo(targetResult.player());
+    }
 
-        var server = player.getServer();
-
-        // 确定目标玩家
-        ServerPlayer targetPlayer = player;
-        String targetPlayerName = FunctionToolHelper.getOptionalString(arguments, "playerName", null);
-        if (targetPlayerName != null && !targetPlayerName.isBlank()) {
-            targetPlayer = server.getPlayerList().getPlayerByName(targetPlayerName);
-            if (targetPlayer == null) {
-                return FunctionCallResult.failure(
-                        FunctionCallResult.ErrorType.EXECUTION_FAILED,
-                        "玩家 " + targetPlayerName + " 不在线"
-                );
-            }
-        }
-
-        // 获取玩家信息
-        String name = targetPlayer.getGameProfile().getName();
-        BlockPos pos = targetPlayer.blockPosition();
-        String dimension = targetPlayer.serverLevel().dimension().location().toString();
-        float health = targetPlayer.getHealth();
-        float maxHealth = targetPlayer.getMaxHealth();
-        int foodLevel = targetPlayer.getFoodData().getFoodLevel();
-        int xpLevel = targetPlayer.experienceLevel;
-        float xpProgress = targetPlayer.experienceProgress;
-        String gameMode = targetPlayer.gameMode.getGameModeForPlayer().getName();
-        boolean isFlying = targetPlayer.getAbilities().flying;
-        int ping = targetPlayer.connection.latency();
+    private FunctionCallResult buildPlayerInfo(ServerPlayer target) {
+        String name = target.getGameProfile().getName();
+        BlockPos pos = target.blockPosition();
+        String dimension = target.serverLevel().dimension().location().toString();
+        float health = target.getHealth();
+        float maxHealth = target.getMaxHealth();
+        int foodLevel = target.getFoodData().getFoodLevel();
+        int xpLevel = target.experienceLevel;
+        float xpProgress = target.experienceProgress;
+        String gameMode = target.gameMode.getGameModeForPlayer().getName();
+        boolean isFlying = target.getAbilities().flying;
+        int ping = target.connection.latency();
 
         StringBuilder result = new StringBuilder();
         result.append(String.format("玩家 %s 的信息:\n", name));
@@ -91,36 +78,6 @@ public class GetPlayerInfoFunctionTool implements AIFunctionTool {
         result.append(String.format("状态: %s\n", isFlying ? "飞行中" : "行走"));
         result.append(String.format("延迟: %dms", ping));
 
-        return FunctionCallResult.success(result.toString());
-    }
-
-    @Override
-    public FunctionCallResult execute(MinecraftServer server, JsonObject arguments) {
-        var playerResult = FunctionToolHelper.getRequiredTargetPlayer(server, arguments, "playerName");
-        if (playerResult.hasError()) return playerResult.error();
-
-        ServerPlayer targetPlayer = playerResult.player();
-        String name = targetPlayer.getGameProfile().getName();
-        BlockPos pos = targetPlayer.blockPosition();
-        String dimension = targetPlayer.serverLevel().dimension().location().toString();
-        float health = targetPlayer.getHealth();
-        float maxHealth = targetPlayer.getMaxHealth();
-        int foodLevel = targetPlayer.getFoodData().getFoodLevel();
-        int xpLevel = targetPlayer.experienceLevel;
-        float xpProgress = targetPlayer.experienceProgress;
-        String gameMode = targetPlayer.gameMode.getGameModeForPlayer().getName();
-        boolean isFlying = targetPlayer.getAbilities().flying;
-        int ping = targetPlayer.connection.latency();
-
-        StringBuilder result = new StringBuilder();
-        result.append(String.format("玩家 %s 的信息:\n", name));
-        result.append(String.format("位置: (%d, %d, %d) %s\n", pos.getX(), pos.getY(), pos.getZ(), dimension));
-        result.append(String.format("血量: %.1f/%.1f\n", health, maxHealth));
-        result.append(String.format("饥饿值: %d/20\n", foodLevel));
-        result.append(String.format("经验: 等级%d (%.1f%%)\n", xpLevel, xpProgress * 100));
-        result.append(String.format("游戏模式: %s\n", gameMode));
-        result.append(String.format("状态: %s\n", isFlying ? "飞行中" : "行走"));
-        result.append(String.format("延迟: %dms", ping));
         return FunctionCallResult.success(result.toString());
     }
 }

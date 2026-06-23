@@ -29,7 +29,6 @@ public class TitleManager {
 
     private final ConcurrentHashMap<UUID, String> titles = new ConcurrentHashMap<>();
     private Path dataFile;
-    private boolean loaded = false;
 
     private TitleManager() {
     }
@@ -60,7 +59,6 @@ public class TitleManager {
                 LOGGER.error("[FireflyMC] 加载称号记录失败", e);
             }
         }
-        this.loaded = true;
     }
 
     /**
@@ -147,7 +145,6 @@ public class TitleManager {
     public void shutdown() {
         saveData();
         titles.clear();
-        loaded = false;
     }
 
     /**
