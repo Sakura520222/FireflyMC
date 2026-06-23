@@ -336,6 +336,12 @@ public class AIApiClient {
                     .map(ChatMessage::toApiMessage)
                     .collect(Collectors.toList());
 
+            // 防御：清理头部孤立的 tool 结果（ChatHistoryManager 已在裁剪时处理，此处双保险），
+            // 避免以 tool 结果开头的 messages 触发严格 provider 校验失败。
+            while (!messages.isEmpty() && "tool".equals(messages.get(0).role())) {
+                messages.remove(0);
+            }
+
             // 添加系统提示（工具定义已通过 tools 字段规范传递，无需在 prompt 文本里重复）
             String systemPrompt = SYSTEM_PROMPT + "\n\n你正在与玩家 [" + playerName + "] 对话。请基于 messages 数组中的历史回复；若末尾是工具调用结果，请结合结果继续作答或发起下一步调用。";
             messages.add(0, new ApiMessage("system", null, systemPrompt));
@@ -373,9 +379,15 @@ public class AIApiClient {
                     .POST(HttpRequest.BodyPublishers.ofString(GSON.toJson(requestBody)))
                     .build();
 
-            // 发送请求
-            HttpResponse<String> response = HTTP_CLIENT.send(request,
-                    HttpResponse.BodyHandlers.ofString());
+            // 发送请求。502/503/504 属于上游临时不可用/超载，短暂退避后重试，
+            // 避免 AI 已完成部分建造后因一次网关抖动直接中断。
+            HttpResponse<String> response = sendWithTransientRetry(request);
+
+            // 出错时打印 messages 结构概要（不含原文，避免泄露玩家聊天等 PII），
+            // 用于定位 provider 校验错误（如 1214 messages 参数非法）
+            if (response.statusCode() >= 400) {
+                logMessagesSummary(response.statusCode(), messagesJson);
+            }
 
             // 处理响应
             return handleResponseWithTools(response);
@@ -387,6 +399,62 @@ public class AIApiClient {
             LOGGER.error("[FireflyMC] AI API调用失败: {}", e.getMessage(), e);
             return AIWithToolsResponse.error(ErrorType.NETWORK_ERROR);
         }
+    }
+
+    /**
+     * 对上游瞬时错误做短重试。
+     * <p>
+     * 502/503/504 常见于 provider 网关临时不可用或模型服务抖动，重试不会重复执行游戏内工具，
+     * 因为这是「等待 AI 下一轮决策」的 HTTP 请求；已执行工具结果只在请求体中作为历史重发。
+     */
+    private static HttpResponse<String> sendWithTransientRetry(HttpRequest request) throws Exception {
+        HttpResponse<String> response = null;
+        for (int attempt = 0; attempt < 3; attempt++) {
+            response = HTTP_CLIENT.send(request, HttpResponse.BodyHandlers.ofString());
+            int code = response.statusCode();
+            if (code != 502 && code != 503 && code != 504) {
+                return response;
+            }
+            if (attempt < 2) {
+                long delayMillis = 750L * (attempt + 1);
+                LOGGER.warn("[FireflyMC] AI API 上游临时不可用({})，{}ms 后重试第 {} 次",
+                        code, delayMillis, attempt + 2);
+                Thread.sleep(delayMillis);
+            }
+        }
+        return response;
+    }
+
+    /**
+     * 打印 messages 结构概要（不含内容），用于诊断 provider 的 messages 校验错误。
+     */
+    private static void logMessagesSummary(int statusCode, JsonArray messagesJson) {
+        StringBuilder summary = new StringBuilder();
+        for (JsonElement el : messagesJson) {
+            JsonObject m = el.getAsJsonObject();
+            summary.append("{").append(m.has("role") && !m.get("role").isJsonNull()
+                    ? m.get("role").getAsString() : "?");
+            if (m.has("name") && !m.get("name").isJsonNull()) {
+                summary.append(",").append(m.get("name").getAsString());
+            }
+            if (m.has("tool_calls") && !m.get("tool_calls").isJsonNull()) {
+                summary.append(",tool_calls=").append(m.getAsJsonArray("tool_calls").size());
+            }
+            if (m.has("tool_call_id") && !m.get("tool_call_id").isJsonNull()) {
+                summary.append(",tool_call_id=").append(m.get("tool_call_id").getAsString());
+            }
+            String contentDesc;
+            if (!m.has("content") || m.get("content").isJsonNull()) {
+                contentDesc = "content=null";
+            } else if (m.get("content").getAsString().isEmpty()) {
+                contentDesc = "content=empty";
+            } else {
+                contentDesc = "len=" + m.get("content").getAsString().length();
+            }
+            summary.append(",").append(contentDesc).append("} ");
+        }
+        LOGGER.warn("[FireflyMC] AI API 返回 {}，messages 结构概要（不含内容）：{}",
+                statusCode, summary);
     }
 
     /**

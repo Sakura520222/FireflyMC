@@ -29,6 +29,13 @@ public class ChatHistoryManager {
         while (history.size() > maxSize) {
             history.poll();
         }
+        // 裁剪后若开头是 tool 结果，说明它对应的 assistant tool_calls 已被裁掉（孤立），
+        // 必须一并删除——否则发送时 messages 会以 tool 结果开头，违反 OpenAI 规范：
+        // 每条 role:tool 必须紧跟携带对应 tool_call_id 的 assistant tool_calls。
+        // 严格 provider（GLM/月之暗面等）会因此报「messages 参数非法」。
+        while (!history.isEmpty() && history.peek().type() == MessageType.TOOL_RESULT) {
+            history.poll();
+        }
     }
 
     /**
