@@ -89,7 +89,7 @@ public class GetNearbyEntitiesFunctionTool implements AIFunctionTool {
 
         String typeFilter = FunctionToolHelper.getOptionalString(arguments, TYPE_PARAM, null);
         ResourceLocation filterId = (typeFilter != null && !typeFilter.isBlank())
-                ? ResourceLocation.tryParse(typeFilter.toLowerCase())
+                ? ResourceLocation.tryParse(typeFilter.toLowerCase(java.util.Locale.ROOT))
                 : null;
 
         return listNearby(target, radius, filterId);

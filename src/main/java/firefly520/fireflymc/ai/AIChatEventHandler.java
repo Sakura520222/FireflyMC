@@ -478,6 +478,7 @@ public class AIChatEventHandler {
         HISTORY_MANAGERS.remove(server);
         PLAYER_COOLDOWNS.clear();
         MESSAGE_COUNTERS.remove(server);
+        BuildAnchorManager.clear();
     }
 
     /**

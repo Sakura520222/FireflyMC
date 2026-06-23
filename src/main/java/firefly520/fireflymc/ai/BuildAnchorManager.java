@@ -43,6 +43,13 @@ public final class BuildAnchorManager {
         return setTo(player, player.blockPosition());
     }
 
+    /**
+     * 清空所有建造锚点（服务器关闭时调用，防止静态 Map 长期累积）。
+     */
+    public static void clear() {
+        ANCHORS.clear();
+    }
+
     private static BuildAnchor current(ServerPlayer player) {
         return new BuildAnchor(player.serverLevel().dimension(), player.blockPosition().immutable());
     }

@@ -9,7 +9,7 @@ import com.google.gson.annotations.SerializedName;
  * 序列化时 Gson 默认省略 {@code null} 字段，因此：
  * <ul>
  *   <li>普通文本消息：只输出 {@code role/content}（及可选 {@code name}）</li>
- *   <li>assistant 发起工具调用：输出 {@code role/tool_calls}，{@code content} 省略</li>
+ *   <li>assistant 发起工具调用：输出 {@code role/tool_calls}，{@code content} 为空字符串</li>
  *   <li>工具结果：输出 {@code role/content/tool_call_id}</li>
  * </ul>
  */
