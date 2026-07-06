@@ -4,7 +4,12 @@ import firefly520.fireflymc.Config;
 import firefly520.fireflymc.FireflyMCMod;
 
 import javax.annotation.Nullable;
+import java.io.IOException;
+import java.net.ConnectException;
+import java.net.NoRouteToHostException;
+import java.net.SocketTimeoutException;
 import java.net.URI;
+import java.net.UnknownHostException;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
@@ -78,4 +83,25 @@ public final class Ipv6ConnectivityChecker {
     public static Ipv6ConnectivityChecker getInstance() { return INSTANCE; }
 
     public Ipv6ProbeSnapshot snapshot() { return snapshot.get(); }
+
+    /** 全链扫描,按语义优先级返回(数值小者优先)。 */
+    static Ipv6ProbeStatus classifyForTest(IOException error) {
+        return classify(error);
+    }
+
+    private static Ipv6ProbeStatus classify(IOException error) {
+        int bestRank = Integer.MAX_VALUE;
+        Ipv6ProbeStatus best = Ipv6ProbeStatus.UNKNOWN;
+        for (Throwable c = error; c != null; c = c.getCause()) {
+            Ipv6ProbeStatus s;
+            int rank;
+            if (c instanceof UnknownHostException) { s = Ipv6ProbeStatus.DNS_FAILED; rank = 1; }
+            else if (c instanceof java.net.http.HttpTimeoutException || c instanceof SocketTimeoutException) { s = Ipv6ProbeStatus.CONNECT_TIMEOUT; rank = 2; }
+            else if (c instanceof javax.net.ssl.SSLException) { s = Ipv6ProbeStatus.TLS_FAILED; rank = 3; }
+            else if (c instanceof ConnectException || c instanceof NoRouteToHostException) { s = Ipv6ProbeStatus.CONNECT_FAILED; rank = 4; }
+            else continue;
+            if (rank < bestRank) { bestRank = rank; best = s; }
+        }
+        return best;
+    }
 }
