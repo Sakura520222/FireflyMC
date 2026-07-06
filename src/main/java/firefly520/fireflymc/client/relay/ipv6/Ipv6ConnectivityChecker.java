@@ -113,4 +113,39 @@ public final class Ipv6ConnectivityChecker {
         if (cm <= 0) return false;
         return java.time.Duration.between(result.checkedAt(), clock.instant()).toMinutes() < cm;
     }
+
+    Ipv6ProbeResult performProbeForTest() { return performProbe(); }
+
+    private Ipv6ProbeResult performProbe() {
+        long startedNanos = System.nanoTime();
+        Ipv6ProbeStatus status;
+        @Nullable Integer httpStatus;
+        try {
+            int code = transport.send(buildRequest());
+            status = (code >= 200 && code < 300) ? Ipv6ProbeStatus.AVAILABLE : Ipv6ProbeStatus.HTTP_FAILED;
+            httpStatus = code;
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            status = Ipv6ProbeStatus.UNKNOWN;
+            httpStatus = null;
+        } catch (IOException e) {
+            status = classify(e);
+            httpStatus = null;
+        } catch (RuntimeException e) {
+            status = Ipv6ProbeStatus.UNKNOWN;
+            httpStatus = null;
+        }
+        java.time.Instant checkedAt = clock.instant();
+        long durationMs = java.util.concurrent.TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startedNanos);
+        return new Ipv6ProbeResult(status, checkedAt, durationMs, httpStatus);
+    }
+
+    private HttpRequest buildRequest() {
+        return HttpRequest.newBuilder()
+                .uri(URI.create(ENDPOINT + "?cb=" + java.util.UUID.randomUUID()))
+                .timeout(Duration.ofSeconds(settings.timeoutSeconds()))
+                .header("User-Agent", USER_AGENT)
+                .GET()
+                .build();
+    }
 }
