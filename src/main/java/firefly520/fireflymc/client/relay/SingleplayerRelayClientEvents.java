@@ -31,6 +31,14 @@ public final class SingleplayerRelayClientEvents {
 
     public static void onClientLoggedIn(ClientPlayerNetworkEvent.LoggingIn event) {
         Minecraft mc = Minecraft.getInstance();
+
+        // IPv6 出站检测:独立于 relay 弹窗配置,只看 enabled && autoCheck && 单人世界
+        if (mc.getSingleplayerServer() != null
+                && Config.CLIENT.IPV6_PROBE_ENABLED.get()
+                && Config.CLIENT.IPV6_PROBE_AUTO_ON_SP_JOIN.get()) {
+            Ipv6ConnectivityChecker.getInstance().checkAsync(false);
+        }
+
         if (!RelayConfig.RELAY.SINGLEPLAYER_RELAY_ENABLED.get() || !RelayConfig.RELAY.SINGLEPLAYER_RELAY_PROMPT_ON_JOIN.get()) {
             return;
         }
@@ -38,11 +46,6 @@ public final class SingleplayerRelayClientEvents {
         if (mc.getSingleplayerServer() != null) {
             ClientState.hasHandledSingleplayerRelayPrompt = false;
             promptPending = true;
-
-            // IPv6 出站检测:enabled && autoCheck 双检查
-            if (Config.CLIENT.IPV6_PROBE_ENABLED.get() && Config.CLIENT.IPV6_PROBE_AUTO_ON_SP_JOIN.get()) {
-                Ipv6ConnectivityChecker.getInstance().checkAsync(false);
-            }
         }
     }
 
