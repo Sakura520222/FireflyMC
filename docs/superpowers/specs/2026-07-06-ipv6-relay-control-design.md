@@ -78,7 +78,7 @@ FireflyMC 已有完整的"单人世界 → 公开联机大厅"链路（`Singlepl
 - **UI 只读快照 + 发命令**：面板不写 Manager / Checker 内部状态，只读快照、调用公开方法。
 - **零新 Mixin**：ESC 按钮复用现有 `ScreenEvent.Init.Post` 模式（与 `JoinMultiplayerScreen` 注入一致）。
 - **检测结果不干预网络路径**：P2P / 中继代码不读 `Ipv6ProbeResult`。
-- **依赖注入可测**：Checker 的 transport / clock / settings 均可注入，单测脱离 NeoForge 全局状态（见 §4.11）。
+- **依赖注入可测**：Checker 的 `transport` / `clock` / `settings` / `executor` 均可注入，单测脱离 NeoForge 全局状态与具体线程实现（见 §4.11）。
 
 ### 3.3 组件清单
 
@@ -163,6 +163,7 @@ private final AtomicReference<CompletableFuture<Ipv6ProbeResult>> inFlight = new
 private final ProbeTransport transport;
 private final Clock clock;
 private final ProbeSettings settings;
+private final Executor probeExecutor;
 
 // 生产单例构造器
 private Ipv6ConnectivityChecker() {
@@ -177,12 +178,13 @@ private Ipv6ConnectivityChecker() {
         public int timeoutSeconds()     { return Config.IPV6_PROBE_TIMEOUT_SECONDS.get(); }
         public int cacheMinutes()       { return Config.IPV6_PROBE_CACHE_MINUTES.get(); }
     };
+    this.probeExecutor = task -> Thread.ofVirtual().name("fireflymc-ipv6-probe").start(task);
 }
 ```
 
 - `HttpClient` 单例复用，**不**在 builder 上设 `connectTimeout`——超时由每次 `HttpRequest.timeout()` 动态读 `settings`，使配置热修改立即生效。
 - HTTP 版本用默认（H2 优先）；端点降级导致的 TLS 失败已归 `TLS_FAILED`，不影响结论。
-- Checker 只持有 `transport` / `clock` / `settings`，**不**保留 `httpClient` 字段，使测试构造器与生产闭合（见 §4.11）。
+- Checker 持有 `transport` / `clock` / `settings` / `probeExecutor` 四个可注入依赖，**不**保留 `httpClient` 字段，使测试构造器与生产闭合（见 §4.11）。
 
 ### 4.5 包私有接口（测试注入）
 
@@ -198,6 +200,8 @@ interface ProbeSettings {
 }
 ```
 
+`Executor`（`probeExecutor`）复用 JDK 标准 `java.util.concurrent.Executor`，不新增接口。
+
 ### 4.6 `checkAsync(boolean force)` 决策表（**在途检测优先于缓存**）
 
 进入顺序：先 `enabled` 守卫 → 再 `inFlight` → 再缓存 → 再 CAS 占位。
@@ -208,11 +212,11 @@ interface ProbeSettings {
 | 1 | `inFlight` 存在且未完成 | **复用**同一 Future（force 与否均复用，不打断） |
 | 1' | `inFlight` 存在但已完成 | CAS 清理后 continue |
 | 2 | 缓存有效（`lastResult != null` 且 `cacheMinutes > 0` 且 `now - checkedAt < cacheMinutes`）且 `!force` | 返回 `CompletableFuture.completedFuture(cached)` |
-| 3 | 否则 | CAS 占位 candidate Future → snapshot 转 `probing(prev)` → 起虚拟线程（启动失败须收尾，见 §4.7） |
+| 3 | 否则 | CAS 占位 candidate Future → snapshot 转 `probing(prev)` → 通过 `probeExecutor.execute` 启动（启动失败须收尾，见 §4.7） |
 
 > **在途优先的理由**：`force=true` 刷新期间，迟到的 `force=false` 调用应加入当前检测、共享其结果，而非直接返回旧缓存。`cacheMinutes=0` 时 `isCacheValid` 永远返回 false → 每次都重测（但仍在途复用）。
 
-### 4.7 single-flight 实现（CAS 占位 + 虚拟线程启动保护）
+### 4.7 single-flight 实现（CAS 占位 + executor 启动保护）
 
 ```java
 public CompletableFuture<Ipv6ProbeResult> checkAsync(boolean force) {
@@ -235,9 +239,9 @@ public CompletableFuture<Ipv6ProbeResult> checkAsync(boolean force) {
         @Nullable Ipv6ProbeResult previous = snapshot.get().lastResult();
         snapshot.updateAndGet(s -> Ipv6ProbeSnapshot.probing(previous));
         try {
-            Thread.ofVirtual().name("fireflymc-ipv6-probe").start(() -> runProbe(candidate, previous));
+            probeExecutor.execute(() -> runProbe(candidate, previous));
         } catch (RuntimeException | Error error) {
-            // 虚拟线程启动本身失败：恢复不变量后重抛
+            // executor 拒绝/启动失败：恢复不变量后重抛
             snapshot.set(new Ipv6ProbeSnapshot(false, previous));
             candidate.completeExceptionally(error);
             inFlight.compareAndSet(candidate, null);
@@ -248,11 +252,15 @@ public CompletableFuture<Ipv6ProbeResult> checkAsync(boolean force) {
 }
 ```
 
-**完成不变量（CAS 占位成功后必须满足）**：无论正常结果、`IOException`、`RuntimeException`、`InterruptedException`、`Error` 或虚拟线程启动失败——`candidate` 最终必须完成或异常完成、`inFlight` 最终必须清除、`snapshot` 不得永久停留在 `probing`。
+**完成不变量（CAS 占位成功后必须满足）**：无论正常结果、`IOException`、`RuntimeException`、`InterruptedException`、`Error`、或 executor 启动失败——`candidate` 最终必须完成或异常完成、`inFlight` 最终必须清除、`snapshot` 不得永久停留在 `probing`。
 
-### 4.8 检测流程（`runProbe` + `performProbe`，**Error 安全**）
+### 4.8 检测流程（`runProbe` + `performProbe`，**RuntimeException / Error 双安全网**）
 
-`runProbe` 保证不变量：`Error` 不被映射为 `UNKNOWN`，但为其恢复内部不变量而捕获、异常完成 Future、清理状态，然后**重新抛出**：
+`runProbe` 保证完成不变量。语义区分：
+
+- `transport.send` / `buildRequest` 的普通 `RuntimeException`：在 `performProbe` 内 catch，映射为 `UNKNOWN`，Future **正常完成**；
+- `clock.instant()` / 结果构造等基础设施 `RuntimeException`：绕过 `performProbe` 内 catch，被 `runProbe` `catch (RuntimeException)` 捕获，Future **异常完成** + 恢复 snapshot；
+- `Error`：被 `runProbe` `catch (Error)` 捕获，Future 异常完成 + 恢复 snapshot + **重新抛出**。
 
 ```java
 private void runProbe(CompletableFuture<Ipv6ProbeResult> candidate, @Nullable Ipv6ProbeResult previous) {
@@ -260,8 +268,13 @@ private void runProbe(CompletableFuture<Ipv6ProbeResult> candidate, @Nullable Ip
         Ipv6ProbeResult result = performProbe();
         snapshot.set(Ipv6ProbeSnapshot.done(result));
         candidate.complete(result);
+    } catch (RuntimeException error) {
+        // 到达此处的是 clock.instant()、结果构造等基础设施异常
+        // （transport/buildRequest 的普通 RuntimeException 已在 performProbe 内映射为 UNKNOWN）
+        snapshot.set(new Ipv6ProbeSnapshot(false, previous));
+        candidate.completeExceptionally(error);
     } catch (Error error) {
-        snapshot.set(new Ipv6ProbeSnapshot(false, previous));   // 回退 probing
+        snapshot.set(new Ipv6ProbeSnapshot(false, previous));
         candidate.completeExceptionally(error);
         throw error;                                            // 不吞 Error
     } finally {
@@ -288,7 +301,7 @@ private Ipv6ProbeResult performProbe() {
         status = UNKNOWN;
         httpStatus = null;
     }
-    Instant checkedAt = clock.instant();                        // 用完成时刻
+    Instant checkedAt = clock.instant();                        // 用完成时刻；若抛 RuntimeException 由 runProbe 处理
     long durationMs = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startedNanos);
     return new Ipv6ProbeResult(status, checkedAt, durationMs, httpStatus);
 }
@@ -309,8 +322,6 @@ private boolean isCacheValid(@Nullable Ipv6ProbeResult result) {
     return Duration.between(result.checkedAt(), clock.instant()).toMinutes() < cm;
 }
 ```
-
-> `Error`（`OutOfMemoryError` / `StackOverflowError` 等）从 `performProbe` 向上传播，被 `runProbe` 的 `catch (Error)` 捕获以恢复不变量后 rethrow，避免 candidate 永不完成、`inFlight` 永不清空导致 single-flight 永久卡死。
 
 ### 4.9 异常分类（`classify(IOException)`，全链扫描 + 语义优先级）
 
@@ -359,17 +370,18 @@ private static Ipv6ProbeStatus classify(IOException error) {
 - `onClientLoggedOut` → **不取消在途、不清空状态**；下次进单人世界按缓存有效期决定是否重测（IPv6 是客户端网络能力，跨世界复用语义正确）。
 - `IPV6_PROBE_ENABLED=false`：事件层不触发；Checker 返回 `failedFuture`；UI 按钮禁用。
 
-### 4.11 测试注入点（包私有构造器，三参数）
+### 4.11 测试注入点（包私有构造器，四参数）
 
 ```java
-Ipv6ConnectivityChecker(ProbeTransport transport, Clock clock, ProbeSettings settings) {
+Ipv6ConnectivityChecker(ProbeTransport transport, Clock clock, ProbeSettings settings, Executor probeExecutor) {
     this.transport = transport;
     this.clock = clock;
     this.settings = settings;
+    this.probeExecutor = probeExecutor;
 }
 ```
 
-完全脱离 NeoForge 配置全局状态、不依赖公网、不构造完整 `HttpResponse`。
+完全脱离 NeoForge 配置全局状态、不依赖公网、不构造完整 `HttpResponse`、不依赖具体线程实现。
 
 ## 5. Manager 状态机（`SingleplayerRelayManager`，路线 A）
 
@@ -648,14 +660,19 @@ scrollOffset      = clamp(scrollOffset, 0, maxScroll)   // mouseScrolled 调整
 
 > 区分原则：`TLS_FAILED` / `HTTP_FAILED` / `UNKNOWN` 用"检测失败"（第三方服务可能故障，不等于用户无 IPv6）；`DNS_FAILED` / `CONNECT_FAILED` / `CONNECT_TIMEOUT` 用"未检测到出站"（更可能是用户侧无 IPv6 路径）。
 
-### 8.2 条件提示行（红线：不得暗示检测结果驱动 P2P / 中继路径）
+### 8.2 条件提示行（**按 `HostingState` 映射**，红线：不得暗示检测结果驱动 P2P / 中继路径）
 
-| 场景 | 文案 key 内容 |
-|---|---|
-| 联机已开 + `AVAILABLE` | IPv6 出站连接可用；公网入站与 P2P 直连能力尚未验证。 |
-| 联机已开 + `DNS_FAILED` / `CONNECT_FAILED` / `CONNECT_TIMEOUT` | 未检测到可用的 IPv6 出站连接；联机仍可使用现有中继链路。 |
-| 联机已开 + `TLS_FAILED` / `HTTP_FAILED` / `UNKNOWN` | IPv6 检测未完成；可能是检测服务不可达，联机功能不受影响。 |
-| 联机未开启 | 此结果仅表示 IPv6 出站能力，不代表公网游戏端口可达。 |
+条件提示按联机**当前态**分两组：
+
+| 联机态 | IPv6 状态 | 提示文案 |
+|---|---|---|
+| **`HOSTING`**（稳定已发布） | `AVAILABLE` | IPv6 出站连接可用；公网入站与 P2P 直连能力尚未验证。 |
+| `HOSTING` | `DNS_FAILED` / `CONNECT_FAILED` / `CONNECT_TIMEOUT` | 未检测到可用的 IPv6 出站连接；联机仍可使用现有中继链路。 |
+| `HOSTING` | `TLS_FAILED` / `HTTP_FAILED` / `UNKNOWN` | IPv6 检测未完成；可能是检测服务不可达，联机功能不受影响。 |
+| `HOSTING` | probing / 从未检测 | （不显示条件提示，或显示中性免责） |
+| **非 `HOSTING`**（`STOPPED` / `STARTING` / `STOPPING`） | 任意 | 此结果仅表示 IPv6 出站能力，不代表公网游戏端口可达。 |
+
+> **不在 `STARTING` / `STOPPING` 显示"联机仍可使用现有中继链路"**——此时托管流程尚未稳定处于已发布态，中性免责声明更准确。
 
 ### 8.3 红线（禁止的是"肯定性结论"，而非词汇本身）
 
@@ -705,8 +722,10 @@ builder.pop();
 | test-ipv6.com 不可达（大陆网络等） | **按实际异常归入** `DNS_FAILED` / `CONNECT_FAILED` / `CONNECT_TIMEOUT` / `TLS_FAILED` / `HTTP_FAILED`；只有无法识别的异常才归 `UNKNOWN`。所有分类均不得被表述为公网不可达（见 §8.3） |
 | 检测中关闭面板 / 退出世界 | 不取消在途任务，自然完成或超时；退出世界不清缓存 |
 | 进世界瞬间自动检测 + 立刻手动点测试 | single-flight 在途优先，复用同一 Future |
-| 检测中 `transport.send` / `clock.instant` 抛 `Error` | `runProbe` `catch(Error)` 恢复 snapshot probing + 异常完成 candidate + finally 清 inFlight + rethrow；后续检测可重新启动（不永久卡死） |
-| 虚拟线程启动失败 | `checkAsync` 启动处 `catch(RuntimeException\|Error)` 恢复 snapshot + 异常完成 candidate + 清 inFlight + rethrow |
+| `transport.send` 抛普通 `RuntimeException` | `performProbe` 内 catch，映射 `UNKNOWN`，Future 正常完成 |
+| `clock.instant()` / 结果构造抛 `RuntimeException` | 绕过 `performProbe` 内 catch，`runProbe` `catch(RuntimeException)` 异常完成 Future + 恢复 snapshot；后续可重启 |
+| 检测中抛 `Error` | `runProbe` `catch(Error)` 恢复 snapshot + 异常完成 candidate + finally 清 inFlight + rethrow；后续检测可重新启动（不永久卡死） |
+| executor 启动失败（`probeExecutor.execute` 抛 `RuntimeException`/`Error`） | `checkAsync` 启动处 catch 恢复 snapshot + 异常完成 candidate + 清 inFlight + rethrow |
 | `startHosting` 抛异常 | catch 用 `compareAndSet(STARTING, STOPPED)`；不覆盖 STOPPING；面板按钮回到 `[开启联机]` |
 | 启动期间调用 `stopHosting` | 两个公开入口均调度到客户端主线程；状态按 `STARTING → STOPPING → STOPPED` 串行转换。启动完成处 CAS 失败时不得覆盖成 `HOSTING`，也不得设置 hosting boolean。底层 executor/WebSocket/P2P 迟到资源竞态属于现有 relay 核心限制，本期不解决 |
 | `getCurrentRoomId()` 短暂 null（HOSTING 期间） | UI 占位"正在获取…"，不抛异常 |
@@ -716,7 +735,7 @@ builder.pop();
 
 ## 11. 测试策略
 
-### 11.1 Checker 单测（注入 `ProbeTransport` + `Clock` + `ProbeSettings`，不依赖公网与 NeoForge 配置）
+### 11.1 Checker 单测（注入 `ProbeTransport` + `Clock` + `ProbeSettings` + `Executor`，不依赖公网与 NeoForge 配置）
 
 **single-flight 用 `CountDownLatch` 控制**（不依赖真实时间）：
 
@@ -741,16 +760,23 @@ ProbeTransport transport = request -> {
 - probing 时保留上一次结果（snapshot 转 `probing(prev)` 后 `lastResult` 不变）。
 - HTTP 边界：199 / 300 → `HTTP_FAILED`；200 / 299 → `AVAILABLE`。
 - 收到 HTTP 响应时 `httpStatus` 非 null；连接异常 / 中断 / 运行时异常时为 null。
-- transport 抛 `IOException` / `RuntimeException` 后 Future 正常完成（结果为对应失败状态），`inFlight` 被清空。
-- `InterruptedException`：中断发生在探测虚拟线程，用 `whenComplete` 在完成线程记录：
+- transport 抛 `IOException` / 普通 `RuntimeException` 后 Future 正常完成（结果为对应失败状态），`inFlight` 被清空。
+- **`clock.instant()` 抛 `RuntimeException`**（注入失败 `Clock`）：Future **异常完成**；`snapshot.probing == false`（回退 previous）；`inFlight` 清空；后续 `checkAsync` 能重新启动。
+- `InterruptedException`：用**两个 latch**保证 `whenComplete` 在探测线程注册后再释放：
   ```java
-  AtomicBoolean interruptedObserved = new AtomicBoolean();
-  future.whenComplete((r, e) -> interruptedObserved.set(Thread.currentThread().isInterrupted()));
-  // 等待完成后断言 interruptedObserved 为 true（状态归 UNKNOWN）
+  CountDownLatch entered = new CountDownLatch(1);
+  CountDownLatch release = new CountDownLatch(1);
+  ProbeTransport transport = request -> {
+      entered.countDown();
+      release.await();
+      throw new InterruptedException("test");
+  };
   ```
+  顺序：`checkAsync()` → 等 `entered` → 注册 `future.whenComplete(...)`（此时 Future 未完成，回调将异步执行）→ `release.countDown()` → 等完成 → 断言回调观察到 `Thread.currentThread().isInterrupted()==true`（状态归 `UNKNOWN`）。
 - `cacheMinutes=0`（注入 `ProbeSettings.cacheMinutes()=0`）：不复用结果。
 - 缓存 TTL：刚好 `cacheMinutes` 时判定过期。
-- **`Error` 处理**（transport 抛 `Error`，如 `StackOverflowError`）：Future **异常完成**（非映射为 `UNKNOWN`）；`snapshot.probing == false`（回退到 previous）；`inFlight` 已清空；**后续 `checkAsync` 能重新启动新检测**（不永久卡死）。虚拟线程启动失败同理。
+- **`Error` 处理**（transport 抛 `Error`，如 `StackOverflowError`）：Future **异常完成**（非映射为 `UNKNOWN`）；`snapshot.probing == false`（回退 previous）；`inFlight` 已清空；**后续 `checkAsync` 能重新启动**（不永久卡死）。
+- **executor 启动失败**（注入 `task -> { throw new RejectedExecutionException("test"); }`）：Future 异常完成；snapshot 回退；`inFlight` 清空；后续可重启。
 - `timeoutSeconds` 动态读取：注入不同 `ProbeSettings.timeoutSeconds()`，断言 `buildRequest().timeout()` 反映当前值。
 
 ### 11.2 Manager 测试（测试层级与接缝，路线 A 边界）
@@ -758,7 +784,7 @@ ProbeTransport transport = request -> {
 **测试层级选择**（§13 步骤 1 必须先确定）：
 - **Checker**：`src/test` 纯 JUnit（已脱离全局状态，见 §11.1）。
 - **Manager**：依赖 `Minecraft.getInstance()` / `mc.isSameThread()` / `mc.execute(...)` / integrated server / relay/P2P 对象，普通 JUnit + Mockito 难以可靠构造真实客户端主线程生命周期。实现时按以下**优先序**选择其一：
-  1. 若项目已有 NeoForge 客户端测试框架（`GameTest` / `IClientItemFunction` 测试基建 / 集成测试 mod），优先复用；
+  1. 若项目已有 NeoForge 客户端测试框架（`GameTest` / 集成测试 mod），优先复用；
   2. 否则为 Manager 增加最小测试接缝（可注入的客户端线程调度器接口 + relay 操作依赖接口），用 JUnit + Mockito 测状态机转换；
   3. 否则将 Manager 状态机测试明确列为**受控白盒/手动测试**（§11.3 第 9 项），不笼统承诺 JUnit 覆盖。
 
@@ -780,7 +806,7 @@ ProbeTransport transport = request -> {
 
 ### 11.3 手动测试矩阵（客户端实跑）
 
-1. 有 IPv6 网络 → `AVAILABLE` + 耗时显示 + 联机已开时提示"出站可用；公网入站与 P2P 尚未验证"。
+1. 有 IPv6 网络 → `AVAILABLE` + 耗时显示 + 联机 `HOSTING` 时提示"出站可用；公网入站与 P2P 尚未验证"。
 2. 禁用网卡 IPv6 → `DNS_FAILED` 或 `CONNECT_FAILED` 或 `CONNECT_TIMEOUT`（取决于系统）+ 文案"未检测到 IPv6 出站"。
 3. hosts 映射 `ipv6.test-ipv6.com` 到 `::1` 且本地无 HTTPS 服务 → 通常 `CONNECT_FAILED`；防火墙静默丢包 → `CONNECT_TIMEOUT`；本地 DNS 规则返回 NXDOMAIN → `DNS_FAILED`；HTTPS 中间人/错误证书 → `TLS_FAILED`。**验证点**：UI 正确展示实际分类，且不把检测失败宣称为公网不可达（Windows hosts 不能直接制造 NXDOMAIN，需用本地 DNS 规则或 DNS 工具）。
 4. 自动检测：进世界 15 min 内重进不重跑；超 15 min 重跑；`cacheMinutes=0` 每次重跑；`enabled=false` 不触发。
@@ -798,6 +824,7 @@ ProbeTransport transport = request -> {
 - 完整长 IPv6 地址不越界（省略 + 悬浮）。
 - `enabled=false` + 有历史结果：展示"检测已关闭" + 历史结果标记。
 - probing 且上次为 `TLS_FAILED`：显示"上次：检测失败"，**不**显示"不可用"。
+- `STARTING` / `STOPPING` 下条件提示显示中性免责（"此结果仅表示 IPv6 出站能力…"），**不**显示"中继链路"提示。
 
 ## 12. lang key 清单
 
@@ -892,9 +919,9 @@ fireflymc.configuration.ipv6_probe.cache_minutes    检测结果缓存时长（�
 1. **确定测试层级**：检查项目是否已有 NeoForge 客户端测试框架或 `src/test` 基建；据此决定 Manager 测试走 §11.2 的哪种路径（复用框架 / 加测试接缝 / 白盒手动），并准备 JUnit/Mockito 依赖。
 2. `Ipv6ProbeStatus` / `Ipv6ProbeResult`（纯数据结构）。
 3. `Config.java` 增加 `ipv6_probe` 配置组及配置翻译 key（**先于 Checker**，因生产 Checker 的 `ProbeSettings` 引用配置字段）。
-4. `Ipv6ConnectivityChecker` + `ProbeTransport` / `ProbeSettings` / `Clock` / `Ipv6ProbeSnapshot` + Checker 单测（§11.1）。
+4. `Ipv6ConnectivityChecker` + `ProbeTransport` / `ProbeSettings` / `Clock` / `Executor` / `Ipv6ProbeSnapshot` + Checker 单测（§11.1）。
 5. `SingleplayerRelayManager` 状态机改造（`HostingState` + 主线程调度对齐 + CAS 转换 + getter + `currentRoomId` volatile + 主线程不变量）+ Manager 生命周期测试（§11.2）。
-6. `SingleplayerRelayControlScreen`（UI + tick/render + GUA 刷新 + §7.6 滚动模型与布局约束），同时一次性补齐其全部 lang key。
+6. `SingleplayerRelayControlScreen`（UI + tick/render + GUA 刷新 + §7.6 滚动模型与布局约束 + §8.2 状态映射），同时一次性补齐其全部 lang key。
 7. `SingleplayerRelayClientEvents` 扩展（`GameMenuScreen` 注入 + `onClientLoggedIn` 双检查触发检测）。
 8. 构建与静态检查：`.\gradlew.bat build`。
 9. 手动测试矩阵（§11.3 + §11.4）全过。
@@ -910,7 +937,8 @@ fireflymc.configuration.ipv6_probe.cache_minutes    检测结果缓存时长（�
 - `enabled=false` 时按钮禁用、文案正确、历史结果保留。
 - 全程不出现 §8.3 列出的肯定性结论。
 - 状态机转换符合 §5.4 转换图；启动期间被停止不闪回 `HOSTING`（白盒验证）。
-- 检测中遇 `Error` 不卡死：Future 异常完成、`inFlight` 清空、后续可重启（§11.1 单测保证）。
+- 检测中遇 `Error` / `clock.instant()` RuntimeException / executor 启动失败均不卡死：Future 异常完成、`inFlight` 清空、后续可重启（§11.1 单测保证）。
 - 320×240 / 高 GUI Scale / `en_us` 下布局不越界、可滚动（§11.4）。
+- `STARTING`/`STOPPING` 条件提示显示中性免责，不显示"中继链路"（§8.2）。
 - 构建通过：`.\gradlew.bat build`。
 - **不**把"停止后绝无迟到回调资源"作为验收项（属路线 B 专项）。
