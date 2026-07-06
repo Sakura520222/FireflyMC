@@ -240,8 +240,14 @@ public CompletableFuture<Ipv6ProbeResult> checkAsync(boolean force) {
         snapshot.updateAndGet(s -> Ipv6ProbeSnapshot.probing(previous));
         try {
             probeExecutor.execute(() -> runProbe(candidate, previous));
-        } catch (RuntimeException | Error error) {
-            // executor 拒绝/启动失败：恢复不变量后重抛
+        } catch (RuntimeException error) {
+            // executor 拒绝等普通启动失败：恢复不变量，返回异常完成的 candidate
+            snapshot.set(new Ipv6ProbeSnapshot(false, previous));
+            candidate.completeExceptionally(error);
+            inFlight.compareAndSet(candidate, null);
+            return candidate;
+        } catch (Error error) {
+            // JVM Error：恢复不变量、异常完成 candidate 后重新抛出，不吞严重错误
             snapshot.set(new Ipv6ProbeSnapshot(false, previous));
             candidate.completeExceptionally(error);
             inFlight.compareAndSet(candidate, null);
@@ -725,7 +731,7 @@ builder.pop();
 | `transport.send` 抛普通 `RuntimeException` | `performProbe` 内 catch，映射 `UNKNOWN`，Future 正常完成 |
 | `clock.instant()` / 结果构造抛 `RuntimeException` | 绕过 `performProbe` 内 catch，`runProbe` `catch(RuntimeException)` 异常完成 Future + 恢复 snapshot；后续可重启 |
 | 检测中抛 `Error` | `runProbe` `catch(Error)` 恢复 snapshot + 异常完成 candidate + finally 清 inFlight + rethrow；后续检测可重新启动（不永久卡死） |
-| executor 启动失败（`probeExecutor.execute` 抛 `RuntimeException`/`Error`） | `checkAsync` 启动处 catch 恢复 snapshot + 异常完成 candidate + 清 inFlight + rethrow |
+| executor 启动失败（`probeExecutor.execute` 抛异常） | `RuntimeException`（如 `RejectedExecutionException`）：恢复 snapshot + 异常完成 candidate + 清 `inFlight` + **返回 candidate**（调用方拿到异常完成的 Future，符合公开 API 契约）；`Error`：同样恢复 + 异常完成 candidate + 清 `inFlight`，然后 **rethrow**（不吞严重错误）。两种情况都不留下 `probing` / `inFlight` 卡死 |
 | `startHosting` 抛异常 | catch 用 `compareAndSet(STARTING, STOPPED)`；不覆盖 STOPPING；面板按钮回到 `[开启联机]` |
 | 启动期间调用 `stopHosting` | 两个公开入口均调度到客户端主线程；状态按 `STARTING → STOPPING → STOPPED` 串行转换。启动完成处 CAS 失败时不得覆盖成 `HOSTING`，也不得设置 hosting boolean。底层 executor/WebSocket/P2P 迟到资源竞态属于现有 relay 核心限制，本期不解决 |
 | `getCurrentRoomId()` 短暂 null（HOSTING 期间） | UI 占位"正在获取…"，不抛异常 |
