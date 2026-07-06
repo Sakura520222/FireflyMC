@@ -43,6 +43,16 @@
   "fireflymc.config.singleplayer_relay.p2p_ipv6_enabled": "启用 P2P IPv6 直连",
   "fireflymc.config.singleplayer_relay.p2p_ipv6_enabled.tooltip": "当双方都有公网 IPv6 地址时，优先尝试 IPv6 直连",
 
+  "fireflymc.configuration.ipv6_probe": "IPv6 联机检测",
+  "fireflymc.configuration.ipv6_probe.enabled": "启用 IPv6 出站检测",
+  "fireflymc.configuration.ipv6_probe.enabled.tooltip": "通过 test-ipv6.com 检测客户端的 IPv6 出站能力",
+  "fireflymc.configuration.ipv6_probe.auto_check_on_singleplayer_join": "进入单人世界时自动检测",
+  "fireflymc.configuration.ipv6_probe.auto_check_on_singleplayer_join.tooltip": "进入单人世界后后台静默检测一次 IPv6 出站能力",
+  "fireflymc.configuration.ipv6_probe.timeout_seconds": "每次检测超时（秒）",
+  "fireflymc.configuration.ipv6_probe.timeout_seconds.tooltip": "单次 IPv6 检测请求的超时时间",
+  "fireflymc.configuration.ipv6_probe.cache_minutes": "检测结果缓存时长（分钟）",
+  "fireflymc.configuration.ipv6_probe.cache_minutes.tooltip": "已完成检测结果的缓存时长，0 表示不缓存",
+
   "fireflymc.configuration.event_notification": "客户端事件通知",
   "fireflymc.configuration.event_notification.button": "客户端事件通知",
   "fireflymc.configuration.event_notification.tooltip": "配置客户端本地玩家事件通知 WebSocket",

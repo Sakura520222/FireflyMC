@@ -43,6 +43,16 @@
   "fireflymc.config.singleplayer_relay.p2p_ipv6_enabled": "Enable P2P IPv6 Direct Connection",
   "fireflymc.config.singleplayer_relay.p2p_ipv6_enabled.tooltip": "Try direct IPv6 connection first when both peers have public IPv6 addresses",
 
+  "fireflymc.configuration.ipv6_probe": "IPv6 Connectivity Probe",
+  "fireflymc.configuration.ipv6_probe.enabled": "Enable IPv6 outbound probe",
+  "fireflymc.configuration.ipv6_probe.enabled.tooltip": "Probe client IPv6 outbound connectivity via test-ipv6.com",
+  "fireflymc.configuration.ipv6_probe.auto_check_on_singleplayer_join": "Auto-probe on singleplayer join",
+  "fireflymc.configuration.ipv6_probe.auto_check_on_singleplayer_join.tooltip": "Silently probe IPv6 outbound once when entering a singleplayer world",
+  "fireflymc.configuration.ipv6_probe.timeout_seconds": "Per-probe timeout (seconds)",
+  "fireflymc.configuration.ipv6_probe.timeout_seconds.tooltip": "Timeout for a single IPv6 probe request",
+  "fireflymc.configuration.ipv6_probe.cache_minutes": "Result cache minutes",
+  "fireflymc.configuration.ipv6_probe.cache_minutes.tooltip": "How long a completed probe result is cached; 0 = never cache",
+
   "fireflymc.configuration.event_notification": "Client Event Notifications",
   "fireflymc.configuration.event_notification.button": "Client Event Notifications",
   "fireflymc.configuration.event_notification.tooltip": "Configure client-side local player event notification WebSocket",
