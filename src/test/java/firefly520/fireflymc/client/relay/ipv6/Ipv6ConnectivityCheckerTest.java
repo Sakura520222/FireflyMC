@@ -299,4 +299,19 @@ class Ipv6ConnectivityCheckerTest {
         assertTrue(c.snapshot().probing());
         assertSame(prev, c.snapshot().lastResult());
     }
+
+    @Test
+    void checkAsync_executorRejectedReturnsExceptionallyCompletedFuture() {
+        java.util.concurrent.Executor failing = task -> { throw new java.util.concurrent.RejectedExecutionException("test"); };
+        Ipv6ConnectivityChecker c = new Ipv6ConnectivityChecker(
+                req -> 204, java.time.Clock.systemUTC(), settings(5), failing);
+
+        java.util.concurrent.CompletableFuture<Ipv6ProbeResult> f = c.checkAsync(true);
+        assertTrue(f.isCompletedExceptionally());
+        assertFalse(c.snapshot().probing());
+        assertNull(c.snapshot().lastResult());
+        // 后续可重启
+        java.util.concurrent.CompletableFuture<Ipv6ProbeResult> f2 = c.checkAsync(true);
+        assertTrue(f2.isCompletedExceptionally());
+    }
 }
