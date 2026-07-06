@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -313,5 +314,29 @@ class Ipv6ConnectivityCheckerTest {
         // 后续可重启
         java.util.concurrent.CompletableFuture<Ipv6ProbeResult> f2 = c.checkAsync(true);
         assertTrue(f2.isCompletedExceptionally());
+    }
+
+    @Test
+    void checkAsync_interruptedMapsUnknownEndToEnd() throws Exception {
+        // 端到端验证 checkAsync + InterruptedException → result UNKNOWN + 状态正确。
+        // 中断标志的恢复已由 performProbe_interruptedMapsUnknownAndRestoresFlag 直接验证
+        // (不在此用 whenComplete 验证回调线程标志 —— CompletableFuture 回调执行时机/线程
+        //  随 JDK 实现而异,在 complete 线程与 join 线程之间可能异步,会引入 flaky)。
+        java.util.concurrent.CountDownLatch entered = new java.util.concurrent.CountDownLatch(1);
+        java.util.concurrent.CountDownLatch release = new java.util.concurrent.CountDownLatch(1);
+        Ipv6ConnectivityChecker c = new Ipv6ConnectivityChecker(
+                req -> { entered.countDown(); release.await(); throw new InterruptedException("t"); },
+                java.time.Clock.systemUTC(), settings(5),
+                java.util.concurrent.Executors.newSingleThreadExecutor());
+
+        java.util.concurrent.CompletableFuture<Ipv6ProbeResult> f = c.checkAsync(false);
+        entered.await();
+        release.countDown();
+        Ipv6ProbeResult result = f.get(5, java.util.concurrent.TimeUnit.SECONDS);
+
+        assertEquals(Ipv6ProbeStatus.UNKNOWN, result.status());
+        assertNull(result.httpStatus());
+        assertFalse(c.snapshot().probing());
+        assertNotNull(c.snapshot().lastResult());
     }
 }
