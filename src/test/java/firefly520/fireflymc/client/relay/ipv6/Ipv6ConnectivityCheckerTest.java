@@ -2,6 +2,8 @@ package firefly520.fireflymc.client.relay.ipv6;
 
 import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import javax.net.ssl.SSLHandshakeException;
 import java.io.IOException;
@@ -74,5 +76,52 @@ class Ipv6ConnectivityCheckerTest {
     @Test
     void classify_unrecognizedFallsToUnknown() {
         assertEquals(Ipv6ProbeStatus.UNKNOWN, classify(new IOException("weird")));
+    }
+
+    @Test
+    void cacheValid_nullReturnsFalse() {
+        assertFalse(checker.cacheValidForTest(null));
+    }
+
+    @Test
+    void cacheValid_zeroMinutesAlwaysInvalid() {
+        Ipv6ConnectivityChecker zeroCache = newChecker(0, java.time.Clock.systemUTC());
+        Ipv6ProbeResult r = resultAt(java.time.Clock.systemUTC().instant(), Ipv6ProbeStatus.AVAILABLE);
+        assertFalse(zeroCache.cacheValidForTest(r));
+    }
+
+    @Test
+    void cacheValid_withinWindowValid() {
+        java.time.Instant now = java.time.Instant.now();
+        java.time.Clock fixedNow = java.time.Clock.fixed(now, java.time.ZoneOffset.UTC);
+        Ipv6ConnectivityChecker c = newChecker(15, fixedNow);
+        Ipv6ProbeResult r = resultAt(now.minus(java.time.Duration.ofMinutes(10)), Ipv6ProbeStatus.AVAILABLE);
+        assertTrue(c.cacheValidForTest(r));
+    }
+
+    @Test
+    void cacheValid_atBoundaryInvalid() {
+        java.time.Instant now = java.time.Clock.fixed(java.time.Instant.now(), java.time.ZoneOffset.UTC).instant();
+        java.time.Clock fixedNow = java.time.Clock.fixed(now, java.time.ZoneOffset.UTC);
+        Ipv6ConnectivityChecker c = newChecker(15, fixedNow);
+        Ipv6ProbeResult r = resultAt(now.minus(java.time.Duration.ofMinutes(15)), Ipv6ProbeStatus.AVAILABLE);
+        assertFalse(c.cacheValidForTest(r));
+    }
+
+    private static Ipv6ProbeResult resultAt(java.time.Instant t, Ipv6ProbeStatus s) {
+        return new Ipv6ProbeResult(s, t, 100, null);
+    }
+
+    private static Ipv6ConnectivityChecker newChecker(int cacheMinutes, java.time.Clock clock) {
+        return new Ipv6ConnectivityChecker(
+                request -> 204,
+                clock,
+                new Ipv6ConnectivityChecker.ProbeSettings() {
+                    public boolean enabled() { return true; }
+                    public int timeoutSeconds() { return 5; }
+                    public int cacheMinutes() { return cacheMinutes; }
+                },
+                Runnable::run
+        );
     }
 }

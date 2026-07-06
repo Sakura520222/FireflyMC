@@ -104,4 +104,13 @@ public final class Ipv6ConnectivityChecker {
         }
         return best;
     }
+
+    boolean cacheValidForTest(@Nullable Ipv6ProbeResult result) { return isCacheValid(result); }
+
+    private boolean isCacheValid(@Nullable Ipv6ProbeResult result) {
+        if (result == null) return false;
+        int cm = settings.cacheMinutes();
+        if (cm <= 0) return false;
+        return java.time.Duration.between(result.checkedAt(), clock.instant()).toMinutes() < cm;
+    }
 }
