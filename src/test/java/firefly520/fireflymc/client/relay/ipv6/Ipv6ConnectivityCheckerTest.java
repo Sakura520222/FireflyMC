@@ -191,4 +191,37 @@ class Ipv6ConnectivityCheckerTest {
             public int cacheMinutes() { return 15; }
         };
     }
+
+    @Test
+    void runProbe_clockRuntimeExceptionCompletesExceptionallyAndRevertsSnapshot() {
+        java.time.Clock brokenClock = new java.time.Clock() {
+            public java.time.ZoneId getZone() { return java.time.ZoneOffset.UTC; }
+            public java.time.Clock withZone(java.time.ZoneId zone) { return this; }
+            public java.time.Instant instant() { throw new RuntimeException("clock broken"); }
+        };
+        Ipv6ConnectivityChecker c = new Ipv6ConnectivityChecker(
+                req -> 204, brokenClock, settings(5), Runnable::run);
+        Ipv6ProbeResult previous = new Ipv6ProbeResult(Ipv6ProbeStatus.AVAILABLE,
+                java.time.Instant.now(), 10, 204);
+        c.setSnapshotForTest(Ipv6ConnectivityChecker.Ipv6ProbeSnapshot.done(previous));
+
+        java.util.concurrent.CompletableFuture<Ipv6ProbeResult> future = new java.util.concurrent.CompletableFuture<>();
+        c.runProbeForTest(future, previous);
+
+        assertTrue(future.isCompletedExceptionally());
+        assertFalse(c.snapshot().probing());
+        assertEquals(previous, c.snapshot().lastResult());
+    }
+
+    @Test
+    void runProbe_errorRethrownAndRevertsSnapshot() {
+        Ipv6ConnectivityChecker c = newCheckerWithTransportFailing(req -> { throw new StackOverflowError("oom"); }, 5);
+        Ipv6ProbeResult previous = new Ipv6ProbeResult(Ipv6ProbeStatus.AVAILABLE, java.time.Instant.now(), 10, 204);
+        c.setSnapshotForTest(Ipv6ConnectivityChecker.Ipv6ProbeSnapshot.done(previous));
+
+        java.util.concurrent.CompletableFuture<Ipv6ProbeResult> future = new java.util.concurrent.CompletableFuture<>();
+        org.junit.jupiter.api.Assertions.assertThrows(StackOverflowError.class, () -> c.runProbeForTest(future, previous));
+        assertTrue(future.isCompletedExceptionally());
+        assertFalse(c.snapshot().probing());
+    }
 }

@@ -148,4 +148,28 @@ public final class Ipv6ConnectivityChecker {
                 .GET()
                 .build();
     }
+
+    void runProbeForTest(CompletableFuture<Ipv6ProbeResult> candidate,
+                         @Nullable Ipv6ProbeResult previous) { runProbe(candidate, previous); }
+
+    void setSnapshotForTest(Ipv6ProbeSnapshot s) { snapshot.set(s); }
+
+    private void runProbe(CompletableFuture<Ipv6ProbeResult> candidate,
+                          @Nullable Ipv6ProbeResult previous) {
+        try {
+            Ipv6ProbeResult result = performProbe();
+            snapshot.set(Ipv6ProbeSnapshot.done(result));
+            candidate.complete(result);
+        } catch (RuntimeException error) {
+            // clock.instant()、结果构造等基础设施异常(transport/buildRequest 的普通 RE 已在 performProbe 内映射 UNKNOWN)
+            snapshot.set(new Ipv6ProbeSnapshot(false, previous));
+            candidate.completeExceptionally(error);
+        } catch (Error error) {
+            snapshot.set(new Ipv6ProbeSnapshot(false, previous));
+            candidate.completeExceptionally(error);
+            throw error;
+        } finally {
+            inFlight.compareAndSet(candidate, null);
+        }
+    }
 }
