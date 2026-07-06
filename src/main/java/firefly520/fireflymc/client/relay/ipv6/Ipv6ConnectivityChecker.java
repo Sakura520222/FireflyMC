@@ -84,6 +84,43 @@ public final class Ipv6ConnectivityChecker {
 
     public Ipv6ProbeSnapshot snapshot() { return snapshot.get(); }
 
+    public java.util.concurrent.CompletableFuture<Ipv6ProbeResult> checkAsync(boolean force) {
+        if (!settings.enabled()) {
+            return java.util.concurrent.CompletableFuture.failedFuture(
+                    new IllegalStateException("IPv6 probe is disabled"));
+        }
+        while (true) {
+            java.util.concurrent.CompletableFuture<Ipv6ProbeResult> existing = inFlight.get();
+            if (existing != null) {
+                if (!existing.isDone()) return existing;
+                inFlight.compareAndSet(existing, null);
+                continue;
+            }
+            @Nullable Ipv6ProbeResult cached = snapshot.get().lastResult();
+            if (!force && isCacheValid(cached)) {
+                return java.util.concurrent.CompletableFuture.completedFuture(cached);
+            }
+            java.util.concurrent.CompletableFuture<Ipv6ProbeResult> candidate = new java.util.concurrent.CompletableFuture<>();
+            if (!inFlight.compareAndSet(null, candidate)) continue;
+            @Nullable Ipv6ProbeResult previous = snapshot.get().lastResult();
+            snapshot.updateAndGet(s -> Ipv6ProbeSnapshot.probing(previous));
+            try {
+                probeExecutor.execute(() -> runProbe(candidate, previous));
+            } catch (RuntimeException error) {
+                snapshot.set(new Ipv6ProbeSnapshot(false, previous));
+                candidate.completeExceptionally(error);
+                inFlight.compareAndSet(candidate, null);
+                return candidate;
+            } catch (Error error) {
+                snapshot.set(new Ipv6ProbeSnapshot(false, previous));
+                candidate.completeExceptionally(error);
+                inFlight.compareAndSet(candidate, null);
+                throw error;
+            }
+            return candidate;
+        }
+    }
+
     /** 全链扫描,按语义优先级返回(数值小者优先)。 */
     static Ipv6ProbeStatus classifyForTest(IOException error) {
         return classify(error);

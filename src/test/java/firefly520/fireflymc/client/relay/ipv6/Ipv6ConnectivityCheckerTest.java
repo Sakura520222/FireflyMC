@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import javax.net.ssl.SSLHandshakeException;
@@ -223,5 +224,79 @@ class Ipv6ConnectivityCheckerTest {
         org.junit.jupiter.api.Assertions.assertThrows(StackOverflowError.class, () -> c.runProbeForTest(future, previous));
         assertTrue(future.isCompletedExceptionally());
         assertFalse(c.snapshot().probing());
+    }
+
+    @Test
+    void checkAsync_disabledReturnsFailedFuture() {
+        Ipv6ConnectivityChecker c = new Ipv6ConnectivityChecker(
+                req -> 204, java.time.Clock.systemUTC(),
+                new Ipv6ConnectivityChecker.ProbeSettings() {
+                    public boolean enabled() { return false; }
+                    public int timeoutSeconds() { return 5; }
+                    public int cacheMinutes() { return 15; }
+                },
+                Runnable::run);
+        java.util.concurrent.CompletableFuture<Ipv6ProbeResult> f = c.checkAsync(false);
+        assertTrue(f.isCompletedExceptionally());
+        assertFalse(c.snapshot().probing());
+    }
+
+    @Test
+    void checkAsync_singleFlight_reusesInFlightFuture() throws Exception {
+        java.util.concurrent.atomic.AtomicInteger calls = new java.util.concurrent.atomic.AtomicInteger();
+        java.util.concurrent.CountDownLatch entered = new java.util.concurrent.CountDownLatch(1);
+        java.util.concurrent.CountDownLatch release = new java.util.concurrent.CountDownLatch(1);
+        Ipv6ConnectivityChecker c = new Ipv6ConnectivityChecker(
+                req -> { calls.incrementAndGet(); entered.countDown(); release.await(); return 204; },
+                java.time.Clock.systemUTC(), settings(5),
+                java.util.concurrent.Executors.newSingleThreadExecutor());
+
+        java.util.concurrent.CompletableFuture<Ipv6ProbeResult> f1 = c.checkAsync(false);
+        entered.await();
+        java.util.concurrent.CompletableFuture<Ipv6ProbeResult> f2 = c.checkAsync(false);
+        assertSame(f1, f2);
+        assertEquals(1, calls.get());
+        release.countDown();
+        f1.join();
+        assertEquals(Ipv6ProbeStatus.AVAILABLE, f1.get().status());
+    }
+
+    @Test
+    void checkAsync_cacheHitReturnsCompletedFutureWithCached() {
+        java.time.Instant now = java.time.Clock.systemUTC().instant();
+        java.time.Clock fixedNow = java.time.Clock.fixed(now, java.time.ZoneOffset.UTC);
+        Ipv6ConnectivityChecker c = newChecker(15, fixedNow);
+        Ipv6ProbeResult cached = new Ipv6ProbeResult(Ipv6ProbeStatus.DNS_FAILED, now.minusSeconds(60), 50, null);
+        c.setSnapshotForTest(Ipv6ConnectivityChecker.Ipv6ProbeSnapshot.done(cached));
+
+        java.util.concurrent.CompletableFuture<Ipv6ProbeResult> f = c.checkAsync(false);
+        assertTrue(f.isDone());
+        assertSame(cached, f.getNow(null));
+    }
+
+    @Test
+    void checkAsync_forceSkipsCache() {
+        java.time.Instant now = java.time.Clock.systemUTC().instant();
+        java.time.Clock fixedNow = java.time.Clock.fixed(now, java.time.ZoneOffset.UTC);
+        java.util.concurrent.atomic.AtomicInteger calls = new java.util.concurrent.atomic.AtomicInteger();
+        Ipv6ConnectivityChecker c = new Ipv6ConnectivityChecker(
+                req -> { calls.incrementAndGet(); return 204; }, fixedNow, settings(5), Runnable::run);
+        Ipv6ProbeResult cached = new Ipv6ProbeResult(Ipv6ProbeStatus.DNS_FAILED, now.minusSeconds(60), 50, null);
+        c.setSnapshotForTest(Ipv6ConnectivityChecker.Ipv6ProbeSnapshot.done(cached));
+
+        java.util.concurrent.CompletableFuture<Ipv6ProbeResult> f = c.checkAsync(true);
+        assertTrue(f.isDone());
+        assertEquals(Ipv6ProbeStatus.AVAILABLE, f.getNow(null).status());
+        assertEquals(1, calls.get());
+    }
+
+    @Test
+    void checkAsync_probingKeepsLastResult() {
+        Ipv6ProbeResult prev = new Ipv6ProbeResult(Ipv6ProbeStatus.AVAILABLE, java.time.Instant.now(), 10, 204);
+        Ipv6ConnectivityChecker c = newCheckerWithTransport(req -> 204, 5);
+        c.setSnapshotForTest(Ipv6ConnectivityChecker.Ipv6ProbeSnapshot.probing(prev));
+        // 不实际触发,只验证 snapshot 字段语义:probing(true) 保留 lastResult
+        assertTrue(c.snapshot().probing());
+        assertSame(prev, c.snapshot().lastResult());
     }
 }
