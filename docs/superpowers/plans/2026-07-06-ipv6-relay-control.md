@@ -451,7 +451,7 @@ class Ipv6ConnectivityCheckerTest {
 
     @Test
     void classify_noRoute() {
-        assertEquals(Ipv6ProbeStatus.NO_ROUTE_TO_HOST_EXCEPTION());
+        assertEquals(Ipv6ProbeStatus.CONNECT_FAILED, classify(new NoRouteToHostException("net unreachable")));
     }
 
     @Test
@@ -466,31 +466,15 @@ class Ipv6ConnectivityCheckerTest {
     void classify_unrecognizedFallsToUnknown() {
         assertEquals(Ipv6ProbeStatus.UNKNOWN, classify(new IOException("weird")));
     }
-
-    @Test
-    void classify_noRouteToHostException() {
-        assertEquals(Ipv6ProbeStatus.CONNECT_FAILED, classify(new NoRouteToHostException("net unreachable")));
-    }
 }
 ```
-
-> 注:`classify_noRoute` 与 `classify_noRouteToHostException` 是同类重复——保留前者删后者,实际写时合并为一个 `classify_noRoute` 测试即可。修正见 Step 3。
 
 - [ ] **Step 2: 运行测试确认失败**
 
 Run: `.\gradlew.bat test --tests "*.Ipv6ConnectivityCheckerTest"`
-Expected: 编译失败(`classifyForTest` 不存在、`NO_ROUTE_TOHostException()` 误写)。
+Expected: 编译失败(`classifyForTest` 不存在)。
 
-- [ ] **Step 3: 修正测试 + 暴露 classify 包私有方法**
-
-修正 `Ipv6ConnectivityCheckerTest.java`(删除重复/误写的 `classify_noRoute` / `classify_noRouteToHostException`,合并为一个):
-
-```java
-    @Test
-    void classify_noRoute() {
-        assertEquals(Ipv6ProbeStatus.CONNECT_FAILED, classify(new NoRouteToHostException("net unreachable")));
-    }
-```
+- [ ] **Step 3: 实现 classify + 暴露包私有测试桥接**
 
 在 `Ipv6ConnectivityChecker` 内加 classify 实现 + 包私有测试桥接方法:
 
@@ -1257,6 +1241,7 @@ public class SingleplayerRelayControlScreen extends Screen {
     private final Screen parent;
     private Button mainButton;
     private Button ipv6TestButton;
+    private Button doneButton;
     private List<String> guaAddresses;
     private Instant lastSeenCheckedAt;
     private int scrollOffset = 0;
@@ -1278,11 +1263,11 @@ public class SingleplayerRelayControlScreen extends Screen {
                 .bounds(cx - bw - 6, 0, bw, bh).build();
         ipv6TestButton = Button.builder(testButtonLabel(), b -> onTestIpv6())
                 .bounds(cx - bw / 2, 0, bw, bh).build();
-        Button done = Button.builder(Component.translatable("gui.fireflymc.singleplayer_relay.action.done"),
+        this.doneButton = Button.builder(Component.translatable("gui.fireflymc.singleplayer_relay.action.done"),
                 b -> onClose()).bounds(cx - 60, 0, 120, bh).build();
         addRenderableWidget(mainButton);
         addRenderableWidget(ipv6TestButton);
-        addRenderableWidget(done);
+        addRenderableWidget(doneButton);
         relayout();
     }
 
@@ -1296,12 +1281,7 @@ public class SingleplayerRelayControlScreen extends Screen {
         int cx = this.width / 2;
         if (mainButton != null) mainButton.setY(footerY - 26);
         if (ipv6TestButton != null) ipv6TestButton.setY(footerY - 4);
-        for (var child : this.children()) {
-            if (child instanceof Button b && b.getMessage().equals(
-                    Component.translatable("gui.fireflymc.singleplayer_relay.action.done"))) {
-                b.setY(footerY + 4);
-            }
-        }
+        if (doneButton != null) doneButton.setY(footerY + 4);
         this.headerHeight = headerHeight;
         this.dialogY = dialogY;
         this.dialogHeight = dialogHeight;
@@ -1621,32 +1601,12 @@ public class SingleplayerRelayControlScreen extends Screen {
 }
 ```
 
-> **实现提示**:`relayout()` 中的 `Button.setMessage()` 比较用 `equals` 识别"完成"按钮较脆弱;更稳妥是在类字段保留 `doneButton` 引用。执行者应将其改为字段引用。
-
-- [ ] **Step 2: 修正 done 按钮为字段引用**
-
-把 `init()` 中 `Button done = Button.builder(...)` 改为存字段:
-
-```java
-        this.doneButton = Button.builder(Component.translatable("gui.fireflymc.singleplayer_relay.action.done"),
-                b -> onClose()).bounds(cx - 60, 0, 120, bh).build();
-        addRenderableWidget(mainButton);
-        addRenderableWidget(ipv6TestButton);
-        addRenderableWidget(doneButton);
-```
-
-加字段 `private Button doneButton;`,删除 `relayout()` 内的 `equals` 识别循环,改为:
-
-```java
-        if (doneButton != null) doneButton.setY(footerY + 4);
-```
-
-- [ ] **Step 3: 编译确认**
+- [ ] **Step 2: 编译确认**
 
 Run: `.\gradlew.bat compileJava`
 Expected: `BUILD SUCCESSFUL`。
 
-- [ ] **Step 4: Commit**
+- [ ] **Step 3: Commit**
 
 ```bash
 git add src/main/java/firefly520/fireflymc/client/screen/SingleplayerRelayControlScreen.java
