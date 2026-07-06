@@ -98,7 +98,7 @@ public class SingleplayerRelayControlScreen extends Screen {
         ipv6TestButton.setMessage(testButtonLabel());
 
         // probing 完成(probing true→false 且 checkedAt 变化)时刷新 GUA
-        if (lastSeenCheckedAt == null && snap.lastResult() != null
+        if ((lastSeenCheckedAt == null && snap.lastResult() != null)
                 || (lastSeenCheckedAt != null && snap.lastResult() != null
                     && !lastSeenCheckedAt.equals(snap.lastResult().checkedAt()))) {
             this.guaAddresses = Ipv6AddressCollector.collectGlobalIpv6();
