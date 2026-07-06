@@ -249,17 +249,16 @@ class Ipv6ConnectivityCheckerTest {
         java.util.concurrent.CountDownLatch release = new java.util.concurrent.CountDownLatch(1);
         Ipv6ConnectivityChecker c = new Ipv6ConnectivityChecker(
                 req -> { calls.incrementAndGet(); entered.countDown(); release.await(); return 204; },
-                java.time.Clock.systemUTC(), settings(5),
-                java.util.concurrent.Executors.newSingleThreadExecutor());
+                java.time.Clock.systemUTC(), settings(5), probeExecutor());
 
         java.util.concurrent.CompletableFuture<Ipv6ProbeResult> f1 = c.checkAsync(false);
-        entered.await();
+        assertTrue(entered.await(5, java.util.concurrent.TimeUnit.SECONDS), "probe not entered in time");
         java.util.concurrent.CompletableFuture<Ipv6ProbeResult> f2 = c.checkAsync(false);
         assertSame(f1, f2);
         assertEquals(1, calls.get());
         release.countDown();
-        f1.join();
-        assertEquals(Ipv6ProbeStatus.AVAILABLE, f1.get().status());
+        Ipv6ProbeResult r1 = f1.get(5, java.util.concurrent.TimeUnit.SECONDS);
+        assertEquals(Ipv6ProbeStatus.AVAILABLE, r1.status());
     }
 
     @Test
@@ -326,11 +325,10 @@ class Ipv6ConnectivityCheckerTest {
         java.util.concurrent.CountDownLatch release = new java.util.concurrent.CountDownLatch(1);
         Ipv6ConnectivityChecker c = new Ipv6ConnectivityChecker(
                 req -> { entered.countDown(); release.await(); throw new InterruptedException("t"); },
-                java.time.Clock.systemUTC(), settings(5),
-                java.util.concurrent.Executors.newSingleThreadExecutor());
+                java.time.Clock.systemUTC(), settings(5), probeExecutor());
 
         java.util.concurrent.CompletableFuture<Ipv6ProbeResult> f = c.checkAsync(false);
-        entered.await();
+        assertTrue(entered.await(5, java.util.concurrent.TimeUnit.SECONDS), "probe not entered in time");
         release.countDown();
         Ipv6ProbeResult result = f.get(5, java.util.concurrent.TimeUnit.SECONDS);
 
@@ -338,5 +336,14 @@ class Ipv6ConnectivityCheckerTest {
         assertNull(result.httpStatus());
         assertFalse(c.snapshot().probing());
         assertNotNull(c.snapshot().lastResult());
+    }
+
+    /** 测试用 daemon 线程 Executor:避免非 daemon 线程在测试结束后阻止 JVM 退出。 */
+    private static java.util.concurrent.Executor probeExecutor() {
+        return r -> {
+            Thread t = new Thread(r, "ipv6-test-probe");
+            t.setDaemon(true);
+            t.start();
+        };
     }
 }
