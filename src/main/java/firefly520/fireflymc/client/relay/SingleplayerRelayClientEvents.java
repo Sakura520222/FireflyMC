@@ -1,21 +1,29 @@
 package firefly520.fireflymc.client.relay;
 
+import firefly520.fireflymc.Config;
 import firefly520.fireflymc.client.ClientState;
+import firefly520.fireflymc.client.relay.ipv6.Ipv6ConnectivityChecker;
 import firefly520.fireflymc.client.screen.RelayLobbyScreen;
+import firefly520.fireflymc.client.screen.SingleplayerRelayControlScreen;
 import firefly520.fireflymc.client.screen.SingleplayerSharePromptScreen;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.components.Button;
+import net.minecraft.client.gui.screens.PauseScreen;
 import net.minecraft.client.gui.screens.multiplayer.JoinMultiplayerScreen;
 import net.minecraft.client.server.IntegratedServer;
+import net.minecraft.network.chat.Component;
 import net.neoforged.neoforge.client.event.ClientPlayerNetworkEvent;
 import net.neoforged.neoforge.client.event.ClientTickEvent;
 import net.neoforged.neoforge.client.event.ScreenEvent;
-import net.minecraft.network.chat.Component;
 
 /**
  * 单人世界公开联机客户端事件。
  */
 public final class SingleplayerRelayClientEvents {
+    private static final int INJECTED_BUTTON_WIDTH = 120;
+    private static final int INJECTED_BUTTON_HEIGHT = 20;
+    private static final int INJECTED_BUTTON_MARGIN = 8;
+
     private static boolean promptPending = false;
 
     private SingleplayerRelayClientEvents() {
@@ -23,6 +31,14 @@ public final class SingleplayerRelayClientEvents {
 
     public static void onClientLoggedIn(ClientPlayerNetworkEvent.LoggingIn event) {
         Minecraft mc = Minecraft.getInstance();
+
+        // IPv6 出站检测:独立于 relay 弹窗配置,只看 enabled && autoCheck && 单人世界
+        if (mc.getSingleplayerServer() != null
+                && Config.CLIENT.IPV6_PROBE_ENABLED.get()
+                && Config.CLIENT.IPV6_PROBE_AUTO_ON_SP_JOIN.get()) {
+            Ipv6ConnectivityChecker.getInstance().checkAsync(false);
+        }
+
         if (!RelayConfig.RELAY.SINGLEPLAYER_RELAY_ENABLED.get() || !RelayConfig.RELAY.SINGLEPLAYER_RELAY_PROMPT_ON_JOIN.get()) {
             return;
         }
@@ -56,18 +72,30 @@ public final class SingleplayerRelayClientEvents {
     }
 
     public static void onScreenInit(ScreenEvent.Init.Post event) {
+        if (event.getScreen() instanceof PauseScreen screen) {
+            Minecraft mc = Minecraft.getInstance();
+            if (mc.level == null || !mc.hasSingleplayerServer()) {
+                return;
+            }
+            int x = Math.max(INJECTED_BUTTON_MARGIN, screen.width - INJECTED_BUTTON_WIDTH - INJECTED_BUTTON_MARGIN);
+            int y = INJECTED_BUTTON_MARGIN;
+            event.addListener(Button.builder(
+                    Component.translatable("gui.fireflymc.singleplayer_relay.entry"),
+                    button -> mc.setScreen(new SingleplayerRelayControlScreen(screen))
+            ).bounds(x, y, INJECTED_BUTTON_WIDTH, INJECTED_BUTTON_HEIGHT).build());
+            return;
+        }
+
         if (!(event.getScreen() instanceof JoinMultiplayerScreen screen)) {
             return;
         }
 
-        int buttonWidth = 120;
-        int buttonHeight = 20;
-        int x = screen.width - buttonWidth - 8;
-        int y = 8;
+        int x = screen.width - INJECTED_BUTTON_WIDTH - INJECTED_BUTTON_MARGIN;
+        int y = INJECTED_BUTTON_MARGIN;
         event.addListener(Button.builder(
                 Component.literal("FireflyMC 联机大厅"),
                 button -> Minecraft.getInstance().setScreen(new RelayLobbyScreen(screen))
-        ).bounds(x, y, buttonWidth, buttonHeight).build());
+        ).bounds(x, y, INJECTED_BUTTON_WIDTH, INJECTED_BUTTON_HEIGHT).build());
     }
 
     private static String resolveWorldName(IntegratedServer server) {

@@ -28,6 +28,10 @@ public class Config {
     public final ModConfigSpec.ConfigValue<Integer> SINGLEPLAYER_RELAY_P2P_RETRANSMIT_MILLIS;
     public final ModConfigSpec.ConfigValue<Integer> SINGLEPLAYER_RELAY_P2P_WINDOW_SIZE;
     public final ModConfigSpec.BooleanValue SINGLEPLAYER_RELAY_P2P_IPV6_ENABLED;
+    public final ModConfigSpec.BooleanValue IPV6_PROBE_ENABLED;
+    public final ModConfigSpec.BooleanValue IPV6_PROBE_AUTO_ON_SP_JOIN;
+    public final ModConfigSpec.ConfigValue<Integer> IPV6_PROBE_TIMEOUT_SECONDS;
+    public final ModConfigSpec.ConfigValue<Integer> IPV6_PROBE_CACHE_MINUTES;
     public final ModConfigSpec.BooleanValue EVENT_NOTIFICATION_ENABLED;
     public final ModConfigSpec.ConfigValue<String> EVENT_NOTIFICATION_URL;
     public final ModConfigSpec.BooleanValue EVENT_NOTIFICATION_AUTO_RECONNECT;
@@ -110,6 +114,31 @@ public class Config {
         .comment("Try direct IPv6 connection first when both peers have public IPv6 addresses")
         .translation("fireflymc.config.singleplayer_relay.p2p_ipv6_enabled")
         .define("p2pIpv6Enabled", true);
+
+      builder.pop();
+
+      builder.push("ipv6_probe")
+        .translation("fireflymc.configuration.ipv6_probe");
+
+      IPV6_PROBE_ENABLED = builder
+        .comment("Enable IPv6 outbound connectivity probe (test-ipv6.com).")
+        .translation("fireflymc.configuration.ipv6_probe.enabled")
+        .define("enabled", true);
+
+      IPV6_PROBE_AUTO_ON_SP_JOIN = builder
+        .comment("Probe IPv6 outbound silently when entering a singleplayer world.")
+        .translation("fireflymc.configuration.ipv6_probe.auto_check_on_singleplayer_join")
+        .define("autoCheckOnSingleplayerJoin", true);
+
+      IPV6_PROBE_TIMEOUT_SECONDS = builder
+        .comment("Per-request timeout for the IPv6 probe.")
+        .translation("fireflymc.configuration.ipv6_probe.timeout_seconds")
+        .defineInRange("timeoutSeconds", 5, 1, 30);
+
+      IPV6_PROBE_CACHE_MINUTES = builder
+        .comment("Minutes a completed probe result is cached. 0 = always re-probe.")
+        .translation("fireflymc.configuration.ipv6_probe.cache_minutes")
+        .defineInRange("cacheMinutes", 15, 0, 1440);
 
       builder.pop();
 
