@@ -55,11 +55,11 @@ public class SingleplayerRelayControlScreen extends Screen {
         int bw = 140, bh = 20;
         int cx = this.width / 2;
         mainButton = Button.builder(mainButtonLabel(), b -> onMain())
-                .bounds(cx - bw - 6, 0, bw, bh).build();
+                .bounds(cx - bw / 2, 0, bw, bh).build();
         ipv6TestButton = Button.builder(testButtonLabel(), b -> onTestIpv6())
                 .bounds(cx - bw / 2, 0, bw, bh).build();
         this.doneButton = Button.builder(Component.translatable("gui.fireflymc.singleplayer_relay.action.done"),
-                b -> onClose()).bounds(cx - 60, 0, 120, bh).build();
+                b -> onClose()).bounds(cx - bw / 2, 0, bw, bh).build();
         addRenderableWidget(mainButton);
         addRenderableWidget(ipv6TestButton);
         addRenderableWidget(doneButton);
