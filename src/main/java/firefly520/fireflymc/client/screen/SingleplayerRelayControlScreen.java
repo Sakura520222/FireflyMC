@@ -20,6 +20,7 @@ import javax.annotation.Nonnull;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
+import java.util.Locale;
 
 /** 单人世界联机控制面板:启停联机 + IPv6 出站检测 + 状态展示。 */
 public class SingleplayerRelayControlScreen extends Screen {
@@ -66,16 +67,15 @@ public class SingleplayerRelayControlScreen extends Screen {
     }
 
     private void relayout() {
-        // 滚动模型:标题区固定 56px,底部完成按钮区固定 32px
+        // 滚动模型:标题区固定 56px,底部按钮区固定 82px,中间内容区滚动
         int headerHeight = 56;
-        int footerHeight = 32;
+        int footerHeight = 82;
         int dialogHeight = Math.min(this.height - 24, 360);
         int dialogY = (this.height - dialogHeight) / 2;
         int footerY = dialogY + dialogHeight - footerHeight;
-        int cx = this.width / 2;
-        if (mainButton != null) mainButton.setY(footerY - 26);
-        if (ipv6TestButton != null) ipv6TestButton.setY(footerY - 4);
-        if (doneButton != null) doneButton.setY(footerY + 4);
+        if (mainButton != null) mainButton.setY(footerY + 4);
+        if (ipv6TestButton != null) ipv6TestButton.setY(footerY + 28);
+        if (doneButton != null) doneButton.setY(footerY + 54);
         this.headerHeight = headerHeight;
         this.dialogY = dialogY;
         this.dialogHeight = dialogHeight;
@@ -158,8 +158,21 @@ public class SingleplayerRelayControlScreen extends Screen {
     }
 
     private int estimateContentHeight() {
-        // 粗略估计:联机段(3行) + 主按钮(20) + IPv6 段(2行) + GUA(2+addresses) + 测试按钮(20) + 提示(2行)
-        return 40 + 20 + 40 + Math.min(2, Math.max(1, guaAddresses.size())) * 12 + 20 + 24;
+        HostingState s = SingleplayerRelayManager.getInstance().getHostingState();
+        int relayHeight = s == HostingState.HOSTING ? 50 : 14;
+
+        Ipv6ProbeSnapshot snap = Ipv6ConnectivityChecker.getInstance().snapshot();
+        boolean enabled = Config.CLIENT.IPV6_PROBE_ENABLED.get();
+        int ipv6Height;
+        if (!enabled || snap.probing() || snap.lastResult() == null) {
+            ipv6Height = 28;
+        } else {
+            int guaRows = guaAddresses.isEmpty() ? 1 : Math.min(2, guaAddresses.size());
+            if (guaAddresses.size() > 2) guaRows++;
+            int hintRows = 3;
+            ipv6Height = 28 + 14 + 12 + guaRows * 12 + 6 + hintRows * 12;
+        }
+        return 8 + relayHeight + 8 + ipv6Height;
     }
 
     @Override
@@ -197,7 +210,7 @@ public class SingleplayerRelayControlScreen extends Screen {
 
     private int renderRelaySection(GuiGraphics g, int x, int y, int w) {
         HostingState s = SingleplayerRelayManager.getInstance().getHostingState();
-        g.drawString(this.font, Component.translatable("gui.fireflymc.singleplayer_relay.state." + s.name().toLowerCase()),
+        g.drawString(this.font, Component.translatable("gui.fireflymc.singleplayer_relay.state." + s.name().toLowerCase(Locale.ROOT)),
                 x, y, stateColor(s), false);
         y += 14;
         if (s == HostingState.HOSTING) {
