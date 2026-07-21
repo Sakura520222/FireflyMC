@@ -6,7 +6,7 @@
 
 **Architecture:** 新增 `Ipv6ConnectivityChecker`(唯一状态源,全注入可测)+ `SingleplayerRelayControlScreen`(面板);`SingleplayerRelayManager` 加 `HostingState` 四态机(路线 A,主线程串行 + CAS);`SingleplayerRelayClientEvents` 扩展注入 ESC 按钮 + 进世界自动检测。详见 `docs/superpowers/specs/2026-07-06-ipv6-relay-control-design.md`(唯一设计依据)。
 
-**Tech Stack:** Minecraft 1.21.1 / NeoForge 21.1.219 / Java 21 / ModDevGradle / JUnit 5(本次新引入,仅 Checker 用)。
+**Tech Stack:** Minecraft 1.21.1 / NeoForge 21.1.241 / Java 21 / ModDevGradle / JUnit 5(本次新引入,仅 Checker 用)。
 
 ---
 
