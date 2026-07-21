@@ -4,7 +4,7 @@
 FireflyMC 是基于 Java 的 Minecraft 模组（NeoForge，MC 1.21.1），核心功能为 WebSocket 中继/P2P UDP 联机、AI Agent 聊天（tool calling）、认证锁定、称号/时长限制/掉落清理等。
 
 ## 技术栈
-Java 21 · Gradle · NeoForge 21.1.219 · Java HttpClient(WS) · UDP P2P · Gson · OpenAI API · GitHub Actions
+Java 21 · Gradle · NeoForge 21.1.241 · Java HttpClient(WS) · UDP P2P · Gson · OpenAI API · GitHub Actions
 
 ## 架构设计
 - **中继/P2P**: `RelayLobbyWebSocketClient` + `P2PConnectionManager`(SendWindow+ReorderBuffer)

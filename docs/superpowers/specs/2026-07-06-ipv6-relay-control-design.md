@@ -1,7 +1,7 @@
 # IPv6 联机增强与单人 ESC 联机控制设计
 
 - 日期：2026-07-06
-- 模组：FireflyMC 2.5.6（Minecraft 1.21.1 NeoForge 21.1.219）
+- 模组：FireflyMC 2.5.6（Minecraft 1.21.1 NeoForge 21.1.241）
 - 状态：设计定稿，待实现
 
 ## 1. 背景与目标

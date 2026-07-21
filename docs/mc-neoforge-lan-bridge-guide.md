@@ -1,4 +1,4 @@
-# Minecraft 1.21.1 / NeoForge 21.1.219 — LAN 桥接 Mod 开发指南
+# Minecraft 1.21.1 / NeoForge 21.1.241 — LAN 桥接 Mod 开发指南
 
 > 整理日期: 2026-05-02 | 目标: 单人世界通过 WebSocket 中继桥接远程玩家
 
