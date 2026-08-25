@@ -111,4 +111,25 @@ public class ClientPayloadHandler {
             );
         });
     }
+
+    /** 点歌：开始播放（含登录同步） */
+    public static void handleMusicStart(firefly520.fireflymc.network.MusicStartPayload payload,
+                                        IPayloadContext context) {
+        context.enqueueWork(() ->
+                firefly520.fireflymc.client.music.MusicPlaybackManager.start(payload));
+    }
+
+    /** 点歌：队列同步 */
+    public static void handleMusicQueueSync(firefly520.fireflymc.network.MusicQueueSyncPayload payload,
+                                            IPayloadContext context) {
+        context.enqueueWork(() ->
+                firefly520.fireflymc.client.music.MusicPlaybackManager.onQueueSync(payload));
+    }
+
+    /** 点歌：停止 */
+    public static void handleMusicStop(firefly520.fireflymc.network.MusicStopPayload payload,
+                                       IPayloadContext context) {
+        context.enqueueWork(() ->
+                firefly520.fireflymc.client.music.MusicPlaybackManager.stop(payload));
+    }
 }

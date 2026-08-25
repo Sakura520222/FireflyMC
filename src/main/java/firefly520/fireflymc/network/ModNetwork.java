@@ -12,7 +12,7 @@ import net.neoforged.neoforge.network.registration.PayloadRegistrar;
  * playToClient 的包处理器使用反射延迟加载客户端类，避免服务端加载客户端类
  */
 public class ModNetwork {
-    public static final String NETWORK_VERSION = "1.0.0";
+    public static final String NETWORK_VERSION = "1.1.0";
 
     public static void registerPayloads(final RegisterPayloadHandlersEvent event) {
         final PayloadRegistrar registrar = event.registrar(FireflyMCMod.MODID)
@@ -81,6 +81,32 @@ public class ModNetwork {
                 CrossChatRelayPayload.TYPE,
                 CrossChatRelayPayload.STREAM_CODEC,
                 (payload, context) -> handleCrossChatRelayOnClient(payload, context)
+        );
+
+        // ===== 点歌系统 =====
+        // S→C 开始播放（含登录同步）
+        registrar.playToClient(
+                MusicStartPayload.TYPE,
+                MusicStartPayload.STREAM_CODEC,
+                (payload, context) -> handleMusicStartOnClient(payload, context)
+        );
+        // S→C 队列同步
+        registrar.playToClient(
+                MusicQueueSyncPayload.TYPE,
+                MusicQueueSyncPayload.STREAM_CODEC,
+                (payload, context) -> handleMusicQueueSyncOnClient(payload, context)
+        );
+        // S→C 停止
+        registrar.playToClient(
+                MusicStopPayload.TYPE,
+                MusicStopPayload.STREAM_CODEC,
+                (payload, context) -> handleMusicStopOnClient(payload, context)
+        );
+        // C→S 播放失败上报
+        registrar.playToServer(
+                MusicPlaybackFailedPayload.TYPE,
+                MusicPlaybackFailedPayload.STREAM_CODEC,
+                ModPayloadHandler::handleMusicPlaybackFailed
         );
     }
 
@@ -196,6 +222,63 @@ public class ModNetwork {
                 method.invoke(null, payload, context);
             } catch (Exception e) {
                 // 忽略错误
+            }
+        }
+    }
+
+    /**
+     * 使用反射调用客户端点歌开始播放处理器
+     */
+    private static void handleMusicStartOnClient(MusicStartPayload payload, IPayloadContext context) {
+        if (FMLEnvironment.dist == Dist.CLIENT) {
+            try {
+                Class<?> handlerClass = Class.forName("firefly520.fireflymc.client.ClientPayloadHandler");
+                java.lang.reflect.Method method = handlerClass.getDeclaredMethod(
+                    "handleMusicStart",
+                    MusicStartPayload.class,
+                    IPayloadContext.class
+                );
+                method.invoke(null, payload, context);
+            } catch (Exception e) {
+                // 忽略
+            }
+        }
+    }
+
+    /**
+     * 使用反射调用客户端点歌队列同步处理器
+     */
+    private static void handleMusicQueueSyncOnClient(MusicQueueSyncPayload payload, IPayloadContext context) {
+        if (FMLEnvironment.dist == Dist.CLIENT) {
+            try {
+                Class<?> handlerClass = Class.forName("firefly520.fireflymc.client.ClientPayloadHandler");
+                java.lang.reflect.Method method = handlerClass.getDeclaredMethod(
+                    "handleMusicQueueSync",
+                    MusicQueueSyncPayload.class,
+                    IPayloadContext.class
+                );
+                method.invoke(null, payload, context);
+            } catch (Exception e) {
+                // 忽略
+            }
+        }
+    }
+
+    /**
+     * 使用反射调用客户端点歌停止处理器
+     */
+    private static void handleMusicStopOnClient(MusicStopPayload payload, IPayloadContext context) {
+        if (FMLEnvironment.dist == Dist.CLIENT) {
+            try {
+                Class<?> handlerClass = Class.forName("firefly520.fireflymc.client.ClientPayloadHandler");
+                java.lang.reflect.Method method = handlerClass.getDeclaredMethod(
+                    "handleMusicStop",
+                    MusicStopPayload.class,
+                    IPayloadContext.class
+                );
+                method.invoke(null, payload, context);
+            } catch (Exception e) {
+                // 忽略
             }
         }
     }

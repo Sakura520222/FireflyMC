@@ -120,6 +120,14 @@ configurations {
     runtimeClasspath.extendsFrom localRuntime
 }
 
+// 单测需要访问 MC/netty 类（如网络包 codec 测试）：并入主源集的完整编译 classpath
+sourceSets {
+    test {
+        compileClasspath += sourceSets.main.compileClasspath
+        runtimeClasspath += sourceSets.main.runtimeClasspath
+    }
+}
+
 dependencies {
     // Mixin for chat message interception
     annotationProcessor 'org.spongepowered:mixin:0.8.5:processor'
@@ -146,6 +154,16 @@ dependencies {
     // For more info:
     // http://www.gradle.org/docs/current/userguide/artifact_dependencies_tutorial.html
     // http://www.gradle.org/docs/current/userguide/dependency_management.html
+
+    // 点歌系统：JLayer MP3 解码器（LGPL，以嵌套 jar 分发，不 shade 不 relocate）
+    jarJar(implementation('javazoom:jlayer:1.0.1')) {
+        version {
+            strictly '[1.0.1]'
+            prefer '1.0.1'
+        }
+    }
+    // ModDevGradle 开发环境需要额外将 jarJar 库放进运行时 classpath，否则 runClient 时 ClassNotFoundException
+    additionalRuntimeClasspath 'javazoom:jlayer:1.0.1'
 
     testImplementation 'org.junit.jupiter:junit-jupiter:5.10.2'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'

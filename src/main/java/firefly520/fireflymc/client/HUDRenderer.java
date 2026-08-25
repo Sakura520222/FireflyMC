@@ -25,56 +25,45 @@ public class HUDRenderer
   private static final int MAX_VISIBLE_PLAYERS = 5;
   private static final long PLAYER_SCROLL_SPEED = 1500L;
 
+  /** 与音乐卡片一致的左右内边距（统一视觉规格） */
+  private static final int PADDING_LEFT = 8;
+  private static final int PADDING_RIGHT = 8;
 
   private static final int TEXT_COLOR = 16777215;
-  private static final int BORDER_COLOR = 0x40FFFFFF;  // 白色半透明
-  private static final int BORDER_RADIUS = 4;
-  private static final int BORDER_THICKNESS = 1;
 
   /** 玩家条目：UUID字符串 + 玩家名 */
   private record PlayerEntry(String uuid, String name) {}
 
 
-  public static void render(GuiGraphics guiGraphics) {
-    Minecraft mc = Minecraft.getInstance();
-
-    // 同步F1隐藏GUI功能
+  /** 服务器信息卡可见性（F1/打开界面/未发布单人世界/无玩家） */
+  public static boolean isServerHudVisible(Minecraft mc) {
     if (mc.options.hideGui) {
-      return;
+      return false;
     }
-
     if (mc.screen != null) {
-      return;
+      return false;
     }
-
     if (mc.getSingleplayerServer() != null && !mc.getSingleplayerServer().isPublished()) {
-      return;
+      return false;
     }
+    return mc.player != null;
+  }
 
-    LocalPlayer player = mc.player;
-    if (player == null) {
-      return;
-    }
+  /** 缩放后坐标系的卡片总高度（供 ClientHandler 纵向 stack 布局计算）。
+   *  URL 为单行（放得下直接显示、超宽滚动），不换行。 */
+  public static int measureTotalHeight(Minecraft mc) {
+    List<PlayerEntry> players = getOnlinePlayers(mc.player);
+    int lineHeight = 9 + 2;
+    int visiblePlayerCount = Math.min(players.size(), MAX_VISIBLE_PLAYERS);
+    int playerListHeight = lineHeight * (visiblePlayerCount + 1);
+    return lineHeight * 3 + playerListHeight + 6;
+  }
 
-
-    List<PlayerEntry> players = getOnlinePlayers(player);
-    int playerCount = players.size();
-
-
+  /** 卡片自身测量宽度（供 ClientHandler 统一取两卡最大值；含称号+玩家名的最长行） */
+  public static int measureWidth(Minecraft mc) {
     Font font = mc.font;
-    int screenHeight = mc.getWindow().getGuiScaledHeight();
-
-
-    Objects.requireNonNull(font); int lineHeight = 9 + 2;
-
-    // 基准宽度：服务器名称宽度
     int baseWidth = font.width(SERVER_NAME);
-
-    // 计算网址换行后的行数
-    int urlLines = font.split(WEBSITE_URL, baseWidth).size();
-
-    // 扩展宽度以容纳称号+玩家名的最长行
-    for (PlayerEntry pe : players) {
+    for (PlayerEntry pe : getOnlinePlayers(mc.player)) {
       String t = ClientState.titleMap.get(pe.uuid());
       StringBuilder sb = new StringBuilder();
       if (t != null && !t.isEmpty()) {
@@ -83,85 +72,90 @@ public class HUDRenderer
       sb.append(pe.name());
       baseWidth = Math.max(baseWidth, font.width(sb.toString()));
     }
+    return baseWidth + 16;
+  }
 
-    // 总高度 = 服务器名(1行) + 在线人数(1行) + 网址(urlLines行) + 分隔线(1行) + 实际可见玩家列表行
+  /** 在缩放后坐标系 (x=5, startY) 按统一宽度渲染本卡片（可见性由 ClientHandler 统一负责） */
+  public static void renderAt(GuiGraphics guiGraphics, int startY, int width) {
+    Minecraft mc = Minecraft.getInstance();
+
+    LocalPlayer player = mc.player;
+
+    List<PlayerEntry> players = getOnlinePlayers(player);
+    int playerCount = players.size();
+
+    Font font = mc.font;
+
+    Objects.requireNonNull(font); int lineHeight = 9 + 2;
+
+    int x = 5;
+    int contentX = x + PADDING_LEFT;
+    int contentWidth = width - PADDING_LEFT - PADDING_RIGHT;
+
+    // 总高度 = 服务器名(1行) + 在线人数(1行) + 网址(1行，超宽滚动不换行) + 分隔线(1行) + 可见玩家行
     int visiblePlayerCount = Math.min(playerCount, MAX_VISIBLE_PLAYERS);
     int playerListHeight = lineHeight * (visiblePlayerCount + 1); // +1 for separator
-    int totalHeight = lineHeight * (2 + urlLines) + playerListHeight + 6;
-    int x = 5;
-
-    // 背景已设为透明
-    // guiGraphics.fill(x, y - 2, x + baseWidth + 10, y + totalHeight, BACKGROUND_COLOR);
+    int totalHeight = lineHeight * 3 + playerListHeight + 6;
 
     // 从配置读取缩放值
     float scale = Config.CLIENT.HUD_SCALE.get().floatValue();
-
-    // 计算缩放后的屏幕尺寸，用于正确计算居中位置
-    int scaledHeight = (int)(screenHeight / scale);
-
-    // 基于缩放后的屏幕尺寸计算垂直居中位置
-    int y = (scaledHeight - totalHeight) / 2;
 
     // 应用缩放
     guiGraphics.pose().pushPose();
     guiGraphics.pose().scale(scale, scale, 1.0F);
 
-    // 绘制圆角边框
-    drawRoundedBorder(guiGraphics, x, y, baseWidth + 16, totalHeight);
+    // y 由 ClientHandler 纵向 stack 布局传入（缩放后坐标系）
+    int y = startY;
+
+    // 绘制圆角边框（宽度 = stack 统一宽度）
+    HudRenderUtil.drawRoundedBorder(guiGraphics, x, y, width, totalHeight);
 
     // 服务器名称
-    guiGraphics.drawString(font, SERVER_NAME, x + 8, y + 3, TEXT_COLOR);
+    guiGraphics.drawString(font, SERVER_NAME, contentX, y + 3, TEXT_COLOR);
     y += lineHeight;
-
-
-
 
     // 在线人数
     MutableComponent mutableComponent = Component.literal("").append(PLAYER_COUNT_PREFIX).append(Component.literal(String.valueOf(playerCount)));
-    guiGraphics.drawString(font, mutableComponent, x + 8, y, TEXT_COLOR);
+    guiGraphics.drawString(font, mutableComponent, contentX, y, TEXT_COLOR);
     y += lineHeight;
 
-
-    // 网址（跑马灯滚动）
+    // 网址：放得下直接显示；超宽平滑滚动（完整原始文本 + 像素平移 + scissor 裁 viewport，
+    // 不做 substr 截取——字符边界取整近似会在滚动终点裁掉末字符的最后几个像素）
     String urlText = WEBSITE_URL.getString();
     int urlWidth = font.width(urlText);
-
-    if (urlWidth <= baseWidth) {
-      // 文本短，不需要滚动，直接显示
-      guiGraphics.drawString(font, WEBSITE_URL, x + 8, y, TEXT_COLOR);
+    if (urlWidth <= contentWidth) {
+      guiGraphics.drawString(font, WEBSITE_URL, contentX, y, TEXT_COLOR);
     } else {
-      // 跑马灯效果：循环滚动显示网址
-      long time = System.currentTimeMillis();
-      int scrollSpeed = 200; // 每个位置显示200毫秒
-      int cycle = urlText.length() + 5; // 滚动周期（字符数+空格缓冲）
-      int offset = (int) ((time / scrollSpeed) % cycle);
-
-      // 构造滚动文本：在末尾添加空格和开头部分以实现循环
-      String scrollText = urlText + "     " + urlText.substring(0, Math.min(offset, urlText.length()));
-
-      // 从offset位置开始截取最多能显示的字符
-      int maxChars = 0;
-      int testWidth = 0;
-      for (int i = offset; i < scrollText.length(); i++) {
-        int charWidth = font.width(scrollText.substring(i, i + 1));
-        if (testWidth + charWidth > baseWidth) break;
-        testWidth += charWidth;
-        maxChars++;
+      // +1px 安全余量：保证最后一个 glyph 的边界像素完整进入 viewport
+      int maxOffset = Math.max(0, urlWidth - contentWidth + 1);
+      // 起点静置 1.5s → 从 0 滚到 maxOffset（25ms/px）→ 终点静置 1.5s → 回起点
+      long cycle = 1500 + maxOffset * 25L + 1500;
+      long t = System.currentTimeMillis() % cycle;
+      int offset;
+      if (t < 1500) {
+        offset = 0;
+      } else if (t < 1500 + maxOffset * 25L) {
+        offset = (int) ((t - 1500) / 25);
+      } else {
+        offset = maxOffset;
       }
+      offset = Math.min(offset, maxOffset); // 终点 clamp：最后像素完整显示后才允许回起点
 
-      String visibleText = scrollText.substring(offset, Math.min(offset + maxChars, scrollText.length()));
-      guiGraphics.drawString(font, Component.literal(visibleText), x + 8, y, TEXT_COLOR);
+      // scissor 是 framebuffer 级坐标（gui-scaled），不受 pose scale 影响 → 逻辑坐标 ×scale 换算
+      guiGraphics.enableScissor((int) (contentX * scale), (int) (y * scale),
+              (int) ((contentX + contentWidth) * scale), (int) ((y + lineHeight) * scale));
+      guiGraphics.drawString(font, urlText, contentX - offset, y, TEXT_COLOR);
+      guiGraphics.disableScissor();
     }
 
     y += lineHeight;
 
-    // 渲染玩家列表
-    renderPlayerList(guiGraphics, font, x, y, baseWidth, lineHeight, players);
+    // 渲染玩家列表（分隔线自适应 contentWidth；长称号+玩家名使用完整宽度并在超宽时截断）
+    renderPlayerList(guiGraphics, font, contentX, contentWidth, y, lineHeight, players);
 
     // 恢复缩放
     guiGraphics.pose().popPose();
   }
-
 
   private static List<PlayerEntry> getOnlinePlayers(LocalPlayer player) {
     List<PlayerEntry> players = new ArrayList<>();
@@ -201,12 +195,12 @@ public class HUDRenderer
   }
 
   private static int renderPlayerList(GuiGraphics guiGraphics, Font font,
-                                     int x, int y, int width, int lineHeight,
+                                     int contentX, int contentWidth, int y, int lineHeight,
                                      List<PlayerEntry> players) {
     int totalPlayers = players.size();
 
-    // 分隔线
-    guiGraphics.drawString(font, Component.literal("──在线玩家──"), x + 8, y, TEXT_COLOR);
+    // 分隔线：根据 contentWidth 动态延长 ──── 在线玩家 ────
+    guiGraphics.drawString(font, Component.literal(separatorLine(font, "在线玩家", contentWidth)), contentX, y, TEXT_COLOR);
     y += lineHeight;
 
     // 计算滚动偏移
@@ -220,7 +214,7 @@ public class HUDRenderer
       }
     }
 
-    // 渲染可见玩家（称号 + 玩家名）
+    // 渲染可见玩家（称号 + 玩家名，超宽时截断到 contentWidth）
     int visibleCount = Math.min(MAX_VISIBLE_PLAYERS, totalPlayers);
     for (int i = 0; i < visibleCount; i++) {
       int playerIndex = scrollOffset + i;
@@ -233,7 +227,8 @@ public class HUDRenderer
         } else {
           displayText = entry.name();
         }
-        guiGraphics.drawString(font, Component.literal(displayText), x + 8, y, TEXT_COLOR);
+        String clipped = font.plainSubstrByWidth(displayText, contentWidth);
+        guiGraphics.drawString(font, Component.literal(clipped), contentX, y, TEXT_COLOR);
         y += lineHeight;
       }
     }
@@ -241,34 +236,15 @@ public class HUDRenderer
     return y;
   }
 
-  private static void drawRoundedBorder(GuiGraphics guiGraphics, int x, int y, int width, int height) {
-    int r = Math.min(BORDER_RADIUS, Math.min(width / 2, height / 2));
-    int t = BORDER_THICKNESS;
-
-    // 1. 绘制四条直边（不包含圆角部分）
-    // 上边
-    guiGraphics.fill(x + r, y, x + width - r, y + t, BORDER_COLOR);
-    // 下边
-    guiGraphics.fill(x + r, y + height - t, x + width - r, y + height, BORDER_COLOR);
-    // 左边
-    guiGraphics.fill(x, y + r, x + t, y + height - r, BORDER_COLOR);
-    // 右边
-    guiGraphics.fill(x + width - t, y + r, x + width, y + height - r, BORDER_COLOR);
-
-    // 2. 绘制四个圆角（使用三角函数计算像素点，更平滑）
-    for (int angle = 0; angle < 90; angle += 2) {
-      double rad = Math.toRadians(angle);
-      int dx = (int) (r * Math.cos(rad));
-      int dy = (int) (r * Math.sin(rad));
-
-      // 左上角
-      guiGraphics.fill(x + r - dx, y + r - dy, x + r - dx + t, y + r - dy + t, BORDER_COLOR);
-      // 右上角
-      guiGraphics.fill(x + width - r + dx - t, y + r - dy, x + width - r + dx, y + r - dy + t, BORDER_COLOR);
-      // 左下角
-      guiGraphics.fill(x + r - dx, y + height - r + dy - t, x + r - dx + t, y + height - r + dy, BORDER_COLOR);
-      // 右下角
-      guiGraphics.fill(x + width - r + dx - t, y + height - r + dy - t, x + width - r + dx, y + height - r + dy, BORDER_COLOR);
+  /** 自适应分隔线：──── 在线玩家 ────，横线数量按 contentWidth 动态计算 */
+  private static String separatorLine(Font font, String label, int contentWidth) {
+    String unit = "─";
+    int unitWidth = font.width(unit);
+    int labelWidth = font.width(label);
+    if (unitWidth <= 0 || contentWidth <= labelWidth + 4) {
+      return label;
     }
+    int side = Math.max(1, (contentWidth - labelWidth - 4) / 2 / unitWidth);
+    return unit.repeat(side) + label + unit.repeat(side);
   }
 }
