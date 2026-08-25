@@ -144,5 +144,22 @@
   "gui.fireflymc.ipv6.hint.idle": "此结果仅表示 IPv6 出站能力，不代表公网游戏端口可达。",
   "gui.fireflymc.time.just_now": "刚刚",
   "gui.fireflymc.time.minutes_ago": "%s 分钟前",
-  "gui.fireflymc.time.hours_ago": "%s 小时前"
+  "gui.fireflymc.time.hours_ago": "%s 小时前",
+
+  "fireflymc.music.searching": "♪ 正在搜索: %s ...",
+  "fireflymc.music.queued": "§a♪ 已点播: %s - %s",
+  "fireflymc.music.announce": "§b♪ %s 点播了《%s》- %s",
+  "fireflymc.music.queue.header": "§6===== 点歌队列 =====",
+  "fireflymc.music.queue.empty": "队列为空",
+  "fireflymc.music.queue.entry": "%d. %s - %s（点歌者: %s）",
+  "fireflymc.music.skipped": "§e已跳过当前歌曲",
+  "fireflymc.music.stopped": "§e已停止播放并清空队列",
+  "fireflymc.music.error.locked": "§c你点播的歌曲已达上限（3 首），等自己点的歌唱完一首后再点吧～",
+  "fireflymc.music.error.pending": "§c正在处理你的上一个点歌请求，请稍等",
+  "fireflymc.music.error.queue_full": "§c点歌队列已满（%d），请稍后再试",
+  "fireflymc.music.error.not_found": "§c没有找到《%s》相关的可播放歌曲（付费歌曲无法点播）",
+  "fireflymc.music.error.no_permission": "§c你没有权限执行此操作",
+  "fireflymc.music.error.keyword_too_long": "§c歌名过长（上限 256 字符）",
+  "fireflymc.music.error.player_only": "§c只有玩家可以点歌",
+  "fireflymc.music.error.playback_failed": "§c《%s》- %s 无法播放，已自动跳过（可能为付费歌曲）"
 }

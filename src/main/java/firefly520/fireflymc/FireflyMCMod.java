@@ -27,7 +27,8 @@ import firefly520.fireflymc.util.ServerLanguageLoader;
 @Mod(FireflyMCMod.MODID)
 public class FireflyMCMod {
   public static final String MODID = "fireflymc";
-  public static final String VERSION = "3.0.0";
+  public static final String VERSION = "3.0.1";
+  public static final org.slf4j.Logger LOGGER = com.mojang.logging.LogUtils.getLogger();
 
   public FireflyMCMod(IEventBus modEventBus, ModContainer modContainer) {
     // 1. 注册客户端配置（官方标准写法）
@@ -64,11 +65,22 @@ public class FireflyMCMod {
       NeoForge.EVENT_BUS.addListener(ClientEventNotificationEvents::onClientLoggedOut);
       NeoForge.EVENT_BUS.addListener(ClientEventNotificationEvents::onClientTick);
       NeoForge.EVENT_BUS.addListener(ClientEventNotificationEvents::onClientChat);
+
+      // 点歌系统：音量桥（每 tick 读 MASTER×MUSIC 写入 AtomicReference）+ 断开清理
+      NeoForge.EVENT_BUS.addListener(firefly520.fireflymc.client.music.MusicClientEvents::onClientTick);
+      NeoForge.EVENT_BUS.addListener(firefly520.fireflymc.client.music.MusicClientEvents::onLoggingOut);
     }
 
     // 4. 注册游戏事件处理（GAME 总线）
     NeoForge.EVENT_BUS.addListener(ModEventHandler::onPlayerLoggedIn);
     NeoForge.EVENT_BUS.addListener(ModEventHandler::onPlayerLoggedOut);
+
+    // 4.6 点歌系统：服务端生命周期与 tick
+    NeoForge.EVENT_BUS.addListener(firefly520.fireflymc.music.MusicServerEvents::onServerStarted);
+    NeoForge.EVENT_BUS.addListener(firefly520.fireflymc.music.MusicServerEvents::onServerStopping);
+    NeoForge.EVENT_BUS.addListener(firefly520.fireflymc.music.MusicServerEvents::onPlayerLoggedIn);
+    NeoForge.EVENT_BUS.addListener(firefly520.fireflymc.music.MusicServerEvents::onPlayerLoggedOut);
+    NeoForge.EVENT_BUS.addListener(firefly520.fireflymc.music.MusicServerEvents::onServerTick);
 
     // 4.5. 注册服务器生命周期事件（加载中文语言文件）
     NeoForge.EVENT_BUS.addListener(this::onServerStarted);

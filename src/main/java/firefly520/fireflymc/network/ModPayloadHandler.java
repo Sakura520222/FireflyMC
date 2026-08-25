@@ -26,12 +26,19 @@ public class ModPayloadHandler {
     // 密码验证已通过的玩家
     public static final Map<UUID, Boolean> PASSWORD_VERIFIED_PLAYERS = new ConcurrentHashMap<>();
 
+    // 音乐能力客户端（已握手，无论 dedicated / LAN / 单人；离线时由集成层移除）
+    public static final Map<UUID, Boolean> MUSIC_CAPABLE_PLAYERS = new ConcurrentHashMap<>();
+
     /**
      * 服务端处理客户端的回复包，验证版本
      */
     public static void handleHandshakeReply(ModHandshakeReplyPayload payload, IPayloadContext context) {
         context.enqueueWork(() -> {
             if (context.player() instanceof ServerPlayer serverPlayer) {
+                // 音乐能力记录：所有服务器类型（含单人/LAN）都在 isSingleplayer 早退前完成
+                if (payload.modVersion().equals(FireflyMCMod.VERSION)) {
+                    MUSIC_CAPABLE_PLAYERS.put(serverPlayer.getUUID(), true);
+                }
                 if (serverPlayer.server.isSingleplayer()) {
                     return;
                 }
@@ -116,5 +123,16 @@ public class ModPayloadHandler {
             // 给予新手福利包
             StarterKitManager.giveStarterKit(serverPlayer);
         }
+    }
+
+    /**
+     * 服务端处理客户端播放失败上报（回到主线程后交给 MusicServerBridge 聚合）
+     */
+    public static void handleMusicPlaybackFailed(MusicPlaybackFailedPayload payload, IPayloadContext context) {
+        context.enqueueWork(() -> {
+            if (context.player() instanceof ServerPlayer serverPlayer) {
+                firefly520.fireflymc.music.MusicServerBridge.onClientFailure(serverPlayer, payload);
+            }
+        });
     }
 }

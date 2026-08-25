@@ -144,5 +144,22 @@
   "gui.fireflymc.ipv6.hint.idle": "This result only reflects IPv6 outbound capability, not public game-port reachability.",
   "gui.fireflymc.time.just_now": "just now",
   "gui.fireflymc.time.minutes_ago": "%s min ago",
-  "gui.fireflymc.time.hours_ago": "%s h ago"
+  "gui.fireflymc.time.hours_ago": "%s h ago",
+
+  "fireflymc.music.searching": "♪ Searching: %s ...",
+  "fireflymc.music.queued": "§a♪ Requested: %s - %s",
+  "fireflymc.music.announce": "§b♪ %s requested \"%s\" - %s",
+  "fireflymc.music.queue.header": "§6===== Music Queue =====",
+  "fireflymc.music.queue.empty": "Queue is empty",
+  "fireflymc.music.queue.entry": "%d. %s - %s (by %s)",
+  "fireflymc.music.skipped": "§eSkipped current song",
+  "fireflymc.music.stopped": "§eStopped and cleared the queue",
+  "fireflymc.music.error.locked": "§cYou already have 3 songs in the queue. Wait until one of yours finishes.",
+  "fireflymc.music.error.pending": "§cYour previous request is still being processed, please wait",
+  "fireflymc.music.error.queue_full": "§cMusic queue is full (%d), try again later",
+  "fireflymc.music.error.not_found": "§cNo playable result for \"%s\" (paid songs unavailable)",
+  "fireflymc.music.error.no_permission": "§cYou don't have permission for this action",
+  "fireflymc.music.error.keyword_too_long": "§cKeyword too long (max 256 chars)",
+  "fireflymc.music.error.player_only": "§cOnly players can request songs",
+  "fireflymc.music.error.playback_failed": "§c\"%s\" - %s is not playable, skipped automatically (likely a paid song)"
 }
