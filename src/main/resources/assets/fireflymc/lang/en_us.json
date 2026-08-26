@@ -162,5 +162,12 @@
   "fireflymc.music.error.no_permission": "§cYou don't have permission for this action",
   "fireflymc.music.error.keyword_too_long": "§cKeyword too long (max 256 chars)",
   "fireflymc.music.error.player_only": "§cOnly players can request songs",
-  "fireflymc.music.error.playback_failed": "§c\"%s\" - %s is not playable, skipped automatically (likely a paid song)"
+  "fireflymc.music.error.playback_failed": "§c\"%s\" - %s is not playable, skipped automatically (likely a paid song)",
+
+  "fireflymc.options.music_request_volume": "Requested Music",
+  "fireflymc.configuration.music_settings": "Requested Music",
+  "fireflymc.configuration.music_settings.button": "Requested Music",
+  "fireflymc.configuration.music_settings.tooltip": "Adjust the independent volume for requested music",
+  "fireflymc.config.music_settings.request_volume": "Requested music volume",
+  "fireflymc.config.music_settings.request_volume.tooltip": "Independent volume for requested music, multiplied with master volume, no longer affected by the vanilla MUSIC category. Defaults to 30%"
 }
