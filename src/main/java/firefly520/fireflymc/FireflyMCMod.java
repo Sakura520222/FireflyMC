@@ -66,9 +66,12 @@ public class FireflyMCMod {
       NeoForge.EVENT_BUS.addListener(ClientEventNotificationEvents::onClientTick);
       NeoForge.EVENT_BUS.addListener(ClientEventNotificationEvents::onClientChat);
 
-      // 点歌系统：音量桥（每 tick 读 MASTER×MUSIC 写入 AtomicReference）+ 断开清理
+      // 点歌系统：音量桥（每 tick 读 MASTER×点歌音乐独立音量写入 AtomicReference）+ 断开清理
       NeoForge.EVENT_BUS.addListener(firefly520.fireflymc.client.music.MusicClientEvents::onClientTick);
       NeoForge.EVENT_BUS.addListener(firefly520.fireflymc.client.music.MusicClientEvents::onLoggingOut);
+      // 点歌独立音量滑块：注入原版声音设置页（拖动即时生效，关屏统一落盘）
+      NeoForge.EVENT_BUS.addListener(firefly520.fireflymc.client.music.MusicSoundOptionsEvents::onScreenInit);
+      NeoForge.EVENT_BUS.addListener(firefly520.fireflymc.client.music.MusicSoundOptionsEvents::onScreenClosing);
     }
 
     // 4. 注册游戏事件处理（GAME 总线）

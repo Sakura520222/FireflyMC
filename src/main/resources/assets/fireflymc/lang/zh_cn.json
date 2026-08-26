@@ -162,5 +162,12 @@
   "fireflymc.music.error.no_permission": "§c你没有权限执行此操作",
   "fireflymc.music.error.keyword_too_long": "§c歌名过长（上限 256 字符）",
   "fireflymc.music.error.player_only": "§c只有玩家可以点歌",
-  "fireflymc.music.error.playback_failed": "§c《%s》- %s 无法播放，已自动跳过（可能为付费歌曲）"
+  "fireflymc.music.error.playback_failed": "§c《%s》- %s 无法播放，已自动跳过（可能为付费歌曲）",
+
+  "fireflymc.options.music_request_volume": "点歌音乐",
+  "fireflymc.configuration.music_settings": "点歌音乐",
+  "fireflymc.configuration.music_settings.button": "点歌音乐",
+  "fireflymc.configuration.music_settings.tooltip": "调整点歌播放的独立音量",
+  "fireflymc.config.music_settings.request_volume": "点歌音乐音量",
+  "fireflymc.config.music_settings.request_volume.tooltip": "点歌播放的独立音量，与主音量相乘生效，不再受原版「音乐」分类影响，默认 30%"
 }
