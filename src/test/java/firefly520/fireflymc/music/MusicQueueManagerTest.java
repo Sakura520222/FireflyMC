@@ -148,6 +148,22 @@ class MusicQueueManagerTest {
     }
 
     @Test
+    void concurrentPrivilegedSessionsOfSamePlayerBothSucceed() {
+        UUID op = UUID.randomUUID();
+        // 房主/OP 快速连点：第一个搜索仍在途时发起第二个，两会话独立认领、都入队
+        assertEquals(MusicQueueManager.BeginResult.ACCEPTED, m.tryBeginRequest(op, true));
+        MusicQueueManager.SearchSession s1 = m.latestSession();
+        assertEquals(MusicQueueManager.BeginResult.ACCEPTED, m.tryBeginRequest(op, true));
+        MusicQueueManager.SearchSession s2 = m.latestSession();
+        assertNotSame(s1, s2);
+        assertTrue(m.completeRequest(op, s1, song("第一首", op, 60_000L)), "先返回的会话必须入队");
+        assertTrue(m.completeRequest(op, s2, song("第二首", op, 60_000L)), "同玩家并发会话不得互相顶掉");
+        assertEquals(1, rec.starts.size(), "第一首开始播放");
+        MusicQueueSyncPayload lastSync = rec.syncs.get(rec.syncs.size() - 1);
+        assertEquals(1, lastSync.queue().size(), "第二首应排队");
+    }
+
+    @Test
     void skipUnlocksRequester() {
         UUID a = UUID.randomUUID();
         UUID b = UUID.randomUUID();

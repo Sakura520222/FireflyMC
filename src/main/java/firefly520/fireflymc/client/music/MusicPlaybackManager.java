@@ -68,8 +68,14 @@ public final class MusicPlaybackManager {
                                 return; // 旧 worker 写回，忽略
                             }
                             // 上报信号（服务端 quorum 决定是否全服切歌）
-                            // + 本地切 Silent 模式：HUD 继续按权威时长走（quorum 未达时不消失）
                             ClientMusicFailReporter.report(playbackId, code);
+                            // 本地切 Silent 时钟：从失败瞬间的位置无缝续走——
+                            // JavaSound 时钟随 line 关闭会冻结，quorum 未达时 HUD/歌词
+                            // 必须继续按服务端权威计时推进（设计 5.5 的静音降级语义）
+                            MusicPlaybackState.PlayingInfo info = MusicPlaybackState.current();
+                            if (info != null) {
+                                info.clock().set(new PlaybackClock.Silent(info.clock().positionMs()));
+                            }
                         });
                     }
                 }, clockRef);

@@ -73,8 +73,9 @@ public final class Mp3DurationProbe {
         }
 
         // 2. VBRI 头（固定位于帧头 + 36）
+        // 边界：frames 字段在 +14..+17，需完整 4 字节才可读（+18 起）
         int vbriOffset = frameStart + 36;
-        if (vbriOffset + 14 <= head.length
+        if (vbriOffset + 18 <= head.length
                 && new String(head, vbriOffset, 4, StandardCharsets.US_ASCII).equals("VBRI")) {
             long frames = readIntBE(head, vbriOffset + 14) & 0xFFFFFFFFL;
             if (frames > 0) {

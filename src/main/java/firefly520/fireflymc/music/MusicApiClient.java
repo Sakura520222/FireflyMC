@@ -64,6 +64,18 @@ public final class MusicApiClient {
             .followRedirects(HttpClient.Redirect.ALWAYS)
             .build();
 
+    /**
+     * body 读取 watchdog：ofInputStream 的 request timeout 只保护到响应头到达，
+     * 之后流式 read 不受任何超时保护——第三方服务停滞会让阻塞读永久挂起、
+     * 玩家永久 pending。到期 close 流可解除阻塞 read（read 抛 IOException 走正常失败链路）。
+     */
+    private static final java.util.concurrent.ScheduledExecutorService READ_WATCHDOG =
+            java.util.concurrent.Executors.newSingleThreadScheduledExecutor(r -> {
+                Thread t = new Thread(r, "fireflymc-music-read-watchdog");
+                t.setDaemon(true);
+                return t;
+            });
+
     private MusicApiClient() {}
 
     /** 搜索歌曲，取第一首。songId 必须纯数字（SSRF 防护）。无结果返回 null。 */
@@ -84,12 +96,20 @@ public final class MusicApiClient {
             try {
                 HttpResponse<InputStream> response = HTTP.send(request, HttpResponse.BodyHandlers.ofInputStream());
                 if (response.statusCode() != 200) {
-                    throw new IOException("搜索接口 HTTP " + response.statusCode());
+                    int code = response.statusCode();
+                    closeQuietly(response.body()); // 非 200 也要释放流与底层连接
+                    throw new IOException("搜索接口 HTTP " + code);
                 }
+                // body 读取 watchdog：停滞则 close 解除阻塞（见 READ_WATCHDOG 注释）
+                java.util.concurrent.ScheduledFuture<?> watchdog = READ_WATCHDOG.schedule(
+                        () -> closeQuietly(response.body()),
+                        SEARCH_TIMEOUT.toMillis() + 2_000L, java.util.concurrent.TimeUnit.MILLISECONDS);
                 // 有界读取：最多 2 MiB，超出视为异常响应
                 byte[] body;
                 try (InputStream in = response.body()) {
                     body = readBounded(in, MAX_SEARCH_BYTES);
+                } finally {
+                    watchdog.cancel(false);
                 }
                 JsonObject json = GSON.fromJson(new String(body, StandardCharsets.UTF_8), JsonObject.class);
                 if (json == null || !json.has("data") || !json.get("data").isJsonArray()) {
@@ -226,9 +246,14 @@ public final class MusicApiClient {
                         .build();
                 try {
                     HttpResponse<InputStream> response = HTTP.send(request, HttpResponse.BodyHandlers.ofInputStream());
+                    java.util.concurrent.ScheduledFuture<?> watchdog = READ_WATCHDOG.schedule(
+                            () -> closeQuietly(response.body()),
+                            PROBE_TIMEOUT.toMillis() + 1_000L, java.util.concurrent.TimeUnit.MILLISECONDS);
                     try (InputStream body = response.body()) {
                         long totalBytes = resolveTotalBytes(response);
-                        byte[] head = readBounded(body, PROBE_HEAD_BYTES);
+                        // 读满 64 KiB 即停（前缀语义）：服务器忽略 Range 返回 200 全文件时
+                        // 不能把"超上限"当异常——否则每次重试都失败、探测必 fallback 腰斩
+                        byte[] head = readPrefix(body, PROBE_HEAD_BYTES);
                         long duration = Mp3DurationProbe.probeDurationMs(head, totalBytes);
                         if (duration != Mp3DurationProbe.FALLBACK_DURATION_MS) {
                             DURATION_CACHE.put(songId, duration); // 探测成功才缓存（fallback 不污染）
@@ -236,6 +261,8 @@ public final class MusicApiClient {
                             return duration;
                         }
                         // 解析结果为 fallback（数据异常/污染页）→ 也重试
+                    } finally {
+                        watchdog.cancel(false); // 读取完成/异常后才解除停滞保护
                     }
                 } catch (IOException | InterruptedException e) {
                     if (e instanceof InterruptedException) {
@@ -274,7 +301,7 @@ public final class MusicApiClient {
         return response.headers().firstValueAsLong("Content-Length").orElse(-1L);
     }
 
-    /** 有界读取：最多 maxBytes，超出抛异常（防无界下载进内存） */
+    /** 有界读取：最多 maxBytes，超出抛异常（防无界下载进内存；搜索响应用） */
     private static byte[] readBounded(InputStream in, int maxBytes) throws IOException {
         ByteArrayOutputStream out = new ByteArrayOutputStream();
         byte[] buf = new byte[8192];
@@ -286,6 +313,31 @@ public final class MusicApiClient {
             out.write(buf, 0, n);
         }
         return out.toByteArray();
+    }
+
+    /**
+     * 前缀读取：读满 maxBytes 即停（提前返回，不消费剩余流，由调用方 close）。
+     * 探测头部专用：服务器忽略 Range 返回 200 全文件时，只需前 64 KiB——
+     * 用 readBounded 会把"超过上限"当异常，导致探测必然 fallback。
+     * 包内可见供单测。
+     */
+    static byte[] readPrefix(InputStream in, int maxBytes) throws IOException {
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        byte[] buf = new byte[8192];
+        int n;
+        while (out.size() < maxBytes && (n = in.read(buf, 0, Math.min(buf.length, maxBytes - out.size()))) > 0) {
+            out.write(buf, 0, n);
+        }
+        return out.toByteArray();
+    }
+
+    private static void closeQuietly(InputStream in) {
+        try {
+            if (in != null) {
+                in.close();
+            }
+        } catch (IOException ignored) {
+        }
     }
 
     private static String truncate(String s, int max) {

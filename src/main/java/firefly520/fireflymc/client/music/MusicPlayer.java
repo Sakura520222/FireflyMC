@@ -52,6 +52,7 @@ public class MusicPlayer implements Runnable {
     private volatile InputStream httpStream;   // stop 序列 close 用
     private volatile Path partFile;
     private volatile OutputStream teeBranch;
+    private volatile TeeInputStream tee;       // 落盘前检查缓存分支健康（磁盘满不 finalize 残缺 .part）
 
     public MusicPlayer(long playbackId, String songId, long basePositionMs, long durationMs,
                        AtomicReference<Float> volumeRef,
@@ -83,6 +84,7 @@ public class MusicPlayer implements Runnable {
             // 网络环境对网易 CDN 存在间歇性连接超时（TUN/IPv6 抖动），重试最多 3 次
             boolean opened = false;
             for (int attempt = 1; attempt <= 3 && !cancelled; attempt++) {
+                boolean retryable = false;
                 try {
                     HttpClient http = HttpClient.newBuilder()
                             .connectTimeout(Duration.ofSeconds(10))
@@ -100,16 +102,25 @@ public class MusicPlayer implements Runnable {
                         opened = true;
                         break;
                     }
-                    // 服务端明确拒绝（如 404 页）不重试，直接失败
+                    int code = response.statusCode();
+                    // 408/429/5xx 是瞬态（CDN 抖动/限流/服务端故障）：退避重试，
+                    // 与网络异常同等对待；404 等永久错误（付费歌 404 页）直接失败
+                    retryable = (code == 408 || code == 429 || code >= 500);
                     firefly520.fireflymc.FireflyMCMod.LOGGER.warn(
-                            "[Music] 音频请求失败 songId={} HTTP {}", songId, response.statusCode());
+                            "[Music] 音频请求失败 songId={} HTTP {}{}", songId, code,
+                            retryable ? "（瞬态，重试）" : "");
                     response.body().close();
-                    break;
+                    if (!retryable) {
+                        break;
+                    }
                 } catch (Exception e) {
                     firefly520.fireflymc.FireflyMCMod.LOGGER.warn(
                             "[Music] 下载尝试 {}/3 失败 songId={}: {}", attempt, songId, String.valueOf(e));
                     closeQuietly(httpStream);
                     httpStream = null;
+                    retryable = true;
+                }
+                if (retryable && attempt < 3) {
                     try {
                         Thread.sleep(500L * attempt); // 退避 0.5s/1s
                     } catch (InterruptedException ie) {
@@ -125,11 +136,13 @@ public class MusicPlayer implements Runnable {
                 return;
             }
             InputStream raw = httpStream;
+            tee = null;
             partFile = cache.beginPartFile(songId, playbackId);
             if (partFile != null) {
                 try {
                     teeBranch = Files.newOutputStream(partFile);
-                    raw = new TeeInputStream(httpStream, teeBranch);
+                    tee = new TeeInputStream(httpStream, teeBranch);
+                    raw = tee;
                 } catch (IOException e) {
                     cache.deletePartFile(partFile); // 磁盘异常：降级不缓存，播放照常
                     partFile = null;
@@ -223,8 +236,9 @@ public class MusicPlayer implements Runnable {
             }
             closeQuietly(dataSource);
             closeQuietly(teeBranch);
-            // 缓存只对网络模式有意义、非静音降级、且本次完整读完（header==null 正常 break）才落盘
-            if (httpMode && success && !silentDegraded && partFile != null) {
+            // 缓存只对网络模式有意义、非静音降级、缓存分支健康、且本次完整读完（header==null 正常 break）才落盘
+            if (httpMode && success && !silentDegraded && partFile != null
+                    && (tee == null || !tee.isBranchBroken())) {
                 cache.finalizePartFile(partFile, songId);
             } else {
                 cache.deletePartFile(partFile);

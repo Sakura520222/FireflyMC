@@ -15,6 +15,11 @@ public class TeeInputStream extends FilterInputStream {
         this.branch = branch;
     }
 
+    /** 缓存分支是否已失败（磁盘满等）：调用方据此禁止 finalize 残缺 .part 为有效缓存 */
+    public boolean isBranchBroken() {
+        return branchBroken;
+    }
+
     @Override
     public int read(byte[] b, int off, int len) throws IOException {
         int n = super.read(b, off, len);
