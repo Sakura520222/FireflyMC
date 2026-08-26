@@ -23,8 +23,17 @@ public record MusicPlaybackFailedPayload(long playbackId, FailureCode failureCod
     public static final StreamCodec<ByteBuf, MusicPlaybackFailedPayload> STREAM_CODEC = StreamCodec.composite(
             ByteBufCodecs.VAR_LONG, MusicPlaybackFailedPayload::playbackId,
             ByteBufCodecs.VAR_INT, p -> p.failureCode.ordinal(),
-            (playbackId, codeOrdinal) -> new MusicPlaybackFailedPayload(playbackId, FailureCode.values()[codeOrdinal])
+            (playbackId, codeOrdinal) -> new MusicPlaybackFailedPayload(playbackId, codeFromOrdinal(codeOrdinal))
     );
+
+    /** 序号范围校验：恶意/损坏包的越界序号以 DecoderException 拒绝（协议层标准处理），而非裸 AIOOBE */
+    private static FailureCode codeFromOrdinal(int ordinal) {
+        FailureCode[] values = FailureCode.values();
+        if (ordinal < 0 || ordinal >= values.length) {
+            throw new io.netty.handler.codec.DecoderException("failureCode 序号越界: " + ordinal);
+        }
+        return values[ordinal];
+    }
 
     @Override
     public Type<? extends CustomPacketPayload> type() {

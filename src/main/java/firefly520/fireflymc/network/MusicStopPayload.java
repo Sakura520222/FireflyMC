@@ -22,8 +22,17 @@ public record MusicStopPayload(long playbackId, Reason reason) implements Custom
     public static final StreamCodec<ByteBuf, MusicStopPayload> STREAM_CODEC = StreamCodec.composite(
             ByteBufCodecs.VAR_LONG, MusicStopPayload::playbackId,
             ByteBufCodecs.VAR_INT, p -> p.reason.ordinal(),
-            (playbackId, reasonOrdinal) -> new MusicStopPayload(playbackId, Reason.values()[reasonOrdinal])
+            (playbackId, reasonOrdinal) -> new MusicStopPayload(playbackId, reasonFromOrdinal(reasonOrdinal))
     );
+
+    /** 序号范围校验：恶意/损坏包的越界序号以 DecoderException 拒绝，而非裸 AIOOBE */
+    private static Reason reasonFromOrdinal(int ordinal) {
+        Reason[] values = Reason.values();
+        if (ordinal < 0 || ordinal >= values.length) {
+            throw new io.netty.handler.codec.DecoderException("reason 序号越界: " + ordinal);
+        }
+        return values[ordinal];
+    }
 
     @Override
     public Type<? extends CustomPacketPayload> type() {

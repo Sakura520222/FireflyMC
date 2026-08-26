@@ -127,11 +127,17 @@ public class MusicQueueManager {
     }
 
     /** 虚拟线程搜索成功后，经 server.execute 回到服务端线程调用。
-     *  @return true=入队成功；false=丢弃（epoch 失效/队列已满） */
-    public boolean completeRequest(UUID player, QueuedSong song) {
-        SearchSession session = pendingSessions.remove(player);
+     *  必须携带发起时捕获的 session（引用相等校验）：/stop 清掉在途请求后同玩家重发新请求时，
+     *  旧回调按 player UUID 取到的是新 session，epoch 校验形同虚设——被取消的歌会死灰复燃，
+     *  且新请求的 pending 被误删导致其结果被丢弃。
+     *  @return true=入队成功；false=丢弃（session 失效/epoch 失效/队列已满） */
+    public boolean completeRequest(UUID player, SearchSession session, QueuedSong song) {
+        if (session == null || pendingSessions.get(player) != session) {
+            return false; // 旧会话的迟到回调：丢弃且不动当前 pending
+        }
+        pendingSessions.remove(player);
         pendingPlayers.remove(player);
-        if (session == null || session.epoch() != queueEpoch) {
+        if (session.epoch() != queueEpoch) {
             return false; // stop 期间发起的旧请求，丢弃
         }
         if (totalSongsInSystem() >= MAX_QUEUE_SIZE) {
@@ -146,8 +152,11 @@ public class MusicQueueManager {
         return true;
     }
 
-    /** 虚拟线程搜索失败后调用：移除 pending，不锁定 */
-    public void failRequest(UUID player) {
+    /** 虚拟线程搜索失败后调用：移除 pending，不锁定。同样按 session 归属校验 */
+    public void failRequest(UUID player, SearchSession session) {
+        if (session == null || pendingSessions.get(player) != session) {
+            return; // 旧会话的迟到失败：不动新请求的 pending
+        }
         pendingSessions.remove(player);
         pendingPlayers.remove(player);
     }
@@ -238,6 +247,20 @@ public class MusicQueueManager {
         // 无状态可清
     }
 
+    /** 当前曲概要（/queue 命令输出与登录定向同步用），无播放返回 null */
+    public MusicQueueSyncPayload.SongSummary currentSummary() {
+        return currentSong == null ? null
+                : new MusicQueueSyncPayload.SongSummary(currentSong.title(), currentSong.author(), currentSong.requesterName());
+    }
+
+    /** 登录定向同步的队列快照；系统完全空闲（无当前曲且队列空）返回 null */
+    public MusicQueueSyncPayload currentQueueSyncPayload() {
+        if (currentSong == null && queue.isEmpty()) {
+            return null;
+        }
+        return new MusicQueueSyncPayload(currentSummary(), queueSummaries());
+    }
+
     /** 供 /fireflymc music queue 命令读取完整队列 */
     public List<MusicQueueSyncPayload.SongSummary> queueSummaries() {
         return queue.stream()
@@ -291,9 +314,6 @@ public class MusicQueueManager {
     }
 
     private void broadcastQueueSync() {
-        var currentSummary = currentSong == null ? null
-                : new MusicQueueSyncPayload.SongSummary(currentSong.title(), currentSong.author(), currentSong.requesterName());
-        var queueSummaries = queueSummaries();
-        queueBroadcaster.accept(new MusicQueueSyncPayload(currentSummary, queueSummaries));
+        queueBroadcaster.accept(new MusicQueueSyncPayload(currentSummary(), queueSummaries()));
     }
 }

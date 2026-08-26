@@ -34,7 +34,7 @@ public final class Mp3DurationProbe {
         if (head == null || head.length < 64) {
             return FALLBACK_DURATION_MS;
         }
-        // 定位第一帧帧头（在开头少量字节内扫，容忍 ID3v2 之外的杂散字节）
+        // 定位第一帧帧头：跳过 ID3v2 标签后扫描剩余全部字节（见 findFrameHeader 注释）
         int frameStart = findFrameHeader(head);
         if (frameStart < 0) {
             return FALLBACK_DURATION_MS;
@@ -89,15 +89,35 @@ public final class Mp3DurationProbe {
         return FALLBACK_DURATION_MS;
     }
 
-    /** 在前 8KB 内寻找 MPEG 帧同步字 0xFFE0 */
+    /**
+     * 寻找 MPEG 帧同步字 0xFFE0：先按 syncsafe 尺寸跳过 ID3v2 标签，再扫描剩余全部字节。
+     * 不再限定 8KB 窗口——嵌入封面超过 8KB 时首帧在窗口外，探测会退化为 fallback
+     * （240s），导致短歌占队列、长歌被腰斩。
+     */
     private static int findFrameHeader(byte[] data) {
-        int limit = Math.min(data.length - 4, 8192);
-        for (int i = 0; i < limit; i++) {
+        int start = id3TagEnd(data);
+        int limit = data.length - 4;
+        for (int i = start; i < limit; i++) {
             if ((data[i] & 0xFF) == 0xFF && (data[i + 1] & 0xE0) == 0xE0) {
                 return i;
             }
         }
         return -1;
+    }
+
+    /** ID3v2 标签结束偏移（10 字节头 + syncsafe size，v2.4 footer 标志再加 10）；无标签返回 0 */
+    private static int id3TagEnd(byte[] data) {
+        if (data.length < 10 || data[0] != 'I' || data[1] != 'D' || data[2] != '3') {
+            return 0;
+        }
+        // 尺寸为 syncsafe 整数：每字节只用低 7 位
+        long size = ((data[6] & 0x7FL) << 21) | ((data[7] & 0x7FL) << 14)
+                | ((data[8] & 0x7FL) << 7) | (data[9] & 0x7FL);
+        long end = 10L + size + (((data[5] & 0x40) != 0) ? 10L : 0L);
+        if (end >= data.length) {
+            return data.length; // 标签覆盖整个探测窗口（封面 > 64KB）：窗口内无帧可找
+        }
+        return (int) end;
     }
 
     private static int readIntBE(byte[] data, int offset) {
