@@ -25,6 +25,12 @@ public record MusicStartPayload(
     public static final CustomPacketPayload.Type<MusicStartPayload> TYPE =
             new CustomPacketPayload.Type<>(ResourceLocation.fromNamespaceAndPath(FireflyMCMod.MODID, "music_start"));
 
+    /**
+     * lrc 字段专用 codec：上限与 MusicApiClient 的歌词截断上限（256 KiB 字符）对齐。
+     * 默认 STRING_UTF8 上限 32767 字符，超长歌词会在 encode 广播时抛异常导致整包发送失败。
+     */
+    private static final StreamCodec<ByteBuf, String> LRC_CODEC = ByteBufCodecs.stringUtf8(256 * 1024);
+
     public static final StreamCodec<ByteBuf, MusicStartPayload> STREAM_CODEC = new StreamCodec<>() {
         @Override
         public MusicStartPayload decode(ByteBuf buf) {
@@ -33,7 +39,7 @@ public record MusicStartPayload(
                     ByteBufCodecs.STRING_UTF8.decode(buf),
                     ByteBufCodecs.STRING_UTF8.decode(buf),
                     ByteBufCodecs.STRING_UTF8.decode(buf),
-                    ByteBufCodecs.STRING_UTF8.decode(buf),
+                    LRC_CODEC.decode(buf),
                     ByteBufCodecs.STRING_UTF8.decode(buf),
                     ByteBufCodecs.VAR_LONG.decode(buf),
                     ByteBufCodecs.VAR_LONG.decode(buf)
@@ -46,7 +52,7 @@ public record MusicStartPayload(
             ByteBufCodecs.STRING_UTF8.encode(buf, v.songId);
             ByteBufCodecs.STRING_UTF8.encode(buf, v.title);
             ByteBufCodecs.STRING_UTF8.encode(buf, v.author);
-            ByteBufCodecs.STRING_UTF8.encode(buf, v.lrc);
+            LRC_CODEC.encode(buf, v.lrc);
             ByteBufCodecs.STRING_UTF8.encode(buf, v.requesterName);
             ByteBufCodecs.VAR_LONG.encode(buf, v.durationMs);
             ByteBufCodecs.VAR_LONG.encode(buf, v.positionMs);

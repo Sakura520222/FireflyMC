@@ -48,9 +48,18 @@ public final class JavaSoundOutput {
         return new PlaybackClock.JavaSound(line, sampleRate, basePositionMs);
     }
 
-    public void stopAndClose() {
+    /**
+     * 关闭线路。
+     * natural=true 自然播完：drain 排空内部缓冲（约 0.2s）再关，尾音完整；
+     * natural=false 取消/切歌：flush 丢弃未播 PCM 立即关。
+     */
+    public void stopAndClose(boolean natural) {
         try {
-            line.flush();
+            if (natural) {
+                line.drain();
+            } else {
+                line.flush();
+            }
             line.stop();
             line.close();
         } catch (Exception ignored) {

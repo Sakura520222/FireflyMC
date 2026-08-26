@@ -2,6 +2,7 @@ package firefly520.fireflymc.music;
 
 import firefly520.fireflymc.network.ModPayloadHandler;
 import firefly520.fireflymc.network.MusicPlaybackFailedPayload;
+import firefly520.fireflymc.network.MusicQueueSyncPayload;
 import firefly520.fireflymc.network.MusicStartPayload;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
@@ -75,15 +76,27 @@ public final class MusicServerBridge {
         return INSTANCE.get();
     }
 
-    /** 玩家登录：定向发送当前曲（中途加入）+ 队列状态 */
+    /** 玩家登录：集成服务器（单人/LAN）直接记音乐能力；定向发送当前曲（中途加入）+ 队列快照 */
     public static void onPlayerLoggedIn(ServerPlayer player) {
         MusicQueueManager m = manager();
         if (m == null) {
             return;
         }
+        MinecraftServer s = server;
+        if (s != null && s.isSingleplayer()) {
+            // 集成服务器不发握手协议：登录即记为音乐能力客户端。
+            // 单人时 capableOnline=1 维持"唯一客户端失败立即 FAILED"语义；
+            // LAN 时分母=在线人数，quorum 正常生效（否则恒为 0，任一客户端失败即全服切歌）
+            ModPayloadHandler.MUSIC_CAPABLE_PLAYERS.put(player.getUUID(), true);
+        }
         MusicStartPayload current = m.currentStartPayload();
         if (current != null) {
             PacketDistributor.sendToPlayer(player, current);
+        }
+        // 队列快照：队列此后无变化时不会再广播，漏发会让登录者的队列 HUD 一直为空
+        MusicQueueSyncPayload sync = m.currentQueueSyncPayload();
+        if (sync != null) {
+            PacketDistributor.sendToPlayer(player, sync);
         }
     }
 

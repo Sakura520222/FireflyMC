@@ -210,6 +210,11 @@ tasks.named('jar', Jar).configure {
                 'Implementation-Timestamp': new Date().format("yyyy-MM-dd'T'HH:mm:ssZ")
         ])
     }
+    // LGPL 分发义务：第三方声明与 JLayer 许可证文本随 jar 一同分发（根目录 NOTICE.md + licenses/）
+    from 'NOTICE.md'
+    from('licenses') {
+        into 'licenses'
+    }
 }
 
 // Example configuration to allow publishing using the maven-publish plugin

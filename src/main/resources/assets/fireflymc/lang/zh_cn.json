@@ -150,6 +150,7 @@
   "fireflymc.music.queued": "§a♪ 已点播: %s - %s",
   "fireflymc.music.announce": "§b♪ %s 点播了《%s》- %s",
   "fireflymc.music.queue.header": "§6===== 点歌队列 =====",
+  "fireflymc.music.queue.current": "§e♪ 正在播放: %s - %s（点歌者: %s）",
   "fireflymc.music.queue.empty": "队列为空",
   "fireflymc.music.queue.entry": "%d. %s - %s（点歌者: %s）",
   "fireflymc.music.skipped": "§e已跳过当前歌曲",

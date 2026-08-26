@@ -150,6 +150,7 @@
   "fireflymc.music.queued": "§a♪ Requested: %s - %s",
   "fireflymc.music.announce": "§b♪ %s requested \"%s\" - %s",
   "fireflymc.music.queue.header": "§6===== Music Queue =====",
+  "fireflymc.music.queue.current": "§e♪ Now playing: %s - %s (by %s)",
   "fireflymc.music.queue.empty": "Queue is empty",
   "fireflymc.music.queue.entry": "%d. %s - %s (by %s)",
   "fireflymc.music.skipped": "§eSkipped current song",

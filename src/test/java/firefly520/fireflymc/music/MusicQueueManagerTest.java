@@ -67,6 +67,14 @@ class MusicQueueManagerTest {
                 "", "Req" + requester.toString().charAt(0), requester, durationMs);
     }
 
+    /** begin→complete 一步完成（捕获本次 session，模拟命令层行为） */
+    private boolean request(UUID player, boolean privileged, QueuedSong song) {
+        if (m.tryBeginRequest(player, privileged) != MusicQueueManager.BeginResult.ACCEPTED) {
+            return false;
+        }
+        return m.completeRequest(player, m.latestSession(), song);
+    }
+
     @Test
     void playerSongLimitLifecycle() {
         UUID a = UUID.randomUUID();
@@ -74,7 +82,7 @@ class MusicQueueManagerTest {
         // 连点 3 首成功（第 1 首立即播放，2/3 排队）
         for (int i = 1; i <= 3; i++) {
             assertEquals(MusicQueueManager.BeginResult.ACCEPTED, m.tryBeginRequest(a, false));
-            assertTrue(m.completeRequest(a, song("歌" + i, a, 60_000L)));
+            assertTrue(m.completeRequest(a, m.latestSession(), song("歌" + i, a, 60_000L)));
         }
         // 第 4 首被拒
         assertEquals(MusicQueueManager.BeginResult.LOCKED, m.tryBeginRequest(a, false));
@@ -86,7 +94,7 @@ class MusicQueueManagerTest {
         assertTrue(rec.stops.isEmpty(), "队列非空时不发 Stop");
         assertEquals(MusicQueueManager.BeginResult.ACCEPTED, m.tryBeginRequest(a, false));
         // 第 4 首入队后又是 3 首 → 第 5 首拒
-        assertTrue(m.completeRequest(a, song("歌4", a, 60_000L)));
+        assertTrue(m.completeRequest(a, m.latestSession(), song("歌4", a, 60_000L)));
         assertEquals(MusicQueueManager.BeginResult.LOCKED, m.tryBeginRequest(a, false));
     }
 
@@ -95,8 +103,7 @@ class MusicQueueManagerTest {
         UUID op = UUID.randomUUID();
         // 特权者不受 3 首限制，连点 4 首全部接受（只受系统总量约束）
         for (int i = 1; i <= 4; i++) {
-            assertEquals(MusicQueueManager.BeginResult.ACCEPTED, m.tryBeginRequest(op, true));
-            assertTrue(m.completeRequest(op, song("特权歌" + i, op, 60_000L)));
+            assertTrue(request(op, true, song("特权歌" + i, op, 60_000L)));
         }
     }
 
@@ -104,10 +111,11 @@ class MusicQueueManagerTest {
     void pendingBlocksDoubleRequest() {
         UUID a = UUID.randomUUID();
         assertEquals(MusicQueueManager.BeginResult.ACCEPTED, m.tryBeginRequest(a, false));
+        MusicQueueManager.SearchSession session = m.latestSession();
         // HTTP 进行中，第二次点歌 → PENDING 拒绝
         assertEquals(MusicQueueManager.BeginResult.PENDING, m.tryBeginRequest(a, false));
         // 搜索失败：pending 移除，未锁定
-        m.failRequest(a);
+        m.failRequest(a, session);
         assertEquals(MusicQueueManager.BeginResult.ACCEPTED, m.tryBeginRequest(a, false));
     }
 
@@ -117,7 +125,7 @@ class MusicQueueManagerTest {
         // 特权者连点 50+1 首：第 51 首被 QUEUE_FULL 拒
         for (int i = 0; i < MusicQueueManager.MAX_QUEUE_SIZE; i++) {
             assertEquals(MusicQueueManager.BeginResult.ACCEPTED, m.tryBeginRequest(op, true));
-            assertTrue(m.completeRequest(op, song("歌" + i, op, 60_000L)));
+            assertTrue(m.completeRequest(op, m.latestSession(), song("歌" + i, op, 60_000L)));
         }
         assertEquals(MusicQueueManager.BeginResult.QUEUE_FULL, m.tryBeginRequest(op, true));
     }
@@ -125,28 +133,28 @@ class MusicQueueManagerTest {
     @Test
     void concurrentPrivilegedRequestsRecheckLimit() {
         UUID op = UUID.randomUUID();
-        // 两个并发搜索都通过了 begin 检查（队列剩 1 个位置）
+        UUID op2 = UUID.randomUUID();
         for (int i = 0; i < MusicQueueManager.MAX_QUEUE_SIZE - 1; i++) {
-            m.tryBeginRequest(op, true);
-            m.completeRequest(op, song("歌" + i, op, 60_000L));
+            assertTrue(request(op, true, song("歌" + i, op, 60_000L)));
         }
-        m.tryBeginRequest(op, true);
-        m.tryBeginRequest(op, true);
+        // 两个特权者并发搜索都通过了 begin 检查（队列剩 1 个位置）
+        assertEquals(MusicQueueManager.BeginResult.ACCEPTED, m.tryBeginRequest(op, true));
+        MusicQueueManager.SearchSession s1 = m.latestSession();
+        assertEquals(MusicQueueManager.BeginResult.ACCEPTED, m.tryBeginRequest(op2, true));
+        MusicQueueManager.SearchSession s2 = m.latestSession();
         // 两个 HTTP 先后返回：第一个入队成功，第二个必须被回检拒绝
-        assertTrue(m.completeRequest(op, song("A", op, 60_000L)));
-        assertFalse(m.completeRequest(op, song("B", op, 60_000L)), "completeRequest 必须回检队列上限");
+        assertTrue(m.completeRequest(op, s1, song("A", op, 60_000L)));
+        assertFalse(m.completeRequest(op2, s2, song("B", op2, 60_000L)), "completeRequest 必须回检队列上限");
     }
 
     @Test
     void skipUnlocksRequester() {
         UUID a = UUID.randomUUID();
         UUID b = UUID.randomUUID();
-        m.tryBeginRequest(a, false);
-        m.completeRequest(a, song("A的歌", a, 60_000L));
+        assertTrue(request(a, false, song("A的歌", a, 60_000L)));
         // b 点满 3 首（第 1 首排队，2/3 继续）
         for (int i = 1; i <= 3; i++) {
-            m.tryBeginRequest(b, false);
-            m.completeRequest(b, song("B歌" + i, b, 60_000L));
+            assertTrue(request(b, false, song("B歌" + i, b, 60_000L)));
         }
         // 当前是 A 的歌
         m.skip();
@@ -163,12 +171,11 @@ class MusicQueueManagerTest {
         UUID a = UUID.randomUUID();
         UUID b = UUID.randomUUID();
         UUID c = UUID.randomUUID();
-        m.tryBeginRequest(a, false);
-        m.completeRequest(a, song("A1", a, 60_000L));
-        m.tryBeginRequest(b, false);
-        m.completeRequest(b, song("B1", b, 60_000L));
+        assertTrue(request(a, false, song("A1", a, 60_000L)));
+        assertTrue(request(b, false, song("B1", b, 60_000L)));
         // 第三人 c 发起搜索（pending 中；a/b 已锁定无法再发起）
         assertEquals(MusicQueueManager.BeginResult.ACCEPTED, m.tryBeginRequest(c, false));
+        MusicQueueManager.SearchSession cSession = m.latestSession();
 
         m.stopAll();
         assertEquals(1, rec.stops.size());
@@ -176,9 +183,39 @@ class MusicQueueManagerTest {
         // 全员解锁
         assertEquals(MusicQueueManager.BeginResult.ACCEPTED, m.tryBeginRequest(a, false));
         assertEquals(MusicQueueManager.BeginResult.ACCEPTED, m.tryBeginRequest(b, false));
-        // stop 前发起的旧搜索结果返回 → epoch 不符 → 丢弃
-        assertFalse(m.completeRequest(c, song("旧结果", c, 60_000L)), "epoch 不符的结果必须丢弃");
+        // stop 前发起的旧搜索结果返回 → 丢弃
+        assertFalse(m.completeRequest(c, cSession, song("旧结果", c, 60_000L)), "stop 前发起的结果必须丢弃");
         assertTrue(rec.starts.stream().noneMatch(p -> "旧结果".equals(p.title())));
+    }
+
+    @Test
+    void lateCompletionDoesNotResurrectAfterStopAndNewRequest() {
+        UUID a = UUID.randomUUID();
+        assertEquals(MusicQueueManager.BeginResult.ACCEPTED, m.tryBeginRequest(a, false));
+        MusicQueueManager.SearchSession old = m.latestSession();
+        m.stopAll(); // epoch++，pending 清空
+        // stop 后同玩家立刻重新点歌（新 session 占据 pending）
+        assertEquals(MusicQueueManager.BeginResult.ACCEPTED, m.tryBeginRequest(a, false));
+        MusicQueueManager.SearchSession fresh = m.latestSession();
+        // 旧回调返回：必须丢弃，且不得顶掉新请求的 pending
+        assertFalse(m.completeRequest(a, old, song("旧结果", a, 60_000L)));
+        // 新回调正常入队
+        assertTrue(m.completeRequest(a, fresh, song("新结果", a, 60_000L)));
+        assertTrue(rec.starts.stream().anyMatch(p -> "新结果".equals(p.title())));
+        assertTrue(rec.starts.stream().noneMatch(p -> "旧结果".equals(p.title())));
+    }
+
+    @Test
+    void lateFailureDoesNotKillNewPending() {
+        UUID a = UUID.randomUUID();
+        assertEquals(MusicQueueManager.BeginResult.ACCEPTED, m.tryBeginRequest(a, false));
+        MusicQueueManager.SearchSession old = m.latestSession();
+        m.stopAll();
+        assertEquals(MusicQueueManager.BeginResult.ACCEPTED, m.tryBeginRequest(a, false));
+        // 旧会话的迟到失败：不得动新请求的 pending
+        m.failRequest(a, old);
+        assertEquals(MusicQueueManager.BeginResult.PENDING, m.tryBeginRequest(a, false));
+        assertTrue(m.completeRequest(a, m.latestSession(), song("ok", a, 1000L)));
     }
 
     @Test
@@ -186,8 +223,7 @@ class MusicQueueManagerTest {
         UUID a = UUID.randomUUID();
         // 点满 3 首
         for (int i = 1; i <= 3; i++) {
-            m.tryBeginRequest(a, false);
-            m.completeRequest(a, song("A" + i, a, 60_000L));
+            assertTrue(request(a, false, song("A" + i, a, 60_000L)));
         }
         m.onPlayerLogout(a);
         assertEquals(MusicQueueManager.BeginResult.LOCKED, m.tryBeginRequest(a, false), "掉线不得解锁");
@@ -196,13 +232,11 @@ class MusicQueueManagerTest {
     @Test
     void sameSongIdDifferentPlaybackId() {
         UUID a = UUID.randomUUID();
-        m.tryBeginRequest(a, false);
-        m.completeRequest(a, song("X", a, 1000L));
+        assertTrue(request(a, false, song("X", a, 1000L)));
         long firstId = rec.starts.get(0).playbackId();
         clock.advanceMs(3000L);
         m.tick(); // 播完
-        m.tryBeginRequest(a, false);
-        m.completeRequest(a, song("X", a, 1000L)); // 同一首再点
+        assertTrue(request(a, false, song("X", a, 1000L))); // 同一首再点
         assertNotEquals(firstId, rec.starts.get(1).playbackId(), "同 songId 的两次播放实例 playbackId 必须不同");
     }
 
@@ -211,8 +245,7 @@ class MusicQueueManagerTest {
         UUID c1 = UUID.randomUUID();
         UUID c2 = UUID.randomUUID();
         UUID requester = UUID.randomUUID();
-        m.tryBeginRequest(requester, true);
-        m.completeRequest(requester, song("Q", requester, 60_000L));
+        assertTrue(request(requester, true, song("Q", requester, 60_000L)));
         long playbackId = rec.starts.get(0).playbackId();
 
         // 单客户端失败（1/3 < 50%）→ 不切歌
@@ -223,8 +256,7 @@ class MusicQueueManagerTest {
         assertEquals(MusicStopPayload.Reason.FINISHED, rec.stops.get(0).reason(), "quorum 未达按权威计时 FINISHED");
 
         // 重新来一轮：2/3 ≥ 50% → 提前 FAILED
-        m.tryBeginRequest(requester, true);
-        m.completeRequest(requester, song("Q2", requester, 60_000L));
+        assertTrue(request(requester, true, song("Q2", requester, 60_000L)));
         long id2 = rec.starts.get(1).playbackId();
         m.onClientFailure(c1, id2, MusicPlaybackFailedPayload.FailureCode.HTTP_FAILED);
         m.onClientFailure(c1, id2, MusicPlaybackFailedPayload.FailureCode.HTTP_FAILED); // 同玩家重复上报去重
@@ -240,12 +272,27 @@ class MusicQueueManagerTest {
     void loginSyncReturnsCurrentPayload() {
         assertNull(m.currentStartPayload());
         UUID a = UUID.randomUUID();
-        m.tryBeginRequest(a, false);
-        m.completeRequest(a, song("当前曲", a, 60_000L));
+        assertTrue(request(a, false, song("当前曲", a, 60_000L)));
         clock.advanceMs(10_000L);
         MusicStartPayload p = m.currentStartPayload();
         assertNotNull(p);
         assertEquals("当前曲", p.title());
         assertEquals(10_000L, p.positionMs(), "登录同步必须带已播进度");
+    }
+
+    @Test
+    void loginSnapshotIncludesQueue() {
+        // 系统完全空闲 → 无需同步
+        assertNull(m.currentQueueSyncPayload());
+        UUID a = UUID.randomUUID();
+        assertTrue(request(a, false, song("A", a, 60_000L)));
+        assertTrue(request(a, false, song("B", a, 60_000L))); // 第 2 首排队
+        MusicQueueSyncPayload snap = m.currentQueueSyncPayload();
+        assertNotNull(snap, "登录快照必须包含当前曲与排队列表");
+        assertEquals("A", snap.current().title());
+        assertEquals(1, snap.queue().size());
+        assertEquals("B", snap.queue().get(0).title());
+        m.stopAll();
+        assertNull(m.currentQueueSyncPayload());
     }
 }

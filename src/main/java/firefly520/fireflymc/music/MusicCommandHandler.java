@@ -82,6 +82,8 @@ public class MusicCommandHandler {
             }
         }
         source.sendSuccess(() -> Component.translatable("fireflymc.music.searching", keyword), false);
+        // 同步捕获本次搜索会话（回调凭它认领归属，防旧回调误伤 stop 后的新请求）
+        final MusicQueueManager.SearchSession session = manager.latestSession();
 
         // 虚拟线程：搜索 + 时长探测（两个 IO 串行）
         Thread.ofVirtual().name("fireflymc-music-search").start(() -> {
@@ -94,7 +96,7 @@ public class MusicCommandHandler {
             final MusicApiClient.SongInfo info = found;
             if (info == null) {
                 server.execute(() -> {
-                    manager.failRequest(player.getUUID());
+                    manager.failRequest(player.getUUID(), session);
                     if (!player.hasDisconnected()) {
                         player.sendSystemMessage(Component.translatable("fireflymc.music.error.not_found", keyword));
                     }
@@ -105,7 +107,7 @@ public class MusicCommandHandler {
             QueuedSong song = new QueuedSong(info.songId(), info.title(), info.author(),
                     info.lrc(), player.getGameProfile().getName(), player.getUUID(), durationMs);
             server.execute(() -> {
-                boolean accepted = manager.completeRequest(player.getUUID(), song);
+                boolean accepted = manager.completeRequest(player.getUUID(), session, song);
                 if (!player.hasDisconnected()) {
                     if (accepted) {
                         player.sendSystemMessage(Component.translatable(
@@ -135,9 +137,16 @@ public class MusicCommandHandler {
             return 0;
         }
         source.sendSuccess(() -> Component.translatable("fireflymc.music.queue.header"), false);
+        MusicQueueSyncPayload.SongSummary current = manager.currentSummary();
+        if (current != null) {
+            source.sendSuccess(() -> Component.translatable(
+                    "fireflymc.music.queue.current", current.title(), current.author(), current.requesterName()), false);
+        }
         List<MusicQueueSyncPayload.SongSummary> queue = manager.queueSummaries();
         if (queue.isEmpty()) {
-            source.sendSuccess(() -> Component.translatable("fireflymc.music.queue.empty"), false);
+            if (current == null) {
+                source.sendSuccess(() -> Component.translatable("fireflymc.music.queue.empty"), false);
+            }
         } else {
             for (int i = 0; i < queue.size(); i++) {
                 MusicQueueSyncPayload.SongSummary s = queue.get(i);

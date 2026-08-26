@@ -5,6 +5,7 @@ import io.netty.buffer.Unpooled;
 import org.junit.jupiter.api.Test;
 import java.util.List;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class MusicPayloadCodecTest {
 
@@ -20,6 +21,15 @@ class MusicPayloadCodecTest {
     void startPayloadRoundTrip() {
         MusicStartPayload p = new MusicStartPayload(7L, "1330348068", "起风了",
                 "买辣椒也用券", "[00:01.00]test", "Firefly", 243000L, 151000L);
+        assertEquals(p, roundTrip(MusicStartPayload.STREAM_CODEC, p));
+    }
+
+    @Test
+    void startPayloadLargeLrcRoundTrip() {
+        // 超过默认 STRING_UTF8 上限（32767 字符）的长歌词：lrc 专用 codec 必须装得下，
+        // 否则入队成功但广播 encode 抛异常，整包发送失败
+        String lrc = "[00:00.00]x\n" + "a".repeat(40_000);
+        MusicStartPayload p = new MusicStartPayload(1L, "1", "t", "a", lrc, "R", 1000L, 0L);
         assertEquals(p, roundTrip(MusicStartPayload.STREAM_CODEC, p));
     }
 
@@ -48,5 +58,34 @@ class MusicPayloadCodecTest {
         MusicPlaybackFailedPayload p = new MusicPlaybackFailedPayload(7L,
                 MusicPlaybackFailedPayload.FailureCode.MP3_DECODE_FAILED);
         assertEquals(p, roundTrip(MusicPlaybackFailedPayload.STREAM_CODEC, p));
+    }
+
+    @Test
+    void failedPayloadRejectsOutOfRangeOrdinal() {
+        // 恶意/损坏包的越界枚举序号：必须以 DecoderException 拒绝（可预期的协议错误），
+        // 而非裸 ArrayIndexOutOfBoundsException
+        ByteBuf buf = Unpooled.buffer();
+        net.minecraft.network.codec.ByteBufCodecs.VAR_LONG.encode(buf, 1L);
+        net.minecraft.network.codec.ByteBufCodecs.VAR_INT.encode(buf, 999);
+        assertThrows(io.netty.handler.codec.DecoderException.class,
+                () -> MusicPlaybackFailedPayload.STREAM_CODEC.decode(buf));
+        buf.release();
+
+        ByteBuf neg = Unpooled.buffer();
+        net.minecraft.network.codec.ByteBufCodecs.VAR_LONG.encode(neg, 1L);
+        net.minecraft.network.codec.ByteBufCodecs.VAR_INT.encode(neg, -1);
+        assertThrows(io.netty.handler.codec.DecoderException.class,
+                () -> MusicPlaybackFailedPayload.STREAM_CODEC.decode(neg));
+        neg.release();
+    }
+
+    @Test
+    void stopPayloadRejectsOutOfRangeOrdinal() {
+        ByteBuf buf = Unpooled.buffer();
+        net.minecraft.network.codec.ByteBufCodecs.VAR_LONG.encode(buf, 0L);
+        net.minecraft.network.codec.ByteBufCodecs.VAR_INT.encode(buf, 42);
+        assertThrows(io.netty.handler.codec.DecoderException.class,
+                () -> MusicStopPayload.STREAM_CODEC.decode(buf));
+        buf.release();
     }
 }

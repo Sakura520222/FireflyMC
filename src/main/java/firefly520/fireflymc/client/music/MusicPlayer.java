@@ -143,6 +143,9 @@ public class MusicPlayer implements Runnable {
         JavaSoundOutput output = null;
         boolean success = false;
         boolean httpMode = (httpStream != null);
+        // 静音降级不消费流到 EOF：.part 只有第一帧预读字节，绝不能落盘为有效缓存
+        // （否则下次播放命中损坏缓存导致腰斩/解码失败）
+        boolean silentDegraded = false;
         try {
             Decoder decoder = new Decoder();
             Header header = bitstream.readFrame();
@@ -159,6 +162,7 @@ public class MusicPlayer implements Runnable {
             if (output == null) {
                 // 静音降级：无输出设备。不得跑高速解码循环（无 write 背压），
                 // 由 Silent 时钟维持 HUD 进度，线程按权威时长等待
+                silentDegraded = true;
                 success = waitSilent();
                 if (success) {
                     callbacks.onFinished(playbackId, true);
@@ -210,7 +214,8 @@ public class MusicPlayer implements Runnable {
             }
         } finally {
             if (output != null) {
-                output.stopAndClose();
+                // success=true 即自然播完：drain 排空 line 内缓冲，尾音不截断；取消/失败 flush 丢弃
+                output.stopAndClose(success);
             }
             try {
                 bitstream.close();
@@ -218,8 +223,8 @@ public class MusicPlayer implements Runnable {
             }
             closeQuietly(dataSource);
             closeQuietly(teeBranch);
-            // 缓存只对网络模式有意义且本次完整读完（header==null 正常 break）才落盘
-            if (httpMode && success && partFile != null) {
+            // 缓存只对网络模式有意义、非静音降级、且本次完整读完（header==null 正常 break）才落盘
+            if (httpMode && success && !silentDegraded && partFile != null) {
                 cache.finalizePartFile(partFile, songId);
             } else {
                 cache.deletePartFile(partFile);
