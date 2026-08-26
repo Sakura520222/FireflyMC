@@ -7,8 +7,8 @@ import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
-import java.util.Optional;
 
 /**
  * 音乐 HUD 卡片（左侧纵向 stack 的上卡片，与服务器信息卡共用统一宽度与 x）。
@@ -32,6 +32,12 @@ public final class MusicHudRenderer {
 
     /** 歌词纵向滚动动画时长（ms），播放器式上滑切换 */
     private static final long LYRIC_ANIM_MS = 300;
+
+    /** 横向跑马灯：起点停留目标（纵向动画完成后）与终点停留目标（下一句出现前保持末尾） */
+    private static final int LYRIC_START_HOLD_MS = 500;
+    private static final int LYRIC_END_HOLD_MS = 300;
+    /** 极短句的最低期望滚动预算：句时间不足时先压缩停留把时间让给滚动，保证滚到末尾 */
+    private static final int LYRIC_MIN_SCROLL_BUDGET_MS = 300;
 
     /**
      * 歌词过渡状态（仅渲染线程访问）。
@@ -125,9 +131,9 @@ public final class MusicHudRenderer {
         guiGraphics.drawString(font, time, X + PADDING, y, REQUESTER_COLOR, false);
         y += LINE_HEIGHT;
 
-        // 3. 当前歌词：粉色 + 纵向滚动切换动画（无歌词文件时整行隐藏，高度已不计）
+        // 3. 当前歌词：粉色 + 纵向切换动画 + 超宽横向跑马灯（无歌词文件时整行隐藏，高度已不计）
         if (hasLyrics()) {
-            renderLyric(guiGraphics, font, X + PADDING, y, width - PADDING * 2, scale);
+            renderLyric(guiGraphics, font, info, X + PADDING, y, width - PADDING * 2, scale);
             y += LINE_HEIGHT;
         }
 
@@ -200,57 +206,113 @@ public final class MusicHudRenderer {
     }
 
     /**
-     * 歌词纵向滚动动画（播放器式）：
-     * 旧行向上滑出淡出、新行自下滑入淡入，约 300ms，smoothstep 缓动；
-     * 同一句期间静止。垂直裁剪用 scissor（参数 ×scale 换算到 gui-scaled 坐标）。
+     * 歌词行：300ms 纵向上滑切换（wall clock 驱动）+ 超宽歌词横向跑马灯（播放时间轴驱动）。
+     * 横向必须用 clock().positionMs() 而非 wall clock：中途加入第一帧即处于与播放进度
+     * 匹配的位置；速度 = 需滚动像素 ÷ 该句真正可滚动时间，自动适配句长，无固定速度、不循环。
      */
-    private static void renderLyric(GuiGraphics g, Font font, int x, int y, int maxWidth, float scale) {
-        Optional<String> line = MusicPlaybackState.currentLyricLine();
-        String current = line.orElse(null);
+    private static void renderLyric(GuiGraphics g, Font font, MusicPlaybackState.PlayingInfo info,
+                                    int x, int y, int maxWidth, float scale) {
+        long positionMs = info.clock().positionMs();
+        Map.Entry<Long, String> currentEntry = info.lrc().floorEntry(positionMs);
+        String current = currentEntry == null ? null : currentEntry.getValue();
+        if (current != null && current.isEmpty()) {
+            current = null;
+        }
 
-        // 歌词变化 → 记录过渡状态
+        // 歌词变化 → 记录过渡状态（前奏/空行视为无歌词，保留区域不绘制）
         if (!Objects.equals(current, LYRIC.current)) {
             LYRIC.previous = LYRIC.current;
             LYRIC.current = current;
             LYRIC.changeTime = System.currentTimeMillis();
         }
-
-        String target = LYRIC.current;
-        if (target == null || target.isEmpty()) {
-            return; // 前奏等空行期：保留区域但不绘制
+        if (current == null) {
+            return;
         }
+
+        // 当前句时间窗：最后一行以服务端权威时长收尾
+        Map.Entry<Long, String> nextEntry = info.lrc().higherEntry(currentEntry.getKey());
+        long lyricStartMs = currentEntry.getKey();
+        long lyricEndMs = nextEntry != null ? nextEntry.getKey() : info.durationMs();
 
         long elapsed = System.currentTimeMillis() - LYRIC.changeTime;
         float progress = Math.min(1f, elapsed / (float) LYRIC_ANIM_MS);
         float eased = progress * progress * (3 - 2 * progress); // smoothstep
+
+        // 横向偏移按播放时间轴插值。正常换句时滚动起点天然在纵向动画之后
+        // （horizontalStart ≥ lyricStart + 300ms），动画期间 offset 恒 0，与纵向切换不打架；
+        // 中途加入则直接得到当前时刻应有的位置。
+        int horizontalOffset = marqueeOffset(positionMs, lyricStartMs, lyricEndMs,
+                lyricMaxOffset(font, current, maxWidth));
 
         // 垂直裁剪（±1px 余量；scissor 坐标须从缩放后逻辑坐标换算回 gui-scaled 坐标）
         g.enableScissor((int) (x * scale), (int) ((y - 1) * scale),
                 (int) ((x + maxWidth) * scale), (int) ((y + LINE_HEIGHT + 1) * scale));
         if (progress < 1f) {
             if (LYRIC.previous != null && !LYRIC.previous.isEmpty()) {
-                // 旧行：向上滑出 + 淡出
+                // 旧行：保持在末尾位置（换句瞬间其时间轴必然已滚完）上滑 + 淡出，不回跳起点
+                int prevOffset = lyricMaxOffset(font, LYRIC.previous, maxWidth);
                 int oldY = Math.round(y - eased * LINE_HEIGHT);
                 int oldAlpha = Math.round((1 - eased) * 255);
-                drawClipped(g, font, LYRIC.previous, x, oldY, maxWidth, withAlpha(LYRIC_COLOR, oldAlpha));
+                g.drawString(font, LYRIC.previous, x - prevOffset, oldY,
+                        withAlpha(LYRIC_COLOR, oldAlpha), false);
             }
             // 新行：自下滑入 + 淡入
             int newY = Math.round(y + (1 - eased) * LINE_HEIGHT);
             int newAlpha = Math.round(eased * 255);
-            drawClipped(g, font, target, x, newY, maxWidth, withAlpha(LYRIC_COLOR, newAlpha));
+            g.drawString(font, current, x - horizontalOffset, newY,
+                    withAlpha(LYRIC_COLOR, newAlpha), false);
         } else {
-            drawClipped(g, font, target, x, y, maxWidth, LYRIC_COLOR);
+            // 完整歌词由 scissor 裁剪可视窗口（不做 substr 永久截断）
+            g.drawString(font, current, x - horizontalOffset, y, LYRIC_COLOR, false);
         }
         g.disableScissor();
     }
 
-    private static int withAlpha(int argb, int alpha) {
-        return (argb & 0x00FFFFFF) | (Math.max(0, Math.min(255, alpha)) << 24);
+    /** 横向滚动总偏移量：+1px 保证最后一个字形完整进入可视区；不超宽为 0 */
+    private static int lyricMaxOffset(Font font, String lyric, int maxWidth) {
+        int overflow = font.width(lyric) - maxWidth;
+        return overflow > 0 ? overflow + 1 : 0;
     }
 
-    private static void drawClipped(GuiGraphics g, Font font, String text, int x, int y, int maxWidth, int color) {
-        String clipped = font.plainSubstrByWidth(text, maxWidth);
-        g.drawString(font, clipped, x, y, color, false);
+    /**
+     * 横向跑马灯偏移（时间轴插值，不维护速度状态）。包内可见供单测。
+     * 把「句时长 - 纵向动画 - 起终点停留」全部分配给滚动，速度由此自动确定。
+     * 时间充足用目标停留（500/300ms）；不足时按 5:3 压缩停留、优先保证滚到末尾。
+     * 不循环：positionMs 越过窗口末端后保持末尾，直到下一句出现。
+     */
+    static int marqueeOffset(long positionMs, long lyricStartMs, long lyricEndMs, int maxOffset) {
+        if (maxOffset <= 0) {
+            return 0; // 短歌词静止
+        }
+        long availableMs = Math.max(0, lyricEndMs - lyricStartMs - LYRIC_ANIM_MS);
+        long startHold;
+        long endHold;
+        long desiredHold = LYRIC_START_HOLD_MS + LYRIC_END_HOLD_MS;
+        if (availableMs >= desiredHold + LYRIC_MIN_SCROLL_BUDGET_MS) {
+            startHold = LYRIC_START_HOLD_MS;
+            endHold = LYRIC_END_HOLD_MS;
+        } else {
+            long holdBudget = Math.max(0, availableMs - LYRIC_MIN_SCROLL_BUDGET_MS);
+            startHold = holdBudget * 5 / 8;
+            endHold = holdBudget - startHold;
+        }
+        long hStart = lyricStartMs + LYRIC_ANIM_MS + startHold;
+        long hEnd = lyricEndMs - endHold;
+        float progress;
+        if (positionMs <= hStart) {
+            progress = 0f;
+        } else if (positionMs >= hEnd) {
+            progress = 1f;
+        } else {
+            // 分母 > 0：线性分支仅在 hStart < positionMs < hEnd 时可达（极短句时 hEnd ≤ hStart，不会进入）
+            progress = (positionMs - hStart) / (float) (hEnd - hStart);
+        }
+        progress = progress * progress * (3f - 2f * progress); // smoothstep
+        return Math.round(maxOffset * progress);
+    }
+
+    private static int withAlpha(int argb, int alpha) {
+        return (argb & 0x00FFFFFF) | (Math.max(0, Math.min(255, alpha)) << 24);
     }
 
     /** 截断优先级：歌名 > 歌手 > requester 最先被截断 */
