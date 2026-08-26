@@ -85,47 +85,62 @@ public class MusicCommandHandler {
         // 同步捕获本次搜索会话（回调凭它认领归属，防旧回调误伤 stop 后的新请求）
         final MusicQueueManager.SearchSession session = manager.latestSession();
 
-        // 虚拟线程：搜索 + 时长探测（两个 IO 串行）
+        // 虚拟线程：搜索 + 时长探测（两个 IO 串行）。
+        // 整体 catch-all 兜底：任何未预期异常（如探测 future 异常完成的 join）都不得
+        // 让玩家永久 pending——failRequest 释放额度后返回错误提示。
         Thread.ofVirtual().name("fireflymc-music-search").start(() -> {
-            MusicApiClient.SongInfo found;
             try {
-                found = MusicApiClient.search(keyword).join();
-            } catch (Exception e) {
-                found = null;
-            }
-            final MusicApiClient.SongInfo info = found;
-            if (info == null) {
+                MusicApiClient.SongInfo found;
+                try {
+                    found = MusicApiClient.search(keyword).join();
+                } catch (Exception e) {
+                    found = null;
+                }
+                final MusicApiClient.SongInfo info = found;
+                if (info == null) {
+                    server.execute(() -> {
+                        manager.failRequest(player.getUUID(), session);
+                        if (!player.hasDisconnected()) {
+                            player.sendSystemMessage(Component.translatable("fireflymc.music.error.not_found", keyword));
+                        }
+                    });
+                    return;
+                }
+                long durationMs;
+                try {
+                    durationMs = MusicApiClient.probeDurationMs(info.songId()).join();
+                } catch (Exception e) {
+                    // 探测意外异常：降级 fallback 时长，不阻塞入队
+                    firefly520.fireflymc.FireflyMCMod.LOGGER.warn(
+                            "[Music] 时长探测异常 songId={}，使用 fallback: {}", info.songId(), String.valueOf(e));
+                    durationMs = Mp3DurationProbe.FALLBACK_DURATION_MS;
+                }
+                QueuedSong song = new QueuedSong(info.songId(), info.title(), info.author(),
+                        info.lrc(), player.getGameProfile().getName(), player.getUUID(), durationMs);
                 server.execute(() -> {
-                    manager.failRequest(player.getUUID(), session);
+                    boolean accepted = manager.completeRequest(player.getUUID(), session, song);
                     if (!player.hasDisconnected()) {
-                        player.sendSystemMessage(Component.translatable("fireflymc.music.error.not_found", keyword));
+                        if (accepted) {
+                            player.sendSystemMessage(Component.translatable(
+                                    "fireflymc.music.queued", info.title(), info.author()));
+                            // 全服播报
+                            for (ServerPlayer p : server.getPlayerList().getPlayers()) {
+                                if (p != player) {
+                                    p.sendSystemMessage(Component.translatable(
+                                            "fireflymc.music.announce", player.getGameProfile().getName(),
+                                            info.title(), info.author()));
+                                }
+                            }
+                        } else {
+                            player.sendSystemMessage(Component.translatable("fireflymc.music.error.queue_full",
+                                    MusicQueueManager.MAX_QUEUE_SIZE));
+                        }
                     }
                 });
-                return;
+            } catch (Throwable t) {
+                firefly520.fireflymc.FireflyMCMod.LOGGER.error("[Music] 点歌流程未预期异常 keyword={}", keyword, t);
+                server.execute(() -> manager.failRequest(player.getUUID(), session));
             }
-            long durationMs = MusicApiClient.probeDurationMs(info.songId()).join();
-            QueuedSong song = new QueuedSong(info.songId(), info.title(), info.author(),
-                    info.lrc(), player.getGameProfile().getName(), player.getUUID(), durationMs);
-            server.execute(() -> {
-                boolean accepted = manager.completeRequest(player.getUUID(), session, song);
-                if (!player.hasDisconnected()) {
-                    if (accepted) {
-                        player.sendSystemMessage(Component.translatable(
-                                "fireflymc.music.queued", info.title(), info.author()));
-                        // 全服播报
-                        for (ServerPlayer p : server.getPlayerList().getPlayers()) {
-                            if (p != player) {
-                                p.sendSystemMessage(Component.translatable(
-                                        "fireflymc.music.announce", player.getGameProfile().getName(),
-                                        info.title(), info.author()));
-                            }
-                        }
-                    } else {
-                        player.sendSystemMessage(Component.translatable("fireflymc.music.error.queue_full",
-                                MusicQueueManager.MAX_QUEUE_SIZE));
-                    }
-                }
-            });
         });
         return 1;
     }

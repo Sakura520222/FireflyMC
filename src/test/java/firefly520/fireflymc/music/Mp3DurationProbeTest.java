@@ -98,4 +98,22 @@ class Mp3DurationProbeTest {
         long duration = Mp3DurationProbe.probeDurationMs(head, 4_738_291L);
         assertEquals(73665L, duration, 2L);
     }
+
+    @Test
+    void truncatedVbriHeaderDoesNotThrow() {
+        // VBRI 头在探测窗口边缘截断（tag 可读但 frames 字段不完整）：
+        // 不得越界读抛 AIOOBE（会沿 future 异常传播，导致玩家永久 pending），应跳过 VBRI 走 CBR。
+        // 构造：20 字节前导（非 0xFF）+ 帧头(4) + sideInfo(32) → vbriOffset=56，
+        // head 总长 70 = vbriOffset+14：frames 字段在 [70,73] 越界（旧条件 56+14≤70 会进入）
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        out.writeBytes(new byte[20]); // 前导 padding（0x00 不会被误认帧同步）
+        out.writeBytes(FRAME_HEADER);
+        out.writeBytes(new byte[32]);
+        out.writeBytes("VBRI0123456789".getBytes(StandardCharsets.US_ASCII));
+        byte[] head = out.toByteArray();
+        assertEquals(70, head.length);
+        assertTrue(head.length >= 64, "构造必须越过入口长度防御");
+        long duration = Mp3DurationProbe.probeDurationMs(head, 4_738_291L);
+        assertEquals(296143L, duration, 5L, "截断 VBRI 必须安全跳过并回退 CBR 估算");
+    }
 }

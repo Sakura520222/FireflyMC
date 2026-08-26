@@ -22,6 +22,21 @@ public class MusicCache {
 
     public MusicCache(Path cacheDir) {
         this.cacheDir = cacheDir;
+        cleanStaleParts();
+    }
+
+    /**
+     * 清理崩溃/强杀残留的 .part：本实例此刻不可能有播放线程在写
+     * （类初始化链路在首个播放开始前），残留文件无人认领且不计入清理范围，
+     * 反复崩溃会无限累积。
+     */
+    private void cleanStaleParts() {
+        try (Stream<Path> files = Files.list(cacheDir)) {
+            files.filter(p -> p.getFileName().toString().endsWith(".mp3.part"))
+                    .forEach(this::deleteQuietly);
+        } catch (IOException ignored) {
+            // 目录不存在：无需清理
+        }
     }
 
     /** 实际使用的目录（懒创建）：运行目录/music-cache */

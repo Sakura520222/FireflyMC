@@ -21,6 +21,16 @@ class MusicCacheTest {
     }
 
     @Test
+    void constructorCleansStalePartsButKeepsMp3s() throws IOException {
+        // 崩溃/强杀残留的 .part 无人认领：构造（启动）时必须清理；完成的 .mp3 保留
+        Files.write(tempDir.resolve("123456.1.mp3.part"), new byte[10]);
+        Files.write(tempDir.resolve("654321.mp3"), new byte[10]);
+        new MusicCache(tempDir);
+        assertFalse(Files.exists(tempDir.resolve("123456.1.mp3.part")), "残留 .part 必须被清理");
+        assertTrue(Files.exists(tempDir.resolve("654321.mp3")), "已完成缓存不得误删");
+    }
+
+    @Test
     void finalizeAtomicRename() throws IOException {
         MusicCache cache = new MusicCache(tempDir);
         Path part = cache.beginPartFile("123456", 42L);

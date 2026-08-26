@@ -32,8 +32,12 @@ public class MusicQueueManager {
 
     public enum BeginResult { ACCEPTED, LOCKED, PENDING, QUEUE_FULL }
 
-    /** 异步搜索会话（捕获发起时的 epoch） */
-    public record SearchSession(long epoch) {}
+    /**
+     * 异步搜索会话（捕获发起时的 epoch）。
+     * id 为单实例内唯一序号：特权者可在同一代内并发多个在途会话，须按唯一身份认领
+     * （仅凭 epoch 相等会在队列中误删兄弟会话）。
+     */
+    public record SearchSession(long id, long epoch) {}
 
     public interface StartBroadcaster extends Consumer<MusicStartPayload> {}
     public interface StopBroadcaster extends Consumer<MusicStopPayload> {}
@@ -64,11 +68,12 @@ public class MusicQueueManager {
     private final Set<UUID> pendingPlayers = new HashSet<>();
     /** playbackId -> 上报失败的客户端集合（去重） */
     private final Map<Long, Set<UUID>> failedClients = new HashMap<>();
-    /** pending 请求的会话（completeRequest 时校验/移除） */
-    private final Map<UUID, SearchSession> pendingSessions = new HashMap<>();
+    /** 在途搜索会话（特权者可并发多个，按 session 身份认领移除） */
+    private final Map<UUID, ArrayDeque<SearchSession>> pendingSessions = new HashMap<>();
 
     private long queueEpoch = 0L;
     private long nextPlaybackId = 1L; // 恒 > 0；0 保留给协议"无实例"
+    private long nextSessionId = 1L;  // 会话唯一序号（防同代会话值相等误删）
     private QueuedSong currentSong;
     private long currentPlaybackId;
     private long currentStartNano;
@@ -112,8 +117,8 @@ public class MusicQueueManager {
             return BeginResult.QUEUE_FULL;
         }
         pendingPlayers.add(player);
-        latestSession = new SearchSession(queueEpoch);
-        pendingSessions.put(player, latestSession);
+        latestSession = new SearchSession(nextSessionId++, queueEpoch);
+        pendingSessions.computeIfAbsent(player, k -> new ArrayDeque<>()).add(latestSession);
         return BeginResult.ACCEPTED;
     }
 
@@ -127,15 +132,19 @@ public class MusicQueueManager {
     }
 
     /** 虚拟线程搜索成功后，经 server.execute 回到服务端线程调用。
-     *  必须携带发起时捕获的 session（引用相等校验）：/stop 清掉在途请求后同玩家重发新请求时，
-     *  旧回调按 player UUID 取到的是新 session，epoch 校验形同虚设——被取消的歌会死灰复燃，
-     *  且新请求的 pending 被误删导致其结果被丢弃。
+     *  必须携带发起时捕获的 session（按唯一身份认领）：/stop 清掉在途请求后同玩家重发
+     *  新请求时，旧回调不得消费新会话——否则被取消的歌死灰复燃、新请求被误删。
+     *  特权者可同代并发多个在途会话，各自独立认领。
      *  @return true=入队成功；false=丢弃（session 失效/epoch 失效/队列已满） */
     public boolean completeRequest(UUID player, SearchSession session, QueuedSong song) {
-        if (session == null || pendingSessions.get(player) != session) {
-            return false; // 旧会话的迟到回调：丢弃且不动当前 pending
+        ArrayDeque<SearchSession> sessions = pendingSessions.get(player);
+        if (session == null || sessions == null || !sessions.remove(session)) {
+            return false; // 旧会话的迟到回调：丢弃且不动在途会话
         }
-        pendingSessions.remove(player);
+        if (sessions.isEmpty()) {
+            pendingSessions.remove(player);
+        }
+        // 普通玩家单会话此刻已无在途；特权者本就不受 pending 检查，移除无害
         pendingPlayers.remove(player);
         if (session.epoch() != queueEpoch) {
             return false; // stop 期间发起的旧请求，丢弃
@@ -152,13 +161,16 @@ public class MusicQueueManager {
         return true;
     }
 
-    /** 虚拟线程搜索失败后调用：移除 pending，不锁定。同样按 session 归属校验 */
+    /** 虚拟线程搜索失败后调用：移除 pending，不锁定。同样按 session 身份认领 */
     public void failRequest(UUID player, SearchSession session) {
-        if (session == null || pendingSessions.get(player) != session) {
-            return; // 旧会话的迟到失败：不动新请求的 pending
+        ArrayDeque<SearchSession> sessions = pendingSessions.get(player);
+        if (session == null || sessions == null || !sessions.remove(session)) {
+            return; // 旧会话的迟到失败：不动在途会话
         }
-        pendingSessions.remove(player);
-        pendingPlayers.remove(player);
+        if (sessions.isEmpty()) {
+            pendingSessions.remove(player);
+            pendingPlayers.remove(player);
+        }
     }
 
     // ---------- 播放推进 ----------
