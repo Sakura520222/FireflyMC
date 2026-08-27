@@ -10,7 +10,6 @@ import firefly520.fireflymc.client.relay.ipv6.Ipv6ProbeStatus;
 import firefly520.fireflymc.client.relay.p2p.Ipv6AddressCollector;
 import firefly520.fireflymc.client.relay.RelayConfig;
 import firefly520.fireflymc.Config;
-import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.Screen;
@@ -76,14 +75,13 @@ public class SingleplayerRelayControlScreen extends Screen {
         if (mainButton != null) mainButton.setY(footerY + 4);
         if (ipv6TestButton != null) ipv6TestButton.setY(footerY + 28);
         if (doneButton != null) doneButton.setY(footerY + 54);
-        this.headerHeight = headerHeight;
         this.dialogY = dialogY;
         this.dialogHeight = dialogHeight;
         this.viewportTop = dialogY + headerHeight;
         this.viewportBottom = footerY - 6;
     }
 
-    private int headerHeight, dialogY, dialogHeight, viewportTop, viewportBottom;
+    private int dialogY, dialogHeight, viewportTop, viewportBottom;
 
     @Override
     public void tick() {

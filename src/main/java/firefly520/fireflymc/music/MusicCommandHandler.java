@@ -70,6 +70,9 @@ public class MusicCommandHandler {
 
         MusicQueueManager.BeginResult begin = manager.tryBeginRequest(player.getUUID(), privileged);
         switch (begin) {
+            case ACCEPTED -> {
+                // 继续走下方搜索流程
+            }
             case LOCKED -> {
                 source.sendFailure(Component.translatable("fireflymc.music.error.locked"));
                 return 0;

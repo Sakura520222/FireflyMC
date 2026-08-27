@@ -11,13 +11,9 @@ import java.io.Closeable;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
-import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.time.Duration;
 import java.util.Arrays;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -86,17 +82,8 @@ public class MusicPlayer implements Runnable {
             for (int attempt = 1; attempt <= 3 && !cancelled; attempt++) {
                 boolean retryable = false;
                 try {
-                    HttpClient http = HttpClient.newBuilder()
-                            .connectTimeout(Duration.ofSeconds(10))
-                            // ALWAYS：outer url 302 到 http://m*.music.126.net（https→http 降级）
-                            .followRedirects(HttpClient.Redirect.ALWAYS)
-                            .build();
-                    HttpRequest request = HttpRequest.newBuilder(URI.create(MusicApiClient.outerUrl(songId)))
-                            .timeout(Duration.ofSeconds(20))
-                            .header("User-Agent", MusicApiClient.OUTBOUND_UA)
-                            .GET()
-                            .build();
-                    HttpResponse<InputStream> response = http.send(request, HttpResponse.BodyHandlers.ofInputStream());
+                    // openAudioStream：HTTPS 升级优先、http 回退（与时长探测同一路径）
+                    HttpResponse<InputStream> response = MusicApiClient.openAudioStream(songId, null);
                     if (response.statusCode() == 200) {
                         // 闲置看护：头后停滞由 watchdog 关闭流走重试/失败链路（cancel 也经此关闭）
                         httpStream = new StallGuardInputStream(response.body());
@@ -221,8 +208,10 @@ public class MusicPlayer implements Runnable {
         } catch (Exception e) {
             success = false;
             if (!cancelled) {
-                // 看护触发的停滞中断与数据损坏分开上报（协议里的 STREAM_INTERRUPTED）
-                boolean stalled = dataSource instanceof StallGuardInputStream guard && guard.isTripped();
+                // 看护触发的停滞中断与数据损坏分开上报（协议里的 STREAM_INTERRUPTED）。
+                // 注意 guard 在字段 httpStream 里——dataSource 已被 BufferedInputStream 包一层，
+                // instanceof dataSource 恒为 false
+                boolean stalled = httpStream instanceof StallGuardInputStream guard && guard.isTripped();
                 firefly520.fireflymc.FireflyMCMod.LOGGER.warn(
                         "[Music] 解码中断 songId={} stalled={}: {}", songId, stalled, String.valueOf(e));
                 callbacks.onLocalFailure(playbackId,

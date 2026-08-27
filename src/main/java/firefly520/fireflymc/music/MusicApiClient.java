@@ -83,6 +83,76 @@ public final class MusicApiClient {
 
     private MusicApiClient() {}
 
+    /**
+     * 打开歌曲音频流（时长探测与客户端播放共用）：
+     * 先取 outer url 的 302 Location，CDN 地址为明文 http:// 时**优先升级 HTTPS**
+     * 重试（本机实测 m*.music.126.net 的 https 变体返回 206 + 有效 MP3 头）；
+     * HTTPS 不可达再回退原 http Location——可用性优先，但主链路尽量加密。
+     *
+     * @param rangeHeader Range 头值（探测传 "bytes=0-65535" 以拿 206+Content-Range）；播放传 null
+     */
+    public static HttpResponse<InputStream> openAudioStream(String songId, String rangeHeader)
+            throws IOException, InterruptedException {
+        // Step1：NEVER 跟随，拿真实 CDN Location
+        HttpRequest.Builder step1Builder = HttpRequest.newBuilder(URI.create(outerUrl(songId)))
+                .timeout(PROBE_TIMEOUT)
+                .header("User-Agent", OUTBOUND_UA);
+        if (rangeHeader != null) {
+            step1Builder.header("Range", rangeHeader).header("Accept-Encoding", "identity");
+        }
+        HttpResponse<InputStream> step1 = HTTP_REDIRECT_NEVER.send(
+                step1Builder.GET().build(), HttpResponse.BodyHandlers.ofInputStream());
+        try (InputStream body = step1.body()) {
+            String location = step1.headers().firstValue("Location").orElse("");
+            if (step1.statusCode() == 200 && location.isEmpty()) {
+                return openFollowing(outerUrl(songId), rangeHeader); // 无重定向直返（罕见）
+            }
+            if (location.startsWith("https://")) {
+                return openFollowing(location, rangeHeader);
+            }
+            if (location.startsWith("http://")) {
+                // Step2：尝试同地址的 https 变体
+                try {
+                    HttpResponse<InputStream> upgraded = HTTP.send(
+                            buildAudioGet("https://" + location.substring("http://".length()), rangeHeader),
+                            HttpResponse.BodyHandlers.ofInputStream());
+                    if (upgraded.statusCode() == 200 || upgraded.statusCode() == 206) {
+                        return upgraded;
+                    }
+                    closeQuietly(upgraded.body());
+                } catch (IOException e) {
+                    firefly520.fireflymc.FireflyMCMod.LOGGER.debug(
+                            "[Music] CDN HTTPS 升级失败，回退 http: {}", String.valueOf(e));
+                }
+                // Step3：HTTPS 不可达 → 回退原 http 地址
+                return openFollowing(location, rangeHeader);
+            }
+            throw new IOException("外链返回异常状态 " + step1.statusCode());
+        }
+    }
+
+    private static HttpRequest buildAudioGet(String url, String rangeHeader) {
+        HttpRequest.Builder b = HttpRequest.newBuilder(URI.create(url))
+                .timeout(SEARCH_TIMEOUT)
+                .header("User-Agent", OUTBOUND_UA);
+        if (rangeHeader != null) {
+            b.header("Range", rangeHeader).header("Accept-Encoding", "identity");
+        }
+        return b.GET().build();
+    }
+
+    /** NEVER 客户端：只用于解析 outer url 的 302 */
+    private static final HttpClient HTTP_REDIRECT_NEVER = HttpClient.newBuilder()
+            .connectTimeout(CONNECT_TIMEOUT)
+            .followRedirects(HttpClient.Redirect.NEVER)
+            .build();
+
+    /** 跟随给定地址的重定向打开流（内部可能有 CDN 域内跳转） */
+    private static HttpResponse<InputStream> openFollowing(String location, String rangeHeader)
+            throws IOException, InterruptedException {
+        return HTTP.send(buildAudioGet(location, rangeHeader), HttpResponse.BodyHandlers.ofInputStream());
+    }
+
     /** body 读取共享 watchdog（播放线程的流式闲置看护同样复用此调度器） */
     public static java.util.concurrent.ScheduledExecutorService readWatchdog() {
         return READ_WATCHDOG;
@@ -251,15 +321,8 @@ public final class MusicApiClient {
         }
         return CompletableFuture.supplyAsync(() -> {
             for (int attempt = 1; attempt <= 3; attempt++) {
-                HttpRequest request = HttpRequest.newBuilder(URI.create(outerUrl(songId)))
-                        .timeout(PROBE_TIMEOUT)
-                        .header("User-Agent", OUTBOUND_UA)
-                        .header("Range", "bytes=0-" + (PROBE_HEAD_BYTES - 1))
-                        .header("Accept-Encoding", "identity") // 字节长度语义不被内容编码干扰
-                        .GET()
-                        .build();
                 try {
-                    HttpResponse<InputStream> response = HTTP.send(request, HttpResponse.BodyHandlers.ofInputStream());
+                    HttpResponse<InputStream> response = openAudioStream(songId, "bytes=0-" + (PROBE_HEAD_BYTES - 1));
                     java.util.concurrent.ScheduledFuture<?> watchdog = READ_WATCHDOG.schedule(
                             () -> closeQuietly(response.body()),
                             PROBE_TIMEOUT.toMillis() + 1_000L, java.util.concurrent.TimeUnit.MILLISECONDS);

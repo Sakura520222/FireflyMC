@@ -5,6 +5,7 @@ import firefly520.fireflymc.music.MusicApiClient;
 import java.io.FilterInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 
@@ -23,21 +24,33 @@ public class StallGuardInputStream extends FilterInputStream {
 
     private volatile boolean tripped = false;
     private volatile ScheduledFuture<?> pending;
+    /** 构造时固定：read() 每次重排沿用同一调度器与超时（注入测试才可确定性驱动） */
+    private final ScheduledExecutorService scheduler;
+    private final long stallTimeoutMs;
 
     public StallGuardInputStream(InputStream in) {
+        this(in, MusicApiClient.readWatchdog(), STALL_TIMEOUT_MS);
+    }
+
+    /** 测试可注入：自定义调度器与（短）超时，确定性驱动到期场景 */
+    StallGuardInputStream(InputStream in, ScheduledExecutorService scheduler, long stallTimeoutMs) {
         super(in);
+        this.scheduler = scheduler;
+        this.stallTimeoutMs = stallTimeoutMs;
         arm();
     }
 
     private void arm() {
         cancel();
-        pending = MusicApiClient.readWatchdog().schedule(() -> {
-            tripped = true;
-            try {
-                in.close(); // 解除阻塞在底层 socket read 上的解码线程
-            } catch (IOException ignored) {
-            }
-        }, STALL_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+        pending = scheduler.schedule(this::onStall, stallTimeoutMs, TimeUnit.MILLISECONDS);
+    }
+
+    private void onStall() {
+        tripped = true;
+        try {
+            in.close(); // 解除阻塞在底层 socket read 上的解码线程
+        } catch (IOException ignored) {
+        }
     }
 
     private void cancel() {
