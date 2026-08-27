@@ -53,16 +53,24 @@ public final class MusicServerBridge {
                         return n;
                     }
                 },
-                song -> {
-                    // FAILED 终态：告知点歌者（可能为付费歌曲导致直链不可播）
+                (song, code) -> {
+                    // FAILED 终态：按失败性质提示。quorum 只收音源型码（Issue #64 修复），
+                    // 走到这里的失败必然是歌本身不可播，文案不再误伤网络型场景
                     MinecraftServer s = server;
                     if (s == null) {
                         return;
                     }
+                    // 日志增强：失败聚合结果（code/songId/点歌者）
+                    firefly520.fireflymc.FireflyMCMod.LOGGER.info(
+                            "[Music] 播放失败终态 songId={} title={} code={} requester={}",
+                            song.songId(), song.title(), code, song.requesterName());
+                    String key = code == MusicPlaybackFailedPayload.FailureCode.MP3_DECODE_FAILED
+                            ? "fireflymc.music.error.playback_decode_failed"
+                            : "fireflymc.music.error.playback_failed";
                     ServerPlayer requester = s.getPlayerList().getPlayer(song.requesterId());
                     if (requester != null) {
                         requester.sendSystemMessage(net.minecraft.network.chat.Component.translatable(
-                                "fireflymc.music.error.playback_failed", song.title(), song.author()));
+                                key, song.title(), song.author()));
                     }
                 });
         INSTANCE.set(manager);
@@ -122,6 +130,10 @@ public final class MusicServerBridge {
     public static void onClientFailure(ServerPlayer reporter, MusicPlaybackFailedPayload payload) {
         MusicQueueManager m = manager();
         if (m != null) {
+            // 日志增强（报告 #7）：上报明细（reporter/playbackId/failureCode）
+            firefly520.fireflymc.FireflyMCMod.LOGGER.info(
+                    "[Music] 失败上报 client={} playbackId={} code={}",
+                    reporter.getGameProfile().getName(), payload.playbackId(), payload.failureCode());
             m.onClientFailure(reporter.getUUID(), payload.playbackId(), payload.failureCode());
         }
     }

@@ -155,6 +155,8 @@
   "fireflymc.music.error.keyword_too_long": "§c歌名过长（上限 256 字符）",
   "fireflymc.music.error.player_only": "§c只有玩家可以点歌",
   "fireflymc.music.error.playback_failed": "§c《%s》- %s 无法播放，已自动跳过（可能为付费歌曲）",
+  "fireflymc.music.error.playback_decode_failed": "§c《%s》- %s 音频数据异常，已自动跳过",
+  "fireflymc.music.hud.recovering": "§7网络波动，正在重新连接音乐流…",
   "fireflymc.options.music_request_volume": "点歌音乐",
   "fireflymc.configuration.music_settings": "点歌音乐",
   "fireflymc.configuration.music_settings.button": "点歌音乐",

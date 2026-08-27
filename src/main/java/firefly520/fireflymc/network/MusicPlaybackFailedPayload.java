@@ -12,9 +12,18 @@ import net.minecraft.resources.ResourceLocation;
  */
 public record MusicPlaybackFailedPayload(long playbackId, FailureCode failureCode) implements CustomPacketPayload {
 
-    /** 受限枚举：不接受客户端任意字符串。本地降级（无设备/缓存失败）不在此列，不上报 */
+    /** 受限枚举：不接受客户端任意字符串。本地降级（无设备/缓存失败）不在此列，不上报。
+     *  NETWORK/STREAM 属网络型失败（客户端局部网络问题，服务端 quorum 忽略）；
+     *  PERMANENT/DECODE 属音源型失败（音源本身不可播，参与 quorum）。 */
     public enum FailureCode {
-        HTTP_FAILED, SOURCE_UNAVAILABLE, STREAM_INTERRUPTED, MP3_DECODE_FAILED
+        /** 瞬态网络失败（连接超时/IOException/408/429/5xx/403 等重试耗尽） */
+        NETWORK_FAILED,
+        /** 播放中断流（StallGuard 停滞、中途 read 异常） */
+        STREAM_INTERRUPTED,
+        /** 确定性不可播（404/410：付费、下架） */
+        HTTP_PERMANENT_FAILED,
+        /** MP3 数据解码失败（响应非音频内容） */
+        MP3_DECODE_FAILED
     }
 
     public static final CustomPacketPayload.Type<MusicPlaybackFailedPayload> TYPE =

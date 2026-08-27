@@ -155,6 +155,8 @@
   "fireflymc.music.error.keyword_too_long": "§cKeyword too long (max 256 chars)",
   "fireflymc.music.error.player_only": "§cOnly players can request songs",
   "fireflymc.music.error.playback_failed": "§c\"%s\" - %s is not playable, skipped automatically (likely a paid song)",
+  "fireflymc.music.error.playback_decode_failed": "§c\"%s\" - %s has malformed audio data, skipped automatically",
+  "fireflymc.music.hud.recovering": "§7Network hiccup, reconnecting music stream…",
   "fireflymc.options.music_request_volume": "Requested Music",
   "fireflymc.configuration.music_settings": "Requested Music",
   "fireflymc.configuration.music_settings.button": "Requested Music",

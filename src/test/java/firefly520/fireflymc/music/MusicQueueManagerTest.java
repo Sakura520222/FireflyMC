@@ -310,8 +310,8 @@ class MusicQueueManagerTest {
                         return online.size() - 1; // 3-1=2
                     }
                 });
-        spyCaps.onClientFailure(c1, playbackId, MusicPlaybackFailedPayload.FailureCode.HTTP_FAILED); // 登出者迟到记录
-        spyCaps.onClientFailure(c2, playbackId, MusicPlaybackFailedPayload.FailureCode.HTTP_FAILED);
+        spyCaps.onClientFailure(c1, playbackId, MusicPlaybackFailedPayload.FailureCode.HTTP_PERMANENT_FAILED); // 登出者迟到记录
+        spyCaps.onClientFailure(c2, playbackId, MusicPlaybackFailedPayload.FailureCode.HTTP_PERMANENT_FAILED);
         clock.advanceMs(600_000L + 2_000L);
         spyCaps.tick();
         // 只有 0 条 failed FINISHED 判定？c2 的上报在 spyCaps 里走 quorum：
@@ -372,8 +372,8 @@ class MusicQueueManagerTest {
         assertTrue(request(requester, true, song("Q", requester, 60_000L)));
         long playbackId = rec.starts.get(0).playbackId();
 
-        // 单客户端失败（1/3 < 50%）→ 不切歌
-        m.onClientFailure(c1, playbackId, MusicPlaybackFailedPayload.FailureCode.HTTP_FAILED);
+        // 单客户端确定性失败（1/3 < 50%）→ 不切歌
+        m.onClientFailure(c1, playbackId, MusicPlaybackFailedPayload.FailureCode.HTTP_PERMANENT_FAILED);
         clock.advanceMs(60_000L + 2_000L);
         m.tick();
         assertEquals(1, rec.stops.size());
@@ -382,14 +382,68 @@ class MusicQueueManagerTest {
         // 重新来一轮：2/3 ≥ 50% → 提前 FAILED
         assertTrue(request(requester, true, song("Q2", requester, 60_000L)));
         long id2 = rec.starts.get(1).playbackId();
-        m.onClientFailure(c1, id2, MusicPlaybackFailedPayload.FailureCode.HTTP_FAILED);
-        m.onClientFailure(c1, id2, MusicPlaybackFailedPayload.FailureCode.HTTP_FAILED); // 同玩家重复上报去重
+        m.onClientFailure(c1, id2, MusicPlaybackFailedPayload.FailureCode.HTTP_PERMANENT_FAILED);
+        m.onClientFailure(c1, id2, MusicPlaybackFailedPayload.FailureCode.HTTP_PERMANENT_FAILED); // 同玩家重复上报去重
         m.onClientFailure(c2, id2, MusicPlaybackFailedPayload.FailureCode.MP3_DECODE_FAILED);
         assertEquals(2, rec.stops.size());
         assertEquals(MusicStopPayload.Reason.FAILED, rec.stops.get(1).reason(), "2/3 达 quorum 提前 FAILED");
         // 旧 playbackId 迟到上报不误伤（不应有第三条 stop）
-        m.onClientFailure(c1, playbackId, MusicPlaybackFailedPayload.FailureCode.HTTP_FAILED);
+        m.onClientFailure(c1, playbackId, MusicPlaybackFailedPayload.FailureCode.HTTP_PERMANENT_FAILED);
         assertEquals(2, rec.stops.size());
+    }
+
+    @Test
+    void networkFailuresNeverTriggerQuorum() {
+        // Issue #64：瞬断/瞬态网络失败是客户端局部问题，全员上报也不得杀歌
+        UUID c1 = UUID.randomUUID();
+        UUID c2 = UUID.randomUUID();
+        UUID c3 = UUID.randomUUID();
+        UUID requester = UUID.randomUUID();
+        assertTrue(request(requester, true, song("Q", requester, 600_000L)));
+        long playbackId = rec.starts.get(0).playbackId();
+        // 3/3 全员 STREAM_INTERRUPTED → 不切歌
+        m.onClientFailure(c1, playbackId, MusicPlaybackFailedPayload.FailureCode.STREAM_INTERRUPTED);
+        m.onClientFailure(c2, playbackId, MusicPlaybackFailedPayload.FailureCode.STREAM_INTERRUPTED);
+        m.onClientFailure(c3, playbackId, MusicPlaybackFailedPayload.FailureCode.STREAM_INTERRUPTED);
+        // 3/3 全员 NETWORK_FAILED → 仍不切歌
+        m.onClientFailure(c1, playbackId, MusicPlaybackFailedPayload.FailureCode.NETWORK_FAILED);
+        m.onClientFailure(c2, playbackId, MusicPlaybackFailedPayload.FailureCode.NETWORK_FAILED);
+        m.onClientFailure(c3, playbackId, MusicPlaybackFailedPayload.FailureCode.NETWORK_FAILED);
+        assertEquals(0, rec.stops.size(), "网络型失败永不触发全局跳歌");
+    }
+
+    @Test
+    void singlePlayerNetworkFailureDoesNotSkip() {
+        // Issue #64 核心症状：单人世界一次瞬断不得立即 FAILED
+        Recorder soloRec = new Recorder();
+        MusicQueueManager solo = new MusicQueueManager(
+                clock.supplier,
+                soloRec.starts::add,
+                soloRec.stops::add,
+                soloRec.syncs::add,
+                new MusicQueueManager.CapabilityLookup() {
+                    @Override
+                    public boolean isCapable(UUID player) {
+                        return true;
+                    }
+
+                    @Override
+                    public int capableOnlineCount() {
+                        return 1;
+                    }
+                });
+        UUID a = UUID.randomUUID();
+        assertEquals(MusicQueueManager.BeginResult.ACCEPTED, solo.tryBeginRequest(a, false));
+        assertTrue(solo.completeRequest(a, solo.latestSession(), song("独奏", a, 600_000L)));
+        long playbackId = soloRec.starts.get(0).playbackId();
+        // 唯一客户端网络型失败 → 不切歌
+        solo.onClientFailure(a, playbackId, MusicPlaybackFailedPayload.FailureCode.STREAM_INTERRUPTED);
+        solo.onClientFailure(a, playbackId, MusicPlaybackFailedPayload.FailureCode.NETWORK_FAILED);
+        assertEquals(0, soloRec.stops.size(), "单人网络型失败不得跳歌");
+        // 确定性失败（音源不可播）→ 仍立即 FAILED（歌没人听得见，早切早好）
+        solo.onClientFailure(a, playbackId, MusicPlaybackFailedPayload.FailureCode.MP3_DECODE_FAILED);
+        assertEquals(1, soloRec.stops.size());
+        assertEquals(MusicStopPayload.Reason.FAILED, soloRec.stops.get(0).reason());
     }
 
     @Test
