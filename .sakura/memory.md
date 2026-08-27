@@ -2,7 +2,7 @@
 
 ## 仓库信息
 - 仓库名: Sakura520222/FireflyMC
-- 累计反思次数: 31
+- 累计反思次数: 5
 
 ## 代码问题与审查要点
 
@@ -46,7 +46,25 @@
 客户端接收 Payload 数值字段须做范围校验，超限拒绝或截断。
 
 ### 渲染器审查清单
-新增渲染器必须检查：渲染阶段、PoseStack push/pop 配对、RenderSystem 状态恢复、距离裁剪、与原实现功能对等。`RenderLevelStageEvent` 失去引擎原生视锥体剔除，必须重新实现裁剪。
+新增渲染器必须检查：渲染阶段、PoseStack push/pop 配对（用 try/finally 包裹）、RenderSystem 状态恢复、距离裁剪、与原实现功能对等。`RenderLevelStageEvent` 失去引擎原生视锥体剔除，必须重新实现裁剪。
+
+### 网络包枚举安全
+所有自定义 Payload 使用 `values()[ordinal]` 时必须使用 `EnumUtil.fromOrdinal` 边界检查，避免 `ArrayIndexOutOfBoundsException`。
+
+### Payload 数据一致性
+当 Payload 的 Codec 容量大于业务逻辑限制时，必须在数据出口处（构造 Payload 前）截断，不仅依赖入口校验。
+
+### 缓存写入成功判定
+引入 `CacheWriteResult`（SUCCESS/INCOMPLETE/FAILED），仅在流读取至 EOF 且校验通过后标记 SUCCESS，异常路径须显式置 false。
+
+### 登录全量同步协议
+玩家登录/重连必须发送完整状态快照，单点同步会导致 UI 长期不一致。
+
+### 虚拟线程使用约束
+虚拟线程仅适用于阻塞 IO，绝不能绕过主线程操作游戏状态或发送数据包。Handler/Callback 中禁止无限制启动虚拟线程。
+
+### 异常日志统一记录
+`catch (Throwable e)` 必须统一记录 `log.error("...", e)`，禁止空 catch 或仅调用失败方法。
 
 ## 近期审查模式总结
 
@@ -85,6 +103,18 @@
 | 配置变更逐项审查 | 默认值、边界值、热更新 |
 | 网络包客户端防御校验 | Payload数值字段须做范围校验 |
 | Javadoc 约束违反 | 字段 Javadoc 声明行为被违反时至少 major |
+| 网络包主线程强制化 | 所有 `PacketDistributor.sendToServer()` 必须包裹在主线程执行 |
+| CompletableFuture 超时强制 | 所有 `join()` 必须配套 `orTimeout` 或 `get(timeout, unit)` |
+| HTTPS 禁止 HTTP 重定向 | 必须设置 `Redirect.NEVER` 或校验最终 URI scheme |
+| Payload 枚举安全校验 | 使用 `EnumUtil.fromOrdinal` 防止越界 |
+| 缓存写入成功判定 | 使用 Result 类型，确保 EOF 且校验通过后才标记成功 |
+| 登录全量同步协议 | 玩家登录必须发送完整状态快照 |
+| 虚拟线程资源控制 | Handler/Callback 中禁止无限制启动虚拟线程 |
+| 渲染器状态恢复 | `push` 必须配对 `pop` 且用 `try/finally` 包裹 |
+| 配置可见性 | 多线程读取的配置字段必须 `volatile` |
+| 事件注册统一管理 | 所有事件注册必须在 `ModEventBusSubscriber` 中统一管理 |
+| 热更新验证 | 配置项必须验证运行时热更新回调是否实现 |
+| 文件层级安全审计 | 涉及 I/O 必须校验路径合法性、异常捕获与日志脱敏 |
 
 ## 高频问题模块
 
