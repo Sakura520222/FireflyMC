@@ -24,17 +24,21 @@ Java 21 · Gradle · NeoForge 21.1.241 · Java HttpClient(WS) · UDP P2P · Gson
 - **AgenticToolLoop**: tool_calls截断后历史未同步致API拒绝
 
 ### 音乐与网络
-- **HTTPS→HTTP**: `HttpClient.Redirect.ALWAYS`未修复，明文下载风险持续
+- **HTTPS→HTTP**: `HttpClient.Redirect.ALWAYS`未修复，明文下载风险持续；多入口未统一整改
 - **join()缺超时**: 时长探测等异步阻塞未配 `orTimeout`，pending泄漏
 - **Payload枚举越界**: 多处 `values()[ordinal]` 缺边界检查
 - **资源清理**: `JavaSoundOutput`、`HttpClient`、`.part`文件异常路径未统一关闭
-- **日志脱敏**: 歌名/昵称等用户可编辑字段未统一脱敏
+- **日志脱敏**: 歌名/昵称等用户可编辑字段未统一脱敏；新代码仍有未脱敏日志点
+- **缓存完整性**: 半截缓存落盘被当作完整缓存；`finalizePartFile`前未校验长度/校验和
+- **枚举序列化**: `FailureCode.ordinal()` 直接用于网络传输，兼容性风险
+- **异常分支空实现**: `reportFinal` 对 `RETRY` 分支未记录日志/上报/清理
 
 ### 设计缺陷
-- **AI Tool安全**: 缺参数校验框架，破坏性操作无额外安全层
+- **AI Tool安全**: 缺参数校验框架，破坏性操作无额外安全层；图片多模态需隐私默认关闭与日志脱敏
 - **上帝类**: `RelayLobbyMessage`职责过多
 - **密码安全**: 纯数字+SHA-256弱哈希
 - **配置可见性**: 多线程读取 `Config` 缺 `volatile`
+- **文档-代码一致性**: `requestVolume` 所属文件未标注；`queue` 指令可能刷屏无分页
 
 ## 审查规则
 | 规则 | 级别 |
@@ -88,5 +92,5 @@ Java 21 · Gradle · NeoForge 21.1.241 · Java HttpClient(WS) · UDP P2P · Gson
 
 ## 仓库信息
 - 仓库名: Sakura520222/FireflyMC
-- 语言统计: Java: 573458
-- 累计反思次数: 41
+- 语言统计: Java: 884925
+- 累计反思次数: 10
