@@ -5,6 +5,8 @@ FireflyMC 是一个面向 FireflyMC 服务器生态的 Minecraft 模组，基于
 当前版本：`3.0.1`  
 Mod ID：`fireflymc`
 
+[FireflyMC官网](https://mc.firefly520.top)
+
 ## 功能特性
 
 - **游戏内点歌**：`/点歌 <歌名>` 从网易云音乐检索歌曲，全服同步收听；HUD 显示曲名、进度条、实时歌词与排队列表，支持单人世界、LAN 联机与专用服务器。
