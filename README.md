@@ -7,6 +7,7 @@ Mod ID：`fireflymc`
 
 ## 功能特性
 
+- **游戏内点歌**：`/点歌 <歌名>` 从网易云音乐检索歌曲，全服同步收听；HUD 显示曲名、进度条、实时歌词与排队列表，支持单人世界、LAN 联机与专用服务器。
 - **服务器信息 HUD**：在游戏内显示服务器名称、在线人数与官网链接。
 - **入服规则确认**：玩家加入多人服务器时显示服务器规则弹窗，并在确认前提供临时保护。
 - **客户端安装校验**：多人服务器可检测玩家是否安装 FireflyMC 客户端模组。
@@ -17,6 +18,14 @@ Mod ID：`fireflymc`
 - **在线时长限制**：专用服务器可限制每日/连续在线时长，并提供管理命令。
 - **单人世界公开联机/中继准备**：客户端包含单人世界 LAN 桥接、中继大厅与 P2P UDP 隧道相关功能。
 - **更新检查**：客户端主菜单可检测模组更新。
+
+### 点歌系统细节
+
+- **队列规则**：普通玩家最多同时 3 首自点歌曲（播完/被跳过/播放失败即释放额度）；单人世界本人、LAN 房主与 OP（权限等级 2）不受限；全队列为系统硬上限 50 首。
+- **同步播放**：服务端权威计时切歌，所有玩家（含中途加入者）自动跟上当前曲目；各客户端独立下载音频并本地缓存（`music-cache/`，256MB 近似 LRU）。
+- **独立音量**：原版“音乐和声音选项”中新增“点歌音乐”滑块（默认 30%），实际音量 = 主音量 × 点歌音乐，不受原版“音乐”分类影响，拖动即时生效。
+- **搜索降级**：默认由服务端执行搜索；若服务端无法访问外网，自动改由点歌者的客户端代为搜索并将结果回传服务端（回包经 token 防伪造校验）。
+- **技术说明**：MP3 解码使用内嵌的 JLayer 1.0.1（LGPL，见 `NOTICE.md` 与 jar 内 `licenses/`）；付费/VIP 歌曲因版权限制无法点播。
 
 ## 运行环境
 
@@ -55,8 +64,24 @@ Mod ID：`fireflymc`
 - `singleplayer_relay.enabled`：是否启用单人世界公开联机提示与中继准备功能。
 - `event_notification.enabled`：是否启用客户端事件通知 WebSocket。
 - `event_notification.webSocketUrl`：客户端事件通知 WebSocket 服务端地址。
+- `music_settings.requestVolume`：点歌音乐独立音量（0.0 ~ 1.0，默认 0.3，与主音量相乘）。
 
 ## 游戏内命令
+
+### 点歌
+
+```text
+/点歌 <歌名>
+/fireflymc music request <歌名>
+/fireflymc music queue
+/fireflymc music skip
+/fireflymc music stop
+```
+
+- `/点歌 <歌名>`（或 `/fireflymc music request`）：搜索并点播歌曲，点歌成功后全服播报。
+- `/fireflymc music queue`：查看当前播放曲目与完整排队列表。
+- `/fireflymc music skip`：跳过当前歌曲。需要单人世界本人、LAN 房主或 OP 2。
+- `/fireflymc music stop`：停止播放并清空整个队列（含正在搜索中的请求）。权限同上。
 
 ### AI 聊天
 
@@ -143,3 +168,5 @@ build/libs/
 ## 许可证
 
 本项目为 **All Rights Reserved**。
+
+第三方组件：点歌系统的 MP3 解码使用 [JLayer 1.0.1](https://repo1.maven.org/maven2/javazoom/jlayer/1.0.1/)（LGPL-2.1），以未修改的嵌套 JAR 形式随本模组分发，详见 `NOTICE.md` 与发布 JAR 内的 `licenses/jlayer-LGPL-2.1.txt`。
