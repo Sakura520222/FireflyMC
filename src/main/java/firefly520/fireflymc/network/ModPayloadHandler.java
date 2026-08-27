@@ -135,4 +135,15 @@ public class ModPayloadHandler {
             }
         });
     }
+
+    /**
+     * 服务端处理客户端代搜索回包（回到主线程后交给 MusicServerBridge 认领会话）
+     */
+    public static void handleMusicSearchResult(MusicSearchResultPayload payload, IPayloadContext context) {
+        context.enqueueWork(() -> {
+            if (context.player() instanceof ServerPlayer serverPlayer) {
+                firefly520.fireflymc.music.MusicServerBridge.onClientSearchResult(serverPlayer, payload);
+            }
+        });
+    }
 }

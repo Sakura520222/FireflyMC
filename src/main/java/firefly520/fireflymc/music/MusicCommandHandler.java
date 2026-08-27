@@ -2,6 +2,8 @@ package firefly520.fireflymc.music;
 
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.arguments.StringArgumentType;
+import firefly520.fireflymc.network.ModPayloadHandler;
+import firefly520.fireflymc.network.MusicProxySearchRequestPayload;
 import firefly520.fireflymc.network.MusicQueueSyncPayload;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
@@ -11,6 +13,7 @@ import net.minecraft.server.level.ServerPlayer;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.neoforge.event.RegisterCommandsEvent;
+import net.neoforged.neoforge.network.PacketDistributor;
 
 import java.util.List;
 
@@ -90,14 +93,17 @@ public class MusicCommandHandler {
         // 让玩家永久 pending——failRequest 释放额度后返回错误提示。
         Thread.ofVirtual().name("fireflymc-music-search").start(() -> {
             try {
-                MusicApiClient.SongInfo found;
+                MusicApiClient.SongInfo info = null;
+                boolean serverSearchFailed = false;
                 try {
-                    found = MusicApiClient.search(keyword).join();
+                    info = MusicApiClient.search(keyword).join();
                 } catch (Exception e) {
-                    found = null;
+                    // 与"未找到"区分：网络故障才触发客户端代搜索降级
+                    serverSearchFailed = true;
+                    firefly520.fireflymc.FireflyMCMod.LOGGER.warn(
+                            "[Music] 服务端搜索失败，降级为客户端代搜索 keyword={}: {}", keyword, String.valueOf(e));
                 }
-                final MusicApiClient.SongInfo info = found;
-                if (info == null) {
+                if (info == null && !serverSearchFailed) {
                     server.execute(() -> {
                         manager.failRequest(player.getUUID(), session);
                         if (!player.hasDisconnected()) {
@@ -106,6 +112,14 @@ public class MusicCommandHandler {
                     });
                     return;
                 }
+                if (info == null) {
+                    // 服务端无法访问外网：委托点歌者客户端代搜索（session 保持 pending，
+                    // 玩家中途退出/回包丢失由 pending 硬超时兜底释放）
+                    final MusicQueueManager fManager = manager;
+                    server.execute(() -> beginClientProxySearch(player, fManager, session, keyword));
+                    return;
+                }
+                final MusicApiClient.SongInfo fInfo = info;
                 long durationMs;
                 try {
                     durationMs = MusicApiClient.probeDurationMs(info.songId()).join();
@@ -115,34 +129,53 @@ public class MusicCommandHandler {
                             "[Music] 时长探测异常 songId={}，使用 fallback: {}", info.songId(), String.valueOf(e));
                     durationMs = Mp3DurationProbe.FALLBACK_DURATION_MS;
                 }
-                QueuedSong song = new QueuedSong(info.songId(), info.title(), info.author(),
-                        info.lrc(), player.getGameProfile().getName(), player.getUUID(), durationMs);
-                server.execute(() -> {
-                    boolean accepted = manager.completeRequest(player.getUUID(), session, song);
-                    if (!player.hasDisconnected()) {
-                        if (accepted) {
-                            player.sendSystemMessage(Component.translatable(
-                                    "fireflymc.music.queued", info.title(), info.author()));
-                            // 全服播报
-                            for (ServerPlayer p : server.getPlayerList().getPlayers()) {
-                                if (p != player) {
-                                    p.sendSystemMessage(Component.translatable(
-                                            "fireflymc.music.announce", player.getGameProfile().getName(),
-                                            info.title(), info.author()));
-                                }
-                            }
-                        } else {
-                            player.sendSystemMessage(Component.translatable("fireflymc.music.error.queue_full",
-                                    MusicQueueManager.MAX_QUEUE_SIZE));
-                        }
-                    }
-                });
+                QueuedSong song = new QueuedSong(fInfo.songId(), fInfo.title(), fInfo.author(),
+                        fInfo.lrc(), player.getGameProfile().getName(), player.getUUID(), durationMs);
+                server.execute(() -> finishRequest(player, server, manager, session,
+                        manager.completeRequest(player.getUUID(), session, song), fInfo.title(), fInfo.author()));
             } catch (Throwable t) {
                 firefly520.fireflymc.FireflyMCMod.LOGGER.error("[Music] 点歌流程未预期异常 keyword={}", keyword, t);
                 server.execute(() -> manager.failRequest(player.getUUID(), session));
             }
         });
         return 1;
+    }
+
+    /** 服务端搜索失败 → 定向委托点歌者的客户端代搜索（须是音乐能力客户端） */
+    private static void beginClientProxySearch(ServerPlayer player, MusicQueueManager manager,
+                                               MusicQueueManager.SearchSession session, String keyword) {
+        if (!ModPayloadHandler.MUSIC_CAPABLE_PLAYERS.containsKey(player.getUUID())) {
+            player.sendSystemMessage(Component.translatable("fireflymc.music.error.search_failed", keyword));
+            manager.failRequest(player.getUUID(), session);
+            return;
+        }
+        PacketDistributor.sendToPlayer(player,
+                new MusicProxySearchRequestPayload(session.id(), keyword));
+    }
+
+    /**
+     * 点歌请求终点（服务端搜索与客户端代搜索共用）：成功则入队播报，失败释放额度并提示。
+     */
+    static void finishRequest(ServerPlayer player, MinecraftServer server, MusicQueueManager manager,
+                              MusicQueueManager.SearchSession session, boolean accepted,
+                              String title, String author) {
+        if (!player.hasDisconnected()) {
+            if (accepted) {
+                player.sendSystemMessage(Component.translatable(
+                        "fireflymc.music.queued", title, author));
+                // 全服播报
+                for (ServerPlayer p : server.getPlayerList().getPlayers()) {
+                    if (p != player) {
+                        p.sendSystemMessage(Component.translatable(
+                                "fireflymc.music.announce", player.getGameProfile().getName(),
+                                title, author));
+                    }
+                }
+            } else {
+                player.sendSystemMessage(Component.translatable("fireflymc.music.error.queue_full",
+                        MusicQueueManager.MAX_QUEUE_SIZE));
+            }
+        }
     }
 
     /** /fireflymc music queue：聊天栏输出当前曲+完整队列 */

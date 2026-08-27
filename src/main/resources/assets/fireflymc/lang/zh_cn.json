@@ -159,6 +159,7 @@
   "fireflymc.music.error.pending": "§c正在处理你的上一个点歌请求，请稍等",
   "fireflymc.music.error.queue_full": "§c点歌队列已满（%d），请稍后再试",
   "fireflymc.music.error.not_found": "§c没有找到《%s》相关的可播放歌曲（付费歌曲无法点播）",
+  "fireflymc.music.error.search_failed": "§c搜索服务暂时不可用，《%s》点歌失败，请稍后再试",
   "fireflymc.music.error.no_permission": "§c你没有权限执行此操作",
   "fireflymc.music.error.keyword_too_long": "§c歌名过长（上限 256 字符）",
   "fireflymc.music.error.player_only": "§c只有玩家可以点歌",

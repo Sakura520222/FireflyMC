@@ -25,6 +25,9 @@ public class MusicQueueManager {
     public static final int MAX_QUEUE_SIZE = 50;
     /** 普通玩家同时在系统内（播放中 + 排队中）的自点歌曲上限 */
     public static final int PLAYER_SONG_LIMIT = 3;
+    /** pending 请求硬超时：服务端搜索有 watchdog 兜底（≈28s 上界），客户端代搜索路径
+     *  的回包在玩家中途退出时会丢失——到期强制释放，防永久 pending 占额 */
+    private static final long PENDING_TIMEOUT_NS = 90_000L * 1_000_000L;
     /** 权威切歌容差 */
     private static final long END_TOLERANCE_MS = 2_000L;
     /** FAILED quorum：失败客户端 ≥ 分母的此比例且 ≥ 2 个（分母 ≤ 1 时单失败即触发） */
@@ -32,12 +35,13 @@ public class MusicQueueManager {
 
     public enum BeginResult { ACCEPTED, LOCKED, PENDING, QUEUE_FULL }
 
-    /**
-     * 异步搜索会话（捕获发起时的 epoch）。
+        /**
+     * 异步搜索会话（捕获发起时的 epoch 与硬超时时刻）。
      * id 为单实例内唯一序号：特权者可在同一代内并发多个在途会话，须按唯一身份认领
-     * （仅凭 epoch 相等会在队列中误删兄弟会话）。
+     * （仅凭 epoch 相等会在队列中误删兄弟会话）；deadline 用于玩家中途退出等
+     * 回包丢失场景的兜底释放。
      */
-    public record SearchSession(long id, long epoch) {}
+    public record SearchSession(long id, long epoch, long deadlineNs) {}
 
     public interface StartBroadcaster extends Consumer<MusicStartPayload> {}
     public interface StopBroadcaster extends Consumer<MusicStopPayload> {}
@@ -68,7 +72,7 @@ public class MusicQueueManager {
     private final Set<UUID> pendingPlayers = new HashSet<>();
     /** playbackId -> 上报失败的客户端集合（去重） */
     private final Map<Long, Set<UUID>> failedClients = new HashMap<>();
-    /** 在途搜索会话（特权者可并发多个，按 session 身份认领移除） */
+    /** 在途搜索会话（特权者可并发多个，按 session 身份认领移除；各自带硬超时） */
     private final Map<UUID, ArrayDeque<SearchSession>> pendingSessions = new HashMap<>();
 
     private long queueEpoch = 0L;
@@ -117,7 +121,7 @@ public class MusicQueueManager {
             return BeginResult.QUEUE_FULL;
         }
         pendingPlayers.add(player);
-        latestSession = new SearchSession(nextSessionId++, queueEpoch);
+        latestSession = new SearchSession(nextSessionId++, queueEpoch, clock.getAsLong() + PENDING_TIMEOUT_NS);
         pendingSessions.computeIfAbsent(player, k -> new ArrayDeque<>()).add(latestSession);
         return BeginResult.ACCEPTED;
     }
@@ -129,6 +133,23 @@ public class MusicQueueManager {
 
     public SearchSession latestSession() {
         return latestSession;
+    }
+
+    /**
+     * 按 id 定位该玩家的在途会话（客户端代搜索回包认领用，不消费）。
+     * @return 匹配的会话；无在途会话或 id 不存在返回 null
+     */
+    public SearchSession findPendingSession(UUID player, long sessionId) {
+        ArrayDeque<SearchSession> sessions = pendingSessions.get(player);
+        if (sessions == null || sessionId <= 0) {
+            return null;
+        }
+        for (SearchSession s : sessions) {
+            if (s.id() == sessionId) {
+                return s;
+            }
+        }
+        return null;
     }
 
     /** 虚拟线程搜索成功后，经 server.execute 回到服务端线程调用。
@@ -175,14 +196,29 @@ public class MusicQueueManager {
 
     // ---------- 播放推进 ----------
 
-    /** 服务端每 tick 调用：权威计时切歌 */
+    /** 服务端每 tick 调用：权威计时切歌 + 在途搜索会话硬超时兜底 */
     public void tick() {
+        expireStalePendings();
         if (currentSong == null) {
             return;
         }
         long elapsedMs = (clock.getAsLong() - currentStartNano) / 1_000_000L;
         if (elapsedMs >= currentSong.durationMs() + END_TOLERANCE_MS) {
             finishCurrent(MusicStopPayload.Reason.FINISHED);
+        }
+    }
+
+    /** 强制释放超时未回包的 pending（玩家中途退出等场景防永久占额） */
+    private void expireStalePendings() {
+        long now = clock.getAsLong();
+        var it = pendingSessions.entrySet().iterator();
+        while (it.hasNext()) {
+            var e = it.next();
+            e.getValue().removeIf(s -> now >= s.deadlineNs());
+            if (e.getValue().isEmpty()) {
+                pendingPlayers.remove(e.getKey());
+                it.remove();
+            }
         }
     }
 

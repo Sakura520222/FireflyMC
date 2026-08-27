@@ -132,4 +132,11 @@ public class ClientPayloadHandler {
         context.enqueueWork(() ->
                 firefly520.fireflymc.client.music.MusicPlaybackManager.stop(payload));
     }
+
+    /** 点歌：服务端外网不可达，委托本客户端代为搜索 */
+    public static void handleMusicProxySearch(firefly520.fireflymc.network.MusicProxySearchRequestPayload payload,
+                                              IPayloadContext context) {
+        context.enqueueWork(() ->
+                firefly520.fireflymc.client.music.MusicProxySearchClient.handle(payload));
+    }
 }

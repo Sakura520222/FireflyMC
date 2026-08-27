@@ -88,4 +88,26 @@ class MusicPayloadCodecTest {
                 () -> MusicStopPayload.STREAM_CODEC.decode(buf));
         buf.release();
     }
+
+    @Test
+    void proxySearchRequestRoundTrip() {
+        MusicProxySearchRequestPayload p = new MusicProxySearchRequestPayload(42L, "起风了");
+        assertEquals(p, roundTrip(MusicProxySearchRequestPayload.STREAM_CODEC, p));
+    }
+
+    @Test
+    void searchResultRoundTrip() {
+        // 含超长歌词 + 中文 keyword 的完整回包（手写 codec，7 字段）
+        String lrc = "[00:00.00]x\n" + "a".repeat(40_000);
+        MusicSearchResultPayload p = new MusicSearchResultPayload(
+                7L, "1330348068", "起风了", "买辣椒也用券", lrc, 243_000L, "点歌 关键词");
+        assertEquals(p, roundTrip(MusicSearchResultPayload.STREAM_CODEC, p));
+    }
+
+    @Test
+    void searchResultNotFoundEmptyFields() {
+        // 未找到回包：songId 为空、其余字段空
+        MusicSearchResultPayload p = new MusicSearchResultPayload(7L, "", "", "", "", 0L, "关键词");
+        assertEquals(p, roundTrip(MusicSearchResultPayload.STREAM_CODEC, p));
+    }
 }
