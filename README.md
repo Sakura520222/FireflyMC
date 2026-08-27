@@ -64,7 +64,7 @@ Mod ID：`fireflymc`
 - `singleplayer_relay.enabled`：是否启用单人世界公开联机提示与中继准备功能。
 - `event_notification.enabled`：是否启用客户端事件通知 WebSocket。
 - `event_notification.webSocketUrl`：客户端事件通知 WebSocket 服务端地址。
-- `music_settings.requestVolume`：点歌音乐独立音量（0.0 ~ 1.0，默认 0.3，与主音量相乘）。
+- `music_settings.requestVolume`（位于 `fireflymc-client.toml`）：点歌音乐独立音量（0.0 ~ 1.0，默认 0.3，与主音量相乘；游戏内滑块拖动后即时生效并写回此值）。
 
 ## 游戏内命令
 
