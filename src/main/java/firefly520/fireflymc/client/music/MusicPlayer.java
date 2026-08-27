@@ -29,7 +29,7 @@ import java.util.concurrent.atomic.AtomicReference;
 public class MusicPlayer implements Runnable {
 
     /** 本地播放失败码（供 manager 上报） */
-    public enum LocalFailure { NONE, HTTP_FAILED, MP3_DECODE_FAILED }
+    public enum LocalFailure { NONE, HTTP_FAILED, STREAM_INTERRUPTED, MP3_DECODE_FAILED }
 
     public interface Callbacks {
         /** 解码循环自然结束（在播放线程调用，manager 自行切回主线程） */
@@ -98,7 +98,8 @@ public class MusicPlayer implements Runnable {
                             .build();
                     HttpResponse<InputStream> response = http.send(request, HttpResponse.BodyHandlers.ofInputStream());
                     if (response.statusCode() == 200) {
-                        httpStream = response.body();
+                        // 闲置看护：头后停滞由 watchdog 关闭流走重试/失败链路（cancel 也经此关闭）
+                        httpStream = new StallGuardInputStream(response.body());
                         opened = true;
                         break;
                     }
@@ -220,9 +221,12 @@ public class MusicPlayer implements Runnable {
         } catch (Exception e) {
             success = false;
             if (!cancelled) {
+                // 看护触发的停滞中断与数据损坏分开上报（协议里的 STREAM_INTERRUPTED）
+                boolean stalled = dataSource instanceof StallGuardInputStream guard && guard.isTripped();
                 firefly520.fireflymc.FireflyMCMod.LOGGER.warn(
-                        "[Music] 解码中断 songId={}: {}", songId, String.valueOf(e));
-                callbacks.onLocalFailure(playbackId, LocalFailure.MP3_DECODE_FAILED);
+                        "[Music] 解码中断 songId={} stalled={}: {}", songId, stalled, String.valueOf(e));
+                callbacks.onLocalFailure(playbackId,
+                        stalled ? LocalFailure.STREAM_INTERRUPTED : LocalFailure.MP3_DECODE_FAILED);
                 return; // finally 仍会执行清理
             }
         } finally {

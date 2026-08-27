@@ -14,6 +14,7 @@ import net.minecraft.resources.ResourceLocation;
  */
 public record MusicSearchResultPayload(
         long sessionId,
+        long proxyToken,
         String songId,
         String title,
         String author,
@@ -28,11 +29,12 @@ public record MusicSearchResultPayload(
     public static final CustomPacketPayload.Type<MusicSearchResultPayload> TYPE =
             new CustomPacketPayload.Type<>(ResourceLocation.fromNamespaceAndPath(FireflyMCMod.MODID, "music_search_result"));
 
-    /** 7 字段超出 composite 上限（6）：手写编解码 */
+    /** 8 字段超出 composite 上限（6）：手写编解码 */
     public static final StreamCodec<ByteBuf, MusicSearchResultPayload> STREAM_CODEC = new StreamCodec<>() {
         @Override
         public MusicSearchResultPayload decode(ByteBuf buf) {
             return new MusicSearchResultPayload(
+                    ByteBufCodecs.VAR_LONG.decode(buf),
                     ByteBufCodecs.VAR_LONG.decode(buf),
                     ByteBufCodecs.STRING_UTF8.decode(buf),
                     ByteBufCodecs.STRING_UTF8.decode(buf),
@@ -46,6 +48,7 @@ public record MusicSearchResultPayload(
         @Override
         public void encode(ByteBuf buf, MusicSearchResultPayload v) {
             ByteBufCodecs.VAR_LONG.encode(buf, v.sessionId);
+            ByteBufCodecs.VAR_LONG.encode(buf, v.proxyToken);
             ByteBufCodecs.STRING_UTF8.encode(buf, v.songId);
             ByteBufCodecs.STRING_UTF8.encode(buf, v.title);
             ByteBufCodecs.STRING_UTF8.encode(buf, v.author);

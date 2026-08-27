@@ -2,19 +2,16 @@
   "mod.fireflymc.name": "FireflyMC",
   "mod.fireflymc.description": "FireflyMC 服务器专用模组",
   "fml.menu.mods.info.description.fireflymc": "FireflyMC 服务器专用模组",
-
   "fireflymc.configuration.title": "FireflyMC 配置",
   "fireflymc.configuration.section.fireflymc.client.toml": "客户端配置",
   "fireflymc.configuration.section.fireflymc.client.toml.title": "FireflyMC 客户端配置",
   "fireflymc.configuration.section.fireflymc.server.toml": "服务端配置",
   "fireflymc.configuration.section.fireflymc.server.toml.title": "FireflyMC 服务端配置",
-
   "fireflymc.configuration.hud_settings": "HUD 设置",
   "fireflymc.configuration.hud_settings.button": "HUD 设置",
   "fireflymc.configuration.hud_settings.tooltip": "调整客户端 HUD 显示设置",
   "fireflymc.config.hud_settings.hud_scale": "HUD 缩放",
   "fireflymc.config.hud_settings.hud_scale.tooltip": "调整 HUD 界面的大小，默认 0.5",
-
   "fireflymc.configuration.singleplayer_relay": "单人世界公开大厅",
   "fireflymc.configuration.singleplayer_relay.button": "单人世界公开大厅",
   "fireflymc.configuration.singleplayer_relay.tooltip": "配置单人世界公开大厅与 P2P 连接",
@@ -42,7 +39,6 @@
   "fireflymc.config.singleplayer_relay.p2p_window_size.tooltip": "可靠 UDP 滑动窗口中的数据包数量",
   "fireflymc.config.singleplayer_relay.p2p_ipv6_enabled": "启用 P2P IPv6 直连",
   "fireflymc.config.singleplayer_relay.p2p_ipv6_enabled.tooltip": "当双方都有公网 IPv6 地址时，优先尝试 IPv6 直连",
-
   "fireflymc.configuration.ipv6_probe": "IPv6 联机检测",
   "fireflymc.configuration.ipv6_probe.enabled": "启用 IPv6 出站检测",
   "fireflymc.configuration.ipv6_probe.enabled.tooltip": "通过 test-ipv6.com 检测客户端的 IPv6 出站能力",
@@ -52,7 +48,6 @@
   "fireflymc.configuration.ipv6_probe.timeout_seconds.tooltip": "单次 IPv6 检测请求的超时时间",
   "fireflymc.configuration.ipv6_probe.cache_minutes": "检测结果缓存时长（分钟）",
   "fireflymc.configuration.ipv6_probe.cache_minutes.tooltip": "已完成检测结果的缓存时长，0 表示不缓存",
-
   "fireflymc.configuration.event_notification": "客户端事件通知",
   "fireflymc.configuration.event_notification.button": "客户端事件通知",
   "fireflymc.configuration.event_notification.tooltip": "配置客户端本地玩家事件通知 WebSocket",
@@ -72,7 +67,6 @@
   "fireflymc.config.event_notification.queue_capacity.tooltip": "重连期间最多缓存的事件通知消息数量",
   "fireflymc.config.event_notification.cross_chat_enabled": "启用跨级聊天",
   "fireflymc.config.event_notification.cross_chat_enabled.tooltip": "开启后，游戏内聊天将与 QQ 群双向互通（需云端同步启用 cross_chat_enabled）",
-
   "fireflymc.config.player_auth": "玩家密码验证",
   "fireflymc.config.player_auth.enabled": "启用密码验证",
   "fireflymc.config.player_auth.enabled.tooltip": "首次加入设置密码，后续每次验证",
@@ -86,12 +80,10 @@
   "fireflymc.config.player_auth.lockout_minutes.tooltip": "密码错误次数耗尽后，客户端限流该时长（0=不限流）",
   "fireflymc.auth_lockout.title": "登录已被限制",
   "fireflymc.auth_lockout.message": "密码错误次数过多，已被临时限制登录。请约 %s 分钟后再试。",
-
   "fireflymc.server_shutdown.title": "服务器维护中",
   "fireflymc.server_shutdown.message": "服务器正在维护，暂无法进入多人服务器。单人 / 局域网 / P2P 联机不受影响。",
   "fireflymc.server_shutdown.announce": "§c[FireflyMC]§r 服务器已进入维护状态，多人服务器与中继联机已关闭",
   "fireflymc.server_startup.announce": "§a[FireflyMC]§r 联机服务已恢复",
-
   "gui.fireflymc.singleplayer_relay.entry": "FireflyMC 联机",
   "gui.fireflymc.singleplayer_relay.control.title": "FireflyMC 联机控制",
   "gui.fireflymc.singleplayer_relay.state.stopped": "未开启",
@@ -145,7 +137,6 @@
   "gui.fireflymc.time.just_now": "刚刚",
   "gui.fireflymc.time.minutes_ago": "%s 分钟前",
   "gui.fireflymc.time.hours_ago": "%s 小时前",
-
   "fireflymc.music.searching": "♪ 正在搜索: %s ...",
   "fireflymc.music.queued": "§a♪ 已点播: %s - %s",
   "fireflymc.music.announce": "§b♪ %s 点播了《%s》- %s",
@@ -164,11 +155,12 @@
   "fireflymc.music.error.keyword_too_long": "§c歌名过长（上限 256 字符）",
   "fireflymc.music.error.player_only": "§c只有玩家可以点歌",
   "fireflymc.music.error.playback_failed": "§c《%s》- %s 无法播放，已自动跳过（可能为付费歌曲）",
-
   "fireflymc.options.music_request_volume": "点歌音乐",
   "fireflymc.configuration.music_settings": "点歌音乐",
   "fireflymc.configuration.music_settings.button": "点歌音乐",
   "fireflymc.configuration.music_settings.tooltip": "调整点歌播放的独立音量",
   "fireflymc.config.music_settings.request_volume": "点歌音乐音量",
-  "fireflymc.config.music_settings.request_volume.tooltip": "点歌播放的独立音量，与主音量相乘生效，不再受原版「音乐」分类影响，默认 30%"
+  "fireflymc.config.music_settings.request_volume.tooltip": "点歌播放的独立音量，与主音量相乘生效，不再受原版「音乐」分类影响，默认 30%",
+  "fireflymc.gui.music.queue_header": "── 排队 (%s) ──",
+  "fireflymc.gui.music.queue_more": "还有 %s 首"
 }

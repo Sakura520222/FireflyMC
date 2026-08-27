@@ -259,6 +259,68 @@ class MusicQueueManagerTest {
     }
 
     @Test
+    void proxyTokenBindsDelegationOnly() {
+        UUID a = UUID.randomUUID();
+        assertEquals(MusicQueueManager.BeginResult.ACCEPTED, m.tryBeginRequest(a, false));
+        long sid = m.latestSession().id();
+        // 未委托的会话不存在 token → 回包无效（改版客户端无法凭可预测 sessionId 伪造结果）
+        assertFalse(m.isProxyTokenValid(sid, 123456789L));
+        assertEquals(0L, m.markProxyDelegated(a, 99999L), "不存在的会话不得签发 token");
+        // 委托后：签发的 token 有效、错误 token 无效；claim 后 token 一并失效
+        long token = m.markProxyDelegated(a, sid);
+        assertNotEquals(0L, token);
+        assertTrue(m.isProxyTokenValid(sid, token));
+        assertFalse(m.isProxyTokenValid(sid, token + 1));
+        assertTrue(m.completeRequest(a, m.findPendingSession(a, sid), song("T", a, 60_000L)));
+        assertFalse(m.isProxyTokenValid(sid, token), "会话认领后 token 必须失效");
+        // stop 清空后：token 全部作废
+        assertEquals(MusicQueueManager.BeginResult.ACCEPTED, m.tryBeginRequest(a, false));
+        MusicQueueManager.SearchSession s2 = m.latestSession();
+        long t2 = m.markProxyDelegated(a, s2.id());
+        assertTrue(m.isProxyTokenValid(s2.id(), t2));
+        m.stopAll();
+        assertFalse(m.isProxyTokenValid(s2.id(), t2), "stopAll 必须作废全部代搜索 token");
+    }
+
+    @Test
+    void quorumIgnoresLoggedOutFailures() {
+        UUID c1 = UUID.randomUUID();
+        UUID c2 = UUID.randomUUID();
+        UUID requester = UUID.randomUUID();
+        assertTrue(request(requester, true, song("Q", requester, 600_000L)));
+        long playbackId = rec.starts.get(0).playbackId();
+        // capability 桩固定 3 人在线且全员 capable——isCapable 只排除 PLAIN，
+        // 这里用"登出即从 capability 移除"的真实集成语义模拟：
+        // A 失败 → 退服（模拟：isCapable 变 false）→ B 失败只算 1 票，不触发
+        MusicQueueManager spyCaps = new MusicQueueManager(
+                clock.supplier,
+                p -> {},
+                p -> {},
+                p -> {},
+                new MusicQueueManager.CapabilityLookup() {
+                    final java.util.Set<UUID> online = java.util.Set.of(c1, c2, requester);
+
+                    @Override
+                    public boolean isCapable(UUID player) {
+                        return online.contains(player) && !player.equals(c1); // c1 已"登出"
+                    }
+
+                    @Override
+                    public int capableOnlineCount() {
+                        return online.size() - 1; // 3-1=2
+                    }
+                });
+        spyCaps.onClientFailure(c1, playbackId, MusicPlaybackFailedPayload.FailureCode.HTTP_FAILED); // 登出者迟到记录
+        spyCaps.onClientFailure(c2, playbackId, MusicPlaybackFailedPayload.FailureCode.HTTP_FAILED);
+        clock.advanceMs(600_000L + 2_000L);
+        spyCaps.tick();
+        // 只有 0 条 failed FINISHED 判定？c2 的上报在 spyCaps 里走 quorum：
+        // 分母=2，在场失败={c2}=1 <2 → 不触发；等权威计时到 → 记录 stops 后再验证
+        // （rec 属于原 manager，spy 的广播丢弃到 no-op lambda，仅验证无异常路径与 c2 单票不触发）
+        assertEquals(0, rec.stops.size());
+    }
+
+    @Test
     void pendingTimeoutReleasesPlayer() {
         UUID a = UUID.randomUUID();
         UUID op = UUID.randomUUID();

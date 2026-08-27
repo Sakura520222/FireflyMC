@@ -138,20 +138,19 @@ public final class MusicServerBridge {
         }
         MinecraftServer s = server;
         String songId = payload.songId();
+        // 防伪造：只受理明确进入代搜索的会话，且回包 token 必须与签发值一致
         MusicQueueManager.SearchSession session = m.findPendingSession(player.getUUID(), payload.sessionId());
+        if (session == null || !m.isProxyTokenValid(payload.sessionId(), payload.proxyToken())) {
+            return; // 迟到/被 stop 清掉/从未委托过的会话或 token 不符：一律丢弃
+        }
         if (!MusicApiClient.isValidSongId(songId)) {
             // 客户端未找到或同样无法访问外网 → 走正常"未找到"链路
-            if (session != null) {
-                m.failRequest(player.getUUID(), session);
-                if (!player.hasDisconnected()) {
-                    player.sendSystemMessage(net.minecraft.network.chat.Component.translatable(
-                            "fireflymc.music.error.not_found", payload.keyword()));
-                }
+            m.failRequest(player.getUUID(), session);
+            if (!player.hasDisconnected()) {
+                player.sendSystemMessage(net.minecraft.network.chat.Component.translatable(
+                        "fireflymc.music.error.not_found", payload.keyword()));
             }
             return;
-        }
-        if (session == null) {
-            return; // 回包迟到（超时已强制释放/stop 过）：丢弃
         }
         long durationMs = Math.max(1_000L, Math.min(payload.durationMs(), 1_800_000L));
         QueuedSong song = new QueuedSong(

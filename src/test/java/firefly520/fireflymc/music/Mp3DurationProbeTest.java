@@ -72,10 +72,25 @@ class Mp3DurationProbeTest {
 
     @Test
     void largeId3TagSkipped() {
-        // 32KB ID3v2 标签（模拟嵌入封面超过旧 8KB 扫描窗口）后跟正常 CBR 帧
+        // 32KB ID3v2.4 标签（模拟嵌入封面超过旧 8KB 扫描窗口）后跟正常 CBR 帧
         byte[] head = withId3(32 * 1024, new byte[32 * 1024], mp3Head(64, null));
         long duration = Mp3DurationProbe.probeDurationMs(head, 4_738_291L);
         assertEquals(296143L, duration, 5L, "大 ID3 标签后的帧头必须仍被找到（不得 fallback）");
+    }
+
+    @Test
+    void id3v23PlainSizeSkipped() {
+        // v2.3 的 size 是普通大端整数（非 syncsafe）：32KB 标签按 syncsafe 解析会严重低估、
+        // 扫描起点落进标签体。构造 version=3 + 普通尺寸编码验证正确跳过
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        out.writeBytes("ID3".getBytes(StandardCharsets.US_ASCII));
+        out.writeBytes(new byte[]{3, 0});                                 // version 2.3
+        out.write(0);                                                     // flags
+        out.writeBytes(new byte[]{0, 0, (byte) 0x80, 0x00});              // BE uint32 = 32768
+        out.writeBytes(new byte[32 * 1024]);
+        out.writeBytes(mp3Head(64, null));
+        long duration = Mp3DurationProbe.probeDurationMs(out.toByteArray(), 4_738_291L);
+        assertEquals(296143L, duration, 5L, "v2.3 普通大端尺寸必须正确解析");
     }
 
     @Test

@@ -2,19 +2,16 @@
   "mod.fireflymc.name": "FireflyMC",
   "mod.fireflymc.description": "FireflyMC server-specific mod",
   "fml.menu.mods.info.description.fireflymc": "FireflyMC server-specific mod",
-
   "fireflymc.configuration.title": "FireflyMC Configuration",
   "fireflymc.configuration.section.fireflymc.client.toml": "Client Settings",
   "fireflymc.configuration.section.fireflymc.client.toml.title": "FireflyMC Client Settings",
   "fireflymc.configuration.section.fireflymc.server.toml": "Server Settings",
   "fireflymc.configuration.section.fireflymc.server.toml.title": "FireflyMC Server Settings",
-
   "fireflymc.configuration.hud_settings": "HUD Settings",
   "fireflymc.configuration.hud_settings.button": "HUD Settings",
   "fireflymc.configuration.hud_settings.tooltip": "Adjust client HUD display settings",
   "fireflymc.config.hud_settings.hud_scale": "HUD Scale",
   "fireflymc.config.hud_settings.hud_scale.tooltip": "Adjust the size of the HUD interface, default 0.5",
-
   "fireflymc.configuration.singleplayer_relay": "Singleplayer Public Lobby",
   "fireflymc.configuration.singleplayer_relay.button": "Singleplayer Public Lobby",
   "fireflymc.configuration.singleplayer_relay.tooltip": "Configure the singleplayer public lobby and P2P connection",
@@ -42,7 +39,6 @@
   "fireflymc.config.singleplayer_relay.p2p_window_size.tooltip": "Reliable UDP sliding window size in packets",
   "fireflymc.config.singleplayer_relay.p2p_ipv6_enabled": "Enable P2P IPv6 Direct Connection",
   "fireflymc.config.singleplayer_relay.p2p_ipv6_enabled.tooltip": "Try direct IPv6 connection first when both peers have public IPv6 addresses",
-
   "fireflymc.configuration.ipv6_probe": "IPv6 Connectivity Probe",
   "fireflymc.configuration.ipv6_probe.enabled": "Enable IPv6 outbound probe",
   "fireflymc.configuration.ipv6_probe.enabled.tooltip": "Probe client IPv6 outbound connectivity via test-ipv6.com",
@@ -52,7 +48,6 @@
   "fireflymc.configuration.ipv6_probe.timeout_seconds.tooltip": "Timeout for a single IPv6 probe request",
   "fireflymc.configuration.ipv6_probe.cache_minutes": "Result cache minutes",
   "fireflymc.configuration.ipv6_probe.cache_minutes.tooltip": "How long a completed probe result is cached; 0 = never cache",
-
   "fireflymc.configuration.event_notification": "Client Event Notifications",
   "fireflymc.configuration.event_notification.button": "Client Event Notifications",
   "fireflymc.configuration.event_notification.tooltip": "Configure client-side local player event notification WebSocket",
@@ -72,7 +67,6 @@
   "fireflymc.config.event_notification.queue_capacity.tooltip": "Maximum queued event notification messages while reconnecting",
   "fireflymc.config.event_notification.cross_chat_enabled": "Enable Cross-Level Chat",
   "fireflymc.config.event_notification.cross_chat_enabled.tooltip": "Forward in-game chat to QQ groups and vice versa (requires cross_chat_enabled on the server)",
-
   "fireflymc.config.player_auth": "Player Password Auth",
   "fireflymc.config.player_auth.enabled": "Enable Password Auth",
   "fireflymc.config.player_auth.enabled.tooltip": "Set password on first join, verify on subsequent joins",
@@ -86,12 +80,10 @@
   "fireflymc.config.player_auth.lockout_minutes.tooltip": "Lock the client for this long after exhausting password attempts (0=disabled)",
   "fireflymc.auth_lockout.title": "Login Restricted",
   "fireflymc.auth_lockout.message": "Too many failed password attempts. Please try again in about %s minutes.",
-
   "fireflymc.server_shutdown.title": "Server Under Maintenance",
   "fireflymc.server_shutdown.message": "The server is under maintenance (pseudo-shutdown). Multiplayer and relay are temporarily disabled. Singleplayer / LAN / P2P are unaffected.",
   "fireflymc.server_shutdown.announce": "§c[FireflyMC]§r Server entered shutdown maintenance. Multiplayer and relay are disabled.",
   "fireflymc.server_startup.announce": "§a[FireflyMC]§r Online services restored.",
-
   "gui.fireflymc.singleplayer_relay.entry": "FireflyMC LAN",
   "gui.fireflymc.singleplayer_relay.control.title": "FireflyMC LAN Control",
   "gui.fireflymc.singleplayer_relay.state.stopped": "Stopped",
@@ -145,7 +137,6 @@
   "gui.fireflymc.time.just_now": "just now",
   "gui.fireflymc.time.minutes_ago": "%s min ago",
   "gui.fireflymc.time.hours_ago": "%s h ago",
-
   "fireflymc.music.searching": "♪ Searching: %s ...",
   "fireflymc.music.queued": "§a♪ Requested: %s - %s",
   "fireflymc.music.announce": "§b♪ %s requested \"%s\" - %s",
@@ -164,11 +155,12 @@
   "fireflymc.music.error.keyword_too_long": "§cKeyword too long (max 256 chars)",
   "fireflymc.music.error.player_only": "§cOnly players can request songs",
   "fireflymc.music.error.playback_failed": "§c\"%s\" - %s is not playable, skipped automatically (likely a paid song)",
-
   "fireflymc.options.music_request_volume": "Requested Music",
   "fireflymc.configuration.music_settings": "Requested Music",
   "fireflymc.configuration.music_settings.button": "Requested Music",
   "fireflymc.configuration.music_settings.tooltip": "Adjust the independent volume for requested music",
   "fireflymc.config.music_settings.request_volume": "Requested music volume",
-  "fireflymc.config.music_settings.request_volume.tooltip": "Independent volume for requested music, multiplied with master volume, no longer affected by the vanilla MUSIC category. Defaults to 30%"
+  "fireflymc.config.music_settings.request_volume.tooltip": "Independent volume for requested music, multiplied with master volume, no longer affected by the vanilla MUSIC category. Defaults to 30%",
+  "fireflymc.gui.music.queue_header": "── Queue (%s) ──",
+  "fireflymc.gui.music.queue_more": "%s more"
 }

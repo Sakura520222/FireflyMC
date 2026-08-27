@@ -83,6 +83,11 @@ public final class MusicApiClient {
 
     private MusicApiClient() {}
 
+    /** body 读取共享 watchdog（播放线程的流式闲置看护同样复用此调度器） */
+    public static java.util.concurrent.ScheduledExecutorService readWatchdog() {
+        return READ_WATCHDOG;
+    }
+
     /** 搜索歌曲，取第一首。songId 必须纯数字（SSRF 防护）。无结果返回 null。 */
     public static CompletableFuture<SongInfo> search(String keyword) {
         return CompletableFuture.supplyAsync(() -> {
@@ -128,8 +133,8 @@ public final class MusicApiClient {
                 // 客户端拿到 200 HTML 解码必失败 → 点歌阶段就跳过这些歌
                 for (int i = 0; i < Math.min(data.size(), PLAYABLE_CHECK_LIMIT); i++) {
                     JsonObject candidate = data.get(i).getAsJsonObject();
-                    String songId = truncate(candidate.has("songid") ? candidate.get("songid").getAsString() : "", 32);
-                    if (!songId.matches("\\d{4,20}")) {
+                    String songId = truncate(optString(candidate, "songid", ""), 32);
+                    if (!isValidSongId(songId)) {
                         continue;
                     }
                     if (!isPlayable(songId)) {
@@ -137,9 +142,9 @@ public final class MusicApiClient {
                     }
                     return new SongInfo(
                             songId,
-                            truncate(candidate.has("title") ? candidate.get("title").getAsString() : "未知", MAX_TITLE),
-                            truncate(candidate.has("author") ? candidate.get("author").getAsString() : "未知", MAX_AUTHOR),
-                            truncate(candidate.has("lrc") ? candidate.get("lrc").getAsString() : "", MAX_LRC));
+                            truncate(optString(candidate, "title", "未知"), MAX_TITLE),
+                            truncate(optString(candidate, "author", "未知"), MAX_AUTHOR),
+                            truncate(optString(candidate, "lrc", ""), MAX_LRC));
                 }
                 return null; // 前 N 候选全部不可播（多为付费歌曲）
             } catch (IOException | InterruptedException e) {
@@ -166,21 +171,25 @@ public final class MusicApiClient {
                     .header("User-Agent", OUTBOUND_UA)
                     .GET()
                     .build();
-            HttpResponse<Void> response = HttpClient.newBuilder()
+            HttpResponse<InputStream> response = HttpClient.newBuilder()
                     .connectTimeout(CONNECT_TIMEOUT)
                     .followRedirects(HttpClient.Redirect.NEVER) // 只看 302 的 Location
                     .build()
-                    .send(request, HttpResponse.BodyHandlers.discarding());
-            String location = response.headers().firstValue("Location").orElse("");
-            if (location.contains("126.net")) {
-                return true;
+                    // ofInputStream 而非 discarding：外链直返 200 时 discarding 会把整首歌
+                    // 下载完才返回；这里只读 Location 头，body 立即关闭
+                    .send(request, HttpResponse.BodyHandlers.ofInputStream());
+            try (InputStream body = response.body()) {
+                String location = response.headers().firstValue("Location").orElse("");
+                if (location.contains("126.net")) {
+                    return true;
+                }
+                if (location.contains("music.163.com/404")) {
+                    firefly520.fireflymc.FireflyMCMod.LOGGER.debug(
+                            "[Music] 预检跳过不可播歌曲 songId={}", songId);
+                    return false;
+                }
+                return true; // 未知响应放行（可能为污染/抖动）
             }
-            if (location.contains("music.163.com/404")) {
-                firefly520.fireflymc.FireflyMCMod.LOGGER.debug(
-                        "[Music] 预检跳过不可播歌曲 songId={}", songId);
-                return false;
-            }
-            return true; // 未知响应放行（可能为污染/抖动）
         } catch (Exception e) {
             return true; // 预检失败放行（不挡播放，播放失败走 FAILED 链路兜底）
         }
@@ -350,5 +359,16 @@ public final class MusicApiClient {
             return "";
         }
         return s.length() <= max ? s : s.substring(0, max);
+    }
+
+    /**
+     * null 安全取字符串：字段存在但为 JSON null（无歌词的歌常见 lrc:null）时
+     * getAsString() 会抛异常——has() 判断不够，须排除 JsonNull 后再取。
+     */
+    private static String optString(JsonObject obj, String key, String fallback) {
+        if (!obj.has(key) || obj.get(key).isJsonNull() || !obj.get(key).isJsonPrimitive()) {
+            return fallback;
+        }
+        return obj.get(key).getAsString();
     }
 }
