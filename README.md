@@ -79,7 +79,7 @@ Mod ID：`fireflymc`
 ```
 
 - `/点歌 <歌名>`（或 `/fireflymc music request`）：搜索并点播歌曲，点歌成功后全服播报。
-- `/fireflymc music queue`：查看当前播放曲目与完整排队列表。
+- `/fireflymc music queue`：查看当前播放曲目与完整排队列表（无权限要求；队列上限 50，输出可能较长刷屏）。
 - `/fireflymc music skip`：跳过当前歌曲。需要单人世界本人、LAN 房主或 OP 2。
 - `/fireflymc music stop`：停止播放并清空整个队列（含正在搜索中的请求）。权限同上。
 
