@@ -12,7 +12,7 @@ import net.neoforged.neoforge.network.registration.PayloadRegistrar;
  * playToClient 的包处理器使用反射延迟加载客户端类，避免服务端加载客户端类
  */
 public class ModNetwork {
-    public static final String NETWORK_VERSION = "1.1.0";
+    public static final String NETWORK_VERSION = "1.2.0";
 
     public static void registerPayloads(final RegisterPayloadHandlersEvent event) {
         final PayloadRegistrar registrar = event.registrar(FireflyMCMod.MODID)
@@ -107,6 +107,18 @@ public class ModNetwork {
                 MusicPlaybackFailedPayload.TYPE,
                 MusicPlaybackFailedPayload.STREAM_CODEC,
                 ModPayloadHandler::handleMusicPlaybackFailed
+        );
+        // S→C 代理搜索请求（服务端无法访问外网时定向委托点歌者客户端）
+        registrar.playToClient(
+                MusicProxySearchRequestPayload.TYPE,
+                MusicProxySearchRequestPayload.STREAM_CODEC,
+                (payload, context) -> handleMusicProxySearchOnClient(payload, context)
+        );
+        // C→S 客户端代搜索回包
+        registrar.playToServer(
+                MusicSearchResultPayload.TYPE,
+                MusicSearchResultPayload.STREAM_CODEC,
+                ModPayloadHandler::handleMusicSearchResult
         );
     }
 
@@ -222,6 +234,25 @@ public class ModNetwork {
                 method.invoke(null, payload, context);
             } catch (Exception e) {
                 // 忽略错误
+            }
+        }
+    }
+
+    /**
+     * 使用反射调用客户端点歌代理搜索请求处理器
+     */
+    private static void handleMusicProxySearchOnClient(MusicProxySearchRequestPayload payload, IPayloadContext context) {
+        if (FMLEnvironment.dist == Dist.CLIENT) {
+            try {
+                Class<?> handlerClass = Class.forName("firefly520.fireflymc.client.ClientPayloadHandler");
+                java.lang.reflect.Method method = handlerClass.getDeclaredMethod(
+                    "handleMusicProxySearch",
+                    MusicProxySearchRequestPayload.class,
+                    IPayloadContext.class
+                );
+                method.invoke(null, payload, context);
+            } catch (Exception e) {
+                // 忽略
             }
         }
     }

@@ -159,6 +159,7 @@
   "fireflymc.music.error.pending": "§cYour previous request is still being processed, please wait",
   "fireflymc.music.error.queue_full": "§cMusic queue is full (%d), try again later",
   "fireflymc.music.error.not_found": "§cNo playable result for \"%s\" (paid songs unavailable)",
+  "fireflymc.music.error.search_failed": "§cSearch service is temporarily unavailable; request for \"%s\" failed, please try again later",
   "fireflymc.music.error.no_permission": "§cYou don't have permission for this action",
   "fireflymc.music.error.keyword_too_long": "§cKeyword too long (max 256 chars)",
   "fireflymc.music.error.player_only": "§cOnly players can request songs",

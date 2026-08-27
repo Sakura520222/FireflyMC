@@ -38,8 +38,13 @@ public final class MusicApiClient {
     /** 时长探测最多读 64 KiB */
     private static final int PROBE_HEAD_BYTES = 64 * 1024;
 
-    /** 字段上限 */
-    private static final int MAX_TITLE = 128, MAX_AUTHOR = 128, MAX_LRC = 256 * 1024;
+    /** 字段上限（客户端代搜索回包的服务端侧截断同用此值） */
+    public static final int MAX_TITLE = 128, MAX_AUTHOR = 128, MAX_LRC = 256 * 1024;
+
+    /** 服务端代搜索/客户端回包共用的 songId 合法性校验（SSRF 防护） */
+    public static boolean isValidSongId(String songId) {
+        return songId != null && songId.matches("\\d{4,20}");
+    }
 
     /** 预检候选数：逐首检查直链可播性，取第一条可播的 */
     private static final int PLAYABLE_CHECK_LIMIT = 5;

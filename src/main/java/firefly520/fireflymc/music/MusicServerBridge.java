@@ -3,6 +3,7 @@ package firefly520.fireflymc.music;
 import firefly520.fireflymc.network.ModPayloadHandler;
 import firefly520.fireflymc.network.MusicPlaybackFailedPayload;
 import firefly520.fireflymc.network.MusicQueueSyncPayload;
+import firefly520.fireflymc.network.MusicSearchResultPayload;
 import firefly520.fireflymc.network.MusicStartPayload;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
@@ -123,5 +124,55 @@ public final class MusicServerBridge {
         if (m != null) {
             m.onClientFailure(reporter.getUUID(), payload.playbackId(), payload.failureCode());
         }
+    }
+
+    /**
+     * 客户端代搜索回包入口（ModPayloadHandler 收包后调用，服务端线程）。
+     * 回包字段是不可信输入：songId 校验、字段截断、时长 clamp 后才入队；
+     * 会话按 sessionId 认领；requesterName 服务端自填，不信任客户端。
+     */
+    public static void onClientSearchResult(ServerPlayer player, MusicSearchResultPayload payload) {
+        MusicQueueManager m = manager();
+        if (m == null) {
+            return;
+        }
+        MinecraftServer s = server;
+        String songId = payload.songId();
+        MusicQueueManager.SearchSession session = m.findPendingSession(player.getUUID(), payload.sessionId());
+        if (!MusicApiClient.isValidSongId(songId)) {
+            // 客户端未找到或同样无法访问外网 → 走正常"未找到"链路
+            if (session != null) {
+                m.failRequest(player.getUUID(), session);
+                if (!player.hasDisconnected()) {
+                    player.sendSystemMessage(net.minecraft.network.chat.Component.translatable(
+                            "fireflymc.music.error.not_found", payload.keyword()));
+                }
+            }
+            return;
+        }
+        if (session == null) {
+            return; // 回包迟到（超时已强制释放/stop 过）：丢弃
+        }
+        long durationMs = Math.max(1_000L, Math.min(payload.durationMs(), 1_800_000L));
+        QueuedSong song = new QueuedSong(
+                songId,
+                truncate(payload.title(), MusicApiClient.MAX_TITLE),
+                truncate(payload.author(), MusicApiClient.MAX_AUTHOR),
+                truncate(payload.lrc(), MusicApiClient.MAX_LRC),
+                player.getGameProfile().getName(),
+                player.getUUID(),
+                durationMs);
+        boolean accepted = m.completeRequest(player.getUUID(), session, song);
+        if (s != null) {
+            firefly520.fireflymc.music.MusicCommandHandler.finishRequest(
+                    player, s, m, session, accepted, song.title(), song.author());
+        }
+    }
+
+    private static String truncate(String s, int maxChars) {
+        if (s == null) {
+            return "";
+        }
+        return s.length() <= maxChars ? s : s.substring(0, maxChars);
     }
 }

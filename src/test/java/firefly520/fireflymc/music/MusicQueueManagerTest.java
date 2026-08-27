@@ -235,6 +235,52 @@ class MusicQueueManagerTest {
     }
 
     @Test
+    void clientSearchResultClaimedBySessionId() {
+        // 客户端代搜索链路：begin → 按 id 定位会话 → completeRequest 入队
+        UUID a = UUID.randomUUID();
+        assertEquals(MusicQueueManager.BeginResult.ACCEPTED, m.tryBeginRequest(a, false));
+        long sessionId = m.latestSession().id();
+        MusicQueueManager.SearchSession found = m.findPendingSession(a, sessionId);
+        assertNotNull(found, "在途会话必须能按 id 定位");
+        assertTrue(m.completeRequest(a, found, song("代理歌", a, 60_000L)));
+        assertEquals("代理歌", rec.starts.get(0).title());
+        // 认领后会话已消费：同 id 再找不到
+        assertNull(m.findPendingSession(a, sessionId));
+    }
+
+    @Test
+    void unknownOrExpiredSessionIdIgnored() {
+        UUID a = UUID.randomUUID();
+        assertEquals(MusicQueueManager.BeginResult.ACCEPTED, m.tryBeginRequest(a, false));
+        // 错误 id / 空 id / 其他玩家：一律定位不到
+        assertNull(m.findPendingSession(a, 99999L));
+        assertNull(m.findPendingSession(a, -1L));
+        assertNull(m.findPendingSession(UUID.randomUUID(), m.latestSession().id()));
+    }
+
+    @Test
+    void pendingTimeoutReleasesPlayer() {
+        UUID a = UUID.randomUUID();
+        UUID op = UUID.randomUUID();
+        // 普通玩家发起请求后中途退出（回包丢失）：90s 硬超时必须释放额度
+        assertEquals(MusicQueueManager.BeginResult.ACCEPTED, m.tryBeginRequest(a, false));
+        clock.advanceMs(90_000L);
+        m.tick();
+        assertEquals(MusicQueueManager.BeginResult.ACCEPTED, m.tryBeginRequest(a, false),
+                "超时后必须释放 pending，玩家可重新点歌");
+        // 特权者并发两会话：各自独立计时，先发起的超时释放后不影响后发起的
+        assertEquals(MusicQueueManager.BeginResult.ACCEPTED, m.tryBeginRequest(op, true));
+        MusicQueueManager.SearchSession s1 = m.latestSession(); // @90s，deadline 180s
+        clock.advanceMs(45_000L); // now=135s
+        assertEquals(MusicQueueManager.BeginResult.ACCEPTED, m.tryBeginRequest(op, true));
+        MusicQueueManager.SearchSession s2 = m.latestSession(); // @135s，deadline 225s
+        clock.advanceMs(50_000L); // now=185s：s1 已过期，s2 未到
+        m.tick();
+        assertNull(m.findPendingSession(op, s1.id()), "超时会话必须被清除");
+        assertNotNull(m.findPendingSession(op, s2.id()), "未超时的兄弟会话必须保留");
+    }
+
+    @Test
     void logoutDoesNotUnlock() {
         UUID a = UUID.randomUUID();
         // 点满 3 首
