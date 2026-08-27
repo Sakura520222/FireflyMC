@@ -137,9 +137,10 @@ public final class MusicHudRenderer {
             y += LINE_HEIGHT;
         }
 
-        // 4. 排队列表（最多 3 项 + "还有 N 首"）
+        // 4. 排队列表（最多 3 项 + "还有 N 首"，经 lang 系统翻译）
         if (!queue.isEmpty()) {
-            String header = "── 排队 (" + queue.size() + ") ──";
+            String header = net.minecraft.network.chat.Component.translatable(
+                    "fireflymc.gui.music.queue_header", queue.size()).getString();
             guiGraphics.drawString(font, header, X + PADDING, y, REQUESTER_COLOR, false);
             y += LINE_HEIGHT;
             int shown = Math.min(queue.size(), MAX_QUEUE_ITEMS);
@@ -152,7 +153,9 @@ public final class MusicHudRenderer {
                 y += LINE_HEIGHT;
             }
             if (queue.size() > MAX_QUEUE_ITEMS) {
-                guiGraphics.drawString(font, "    还有 " + (queue.size() - MAX_QUEUE_ITEMS) + " 首",
+                String more = net.minecraft.network.chat.Component.translatable(
+                        "fireflymc.gui.music.queue_more", queue.size() - MAX_QUEUE_ITEMS).getString();
+                guiGraphics.drawString(font, "    " + more,
                         X + PADDING, y, REQUESTER_COLOR, false);
             }
         }

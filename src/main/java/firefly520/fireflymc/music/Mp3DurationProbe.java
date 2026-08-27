@@ -106,15 +106,28 @@ public final class Mp3DurationProbe {
         return -1;
     }
 
-    /** ID3v2 标签结束偏移（10 字节头 + syncsafe size，v2.4 footer 标志再加 10）；无标签返回 0 */
+    /**
+     * ID3v2 标签结束偏移；无标签返回 0。
+     * 尺寸按版本解析——v2.4 为 syncsafe（每字节低 7 位），v2.2/v2.3 为普通大端整数：
+     * 统一按 syncsafe 解析 v2.3 会显著低估尺寸、扫描起点落进标签体内。
+     * flags 字节：0x40 是扩展头（已含在 size 内），footer 标志是 0x10（仅 v2.4）——
+     * 误把 0x40 当 footer 会多偏移 10 字节、扫进第一帧内部错过 Xing 元数据。
+     */
     private static int id3TagEnd(byte[] data) {
         if (data.length < 10 || data[0] != 'I' || data[1] != 'D' || data[2] != '3') {
             return 0;
         }
-        // 尺寸为 syncsafe 整数：每字节只用低 7 位
-        long size = ((data[6] & 0x7FL) << 21) | ((data[7] & 0x7FL) << 14)
-                | ((data[8] & 0x7FL) << 7) | (data[9] & 0x7FL);
-        long end = 10L + size + (((data[5] & 0x40) != 0) ? 10L : 0L);
+        int version = data[3] & 0xFF;
+        long end;
+        if (version >= 4) { // ID3v2.4
+            long size = ((data[6] & 0x7FL) << 21) | ((data[7] & 0x7FL) << 14)
+                    | ((data[8] & 0x7FL) << 7) | (data[9] & 0x7FL);
+            end = 10L + size + (((data[5] & 0x10) != 0) ? 10L : 0L); // footer flag d=%abcd0000 的 d
+        } else { // ID3v2.2 / v2.3：普通 BE uint32，无 footer 概念
+            long size = ((data[6] & 0xFFL) << 24) | ((data[7] & 0xFFL) << 16)
+                    | ((data[8] & 0xFFL) << 8) | (data[9] & 0xFFL);
+            end = 10L + size;
+        }
         if (end >= data.length) {
             return data.length; // 标签覆盖整个探测窗口（封面 > 64KB）：窗口内无帧可找
         }

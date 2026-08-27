@@ -11,6 +11,7 @@ public final class ClientMusicFailReporter {
     public static void report(long playbackId, MusicPlayer.LocalFailure code) {
         MusicPlaybackFailedPayload.FailureCode failureCode = switch (code) {
             case HTTP_FAILED -> MusicPlaybackFailedPayload.FailureCode.HTTP_FAILED;
+            case STREAM_INTERRUPTED -> MusicPlaybackFailedPayload.FailureCode.STREAM_INTERRUPTED;
             case MP3_DECODE_FAILED -> MusicPlaybackFailedPayload.FailureCode.MP3_DECODE_FAILED;
             case NONE -> null;
         };

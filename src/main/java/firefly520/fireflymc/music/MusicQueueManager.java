@@ -74,6 +74,8 @@ public class MusicQueueManager {
     private final Map<Long, Set<UUID>> failedClients = new HashMap<>();
     /** 在途搜索会话（特权者可并发多个，按 session 身份认领移除；各自带硬超时） */
     private final Map<UUID, ArrayDeque<SearchSession>> pendingSessions = new HashMap<>();
+    /** 已进入客户端代搜索的会话签发的防伪造 token（sessionId → token） */
+    private final Map<Long, Long> proxyTokens = new HashMap<>();
 
     private long queueEpoch = 0L;
     private long nextPlaybackId = 1L; // 恒 > 0；0 保留给协议"无实例"
@@ -152,6 +154,29 @@ public class MusicQueueManager {
         return null;
     }
 
+    /**
+     * 标记会话进入客户端代搜索并签发不可猜测 token（服务端线程）。
+     * 回包必须原样携带此 token 才被受理——sessionId 单调可预测，
+     * 无 token 绑定时改版客户端可伪造回包绕过服务端搜索与可播性预检。
+     *
+     * @return token；会话不存在/已被消费返回 0
+     */
+    public long markProxyDelegated(UUID player, long sessionId) {
+        SearchSession session = findPendingSession(player, sessionId);
+        if (session == null) {
+            return 0L;
+        }
+        long token = java.util.concurrent.ThreadLocalRandom.current().nextLong(1, Long.MAX_VALUE);
+        proxyTokens.put(sessionId, token);
+        return token;
+    }
+
+    /** 校验回包 token（不消费；会话认领时随 completeRequest/failRequest 一并失效） */
+    public boolean isProxyTokenValid(long sessionId, long token) {
+        Long expected = proxyTokens.get(sessionId);
+        return expected != null && token != 0 && expected == token;
+    }
+
     /** 虚拟线程搜索成功后，经 server.execute 回到服务端线程调用。
      *  必须携带发起时捕获的 session（按唯一身份认领）：/stop 清掉在途请求后同玩家重发
      *  新请求时，旧回调不得消费新会话——否则被取消的歌死灰复燃、新请求被误删。
@@ -162,6 +187,7 @@ public class MusicQueueManager {
         if (session == null || sessions == null || !sessions.remove(session)) {
             return false; // 旧会话的迟到回调：丢弃且不动在途会话
         }
+        proxyTokens.remove(session.id()); // 会话已消费：其代搜索 token 一并失效
         if (sessions.isEmpty()) {
             pendingSessions.remove(player);
         }
@@ -188,6 +214,7 @@ public class MusicQueueManager {
         if (session == null || sessions == null || !sessions.remove(session)) {
             return; // 旧会话的迟到失败：不动在途会话
         }
+        proxyTokens.remove(session.id());
         if (sessions.isEmpty()) {
             pendingSessions.remove(player);
             pendingPlayers.remove(player);
@@ -214,7 +241,13 @@ public class MusicQueueManager {
         var it = pendingSessions.entrySet().iterator();
         while (it.hasNext()) {
             var e = it.next();
-            e.getValue().removeIf(s -> now >= s.deadlineNs());
+            e.getValue().removeIf(s -> {
+                if (now >= s.deadlineNs()) {
+                    proxyTokens.remove(s.id()); // 过期会话的代搜索 token 一并失效
+                    return true;
+                }
+                return false;
+            });
             if (e.getValue().isEmpty()) {
                 pendingPlayers.remove(e.getKey());
                 it.remove();
@@ -246,6 +279,7 @@ public class MusicQueueManager {
         }
         pendingPlayers.clear();
         pendingSessions.clear();
+        proxyTokens.clear();
         failedClients.clear();
         broadcastQueueSync();
     }
@@ -269,10 +303,13 @@ public class MusicQueueManager {
 
     private boolean shouldFailEarly(Set<UUID> failed) {
         int capableOnline = capabilityLookup.capableOnlineCount();
+        // 分子只计仍在场的失败者：A 失败后退服时其记录仍留在 failedClients，
+        // 不过滤会让后来 B 的一次真实失败被累计成两票、凭空满足 quorum
+        int activeFailed = (int) failed.stream().filter(capabilityLookup::isCapable).count();
         if (capableOnline <= 1) {
-            return true; // 单人世界：唯一客户端失败立即 FAILED
+            return activeFailed >= 1; // 单人世界：唯一客户端失败立即 FAILED
         }
-        return failed.size() >= 2 && failed.size() * 2 >= (int) Math.ceil(capableOnline * FAILED_QUORUM_RATIO * 2);
+        return activeFailed >= 2 && activeFailed * 2 >= (int) Math.ceil(capableOnline * FAILED_QUORUM_RATIO * 2);
     }
 
     public boolean isMusicCapable(UUID player) {

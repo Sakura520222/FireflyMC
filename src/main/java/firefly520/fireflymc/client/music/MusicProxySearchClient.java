@@ -14,9 +14,10 @@ public final class MusicProxySearchClient {
 
     private MusicProxySearchClient() {}
 
-    /** 收到 S→C 代理请求（主线程）：起虚拟线程执行 IO，结果 sendToServer */
+    /** 收到 S→C 代理请求（主线程）：起虚拟线程执行 IO，结果（含原样 token）sendToServer */
     public static void handle(MusicProxySearchRequestPayload payload) {
         final long sessionId = payload.sessionId();
+        final long proxyToken = payload.proxyToken();
         final String keyword = payload.keyword();
         Thread.ofVirtual().name("fireflymc-music-proxy-search").start(() -> {
             FireflyMCMod.LOGGER.info("[Music] 服务端外网不可达，客户端代搜索: {}", keyword);
@@ -36,6 +37,7 @@ public final class MusicProxySearchClient {
             long fDuration = durationMs;
             PacketDistributor.sendToServer(new MusicSearchResultPayload(
                     sessionId,
+                    proxyToken,
                     fInfo == null ? "" : fInfo.songId(),
                     fInfo == null ? "" : fInfo.title(),
                     fInfo == null ? "" : fInfo.author(),

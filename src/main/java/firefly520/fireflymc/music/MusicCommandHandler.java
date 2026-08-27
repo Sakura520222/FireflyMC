@@ -149,8 +149,15 @@ public class MusicCommandHandler {
             manager.failRequest(player.getUUID(), session);
             return;
         }
+        // 签发不可猜测 token：回包必须原样带回，防改版客户端凭可预测 sessionId 伪造结果
+        long token = manager.markProxyDelegated(player.getUUID(), session.id());
+        if (token == 0L) {
+            player.sendSystemMessage(Component.translatable("fireflymc.music.error.search_failed", keyword));
+            manager.failRequest(player.getUUID(), session);
+            return;
+        }
         PacketDistributor.sendToPlayer(player,
-                new MusicProxySearchRequestPayload(session.id(), keyword));
+                new MusicProxySearchRequestPayload(session.id(), token, keyword));
     }
 
     /**
