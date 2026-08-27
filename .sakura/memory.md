@@ -2,7 +2,7 @@
 
 ## 仓库信息
 - 仓库名: Sakura520222/FireflyMC
-- 累计反思次数: 5
+- 累计反思次数: 10
 
 ## 代码问题与审查要点
 
@@ -115,6 +115,20 @@
 | 事件注册统一管理 | 所有事件注册必须在 `ModEventBusSubscriber` 中统一管理 |
 | 热更新验证 | 配置项必须验证运行时热更新回调是否实现 |
 | 文件层级安全审计 | 涉及 I/O 必须校验路径合法性、异常捕获与日志脱敏 |
+| 缓存完整性校验 | finalizePartFile 前必须校验文件长度或校验和，未通过则删除或标记损坏 |
+| 异常分支不可空 | 所有 catch/else/switch 中的 RETRY/FAIL 分支必须显式记录日志、上报或清理 |
+| 枚举序列化安全 | 禁止 ordinal() 直接用于网络传输，必须每次枚举变更时同步提升 NETWORK_VERSION |
+| 容错阈值配置化 | 所有业务阈值（超时/重试/缓存大小）必须通过配置项或构造函数注入 |
+| 单元测试覆盖要求 | 异常路径必须提供单元测试，新增类覆盖率 ≥90%，deterministic 测试 |
+| 跨线程资源同步 | 共享文件/缓存对象必须 synchronized/ReentrantLock/Concurrent |
+| 文档-代码一致性 | 自动对比 Config、指令注册、常量与文档描述是否同步 |
+| 配置归属标注 | 文档中配置项必须标注所属 toml 文件 |
+| 长输出警示 | 一次性输出 >30 行的指令必须注明可能刷屏 |
+| HTTPS 降级禁止 | HttpClient 必须显式设置 Redirect.NEVER，重定向后校验 scheme 为 https |
+| instanceof 包装流判定 | 包装流类型判断必须检查最内层实现，否则提供 getRawStream() 或 isGuarded() |
+| 虚拟线程网络发包 | PacketDistributor.sendToServer 必须包裹在 Minecraft.getInstance().execute() 中 |
+| 语言资源一致性 | i18n 文件必须通过 lint 检查键值对完整、未使用键、占位符一致 |
+| 代理模式信任边界 | 服务端必须将客户端回包视为不可信输入，严格校验所有字段 |
 
 ## 高频问题模块
 
@@ -123,6 +137,9 @@
 - `ClientState` — 静态状态泛滥、volatile缺失、生命周期薄弱（🔴）
 - `P2PConnectionManager` — 竞态条件、握手超时、IPv6过滤（🔴）
 - `ModNetwork` — 反射调用系统性空 catch，三轮修复失败，需资深开发者介入（🔴）
+- `MusicCache` — 半截文件落盘、LRU 删除未加锁、缓存完整性校验缺失（🔴）
+- `MusicProxySearchClient` — 虚拟线程直接发包、并发节流缺失（🔴）
+- `MusicApiClient` — HTTPS 降级风险（🔴）
 - `PlayerPasswordManager` — 密码安全、静态状态、配置边界（🟠）
 - `UpdateChecker` — 线程安全、版本硬编码、日志框架（🟠）
 - `RelayGuestJoiner` — 职责过多、组合操作原子性（🟠）
