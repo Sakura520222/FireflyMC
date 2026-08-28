@@ -51,3 +51,4 @@ docs/client-event-websocket-protocol.md
 .superpowers/
 日志.log
 文件.md
+logs/

@@ -2,7 +2,7 @@
 
 FireflyMC 是一个面向 FireflyMC 服务器生态的 Minecraft 模组，基于 **Minecraft 1.21.1** 与 **NeoForge 21.1.241** 开发。
 
-当前版本：`3.0.1`  
+当前版本：`3.0.2`  
 Mod ID：`fireflymc`
 
 [FireflyMC官网](https://mc.firefly520.top)

@@ -24,6 +24,8 @@ public class StallGuardInputStream extends FilterInputStream {
 
     private volatile boolean tripped = false;
     private volatile ScheduledFuture<?> pending;
+    /** 成功读取的累计字节数（文件完整性判断用：实收 vs Content-Length） */
+    private long bytesRead = 0L;
     /** 构造时固定：read() 每次重排沿用同一调度器与超时（注入测试才可确定性驱动） */
     private final ScheduledExecutorService scheduler;
     private final long stallTimeoutMs;
@@ -66,10 +68,16 @@ public class StallGuardInputStream extends FilterInputStream {
         return tripped;
     }
 
+    /** 成功读取的累计字节数（仅播放线程读写） */
+    public long bytesRead() {
+        return bytesRead;
+    }
+
     @Override
     public int read() throws IOException {
         int b = in.read();
         if (b >= 0) {
+            bytesRead++;
             arm();
         } else {
             cancel();
@@ -81,6 +89,7 @@ public class StallGuardInputStream extends FilterInputStream {
     public int read(byte[] b, int off, int len) throws IOException {
         int n = in.read(b, off, len);
         if (n > 0) {
+            bytesRead += n;
             arm();
         } else if (n < 0) {
             cancel();

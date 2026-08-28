@@ -21,13 +21,53 @@ class MusicCacheTest {
     }
 
     @Test
-    void constructorCleansStalePartsButKeepsMp3s() throws IOException {
-        // 崩溃/强杀残留的 .part 无人认领：构造（启动）时必须清理；完成的 .mp3 保留
+    void legacyCacheWithoutMarkerIsWipedOnInitialize() throws IOException {
+        // 3.0.1 升级迁移（无格式标记 = 旧格式）：3.0.1 的"EOF 无异常即落盘"可能存有
+        // 截断的半截 MP3，且无法事后区分好坏——正式缓存与 .part 全量作废并写入 v2 标记
+        Files.write(tempDir.resolve("123456.mp3"), new byte[10]);
         Files.write(tempDir.resolve("123456.1.mp3.part"), new byte[10]);
+        MusicCache cache = new MusicCache(tempDir);
+        assertTrue(cache.ensureInitialized(), "迁移成功必须返回 true");
+        assertFalse(Files.exists(tempDir.resolve("123456.mp3")), "旧格式正式缓存必须作废");
+        assertFalse(Files.exists(tempDir.resolve("123456.1.mp3.part")), "旧格式 .part 必须作废");
+        assertEquals("2", Files.readString(tempDir.resolve(".format-version")).strip(),
+                "迁移后必须写入格式标记");
+    }
+
+    @Test
+    void currentFormatCacheSurvivesInitialize() throws IOException {
+        // 已是 v2 格式（标记存在）：残留 .part 清理，正式缓存保留
+        MusicCache first = new MusicCache(tempDir);
+        assertTrue(first.ensureInitialized(), "首次初始化必须成功"); // 写入 v2 标记
         Files.write(tempDir.resolve("654321.mp3"), new byte[10]);
-        new MusicCache(tempDir);
-        assertFalse(Files.exists(tempDir.resolve("123456.1.mp3.part")), "残留 .part 必须被清理");
-        assertTrue(Files.exists(tempDir.resolve("654321.mp3")), "已完成缓存不得误删");
+        Files.write(tempDir.resolve("654321.9.mp3.part"), new byte[10]);
+        MusicCache cache = new MusicCache(tempDir);
+        assertTrue(cache.ensureInitialized(), "v2 格式初始化必须成功");
+        assertTrue(Files.exists(tempDir.resolve("654321.mp3")), "当前格式正式缓存不得误删");
+        assertFalse(Files.exists(tempDir.resolve("654321.9.mp3.part")), "残留 .part 必须被清理");
+    }
+
+    @Test
+    void freshInstallWithoutDirectoryInitializesCleanly() throws IOException {
+        // 新安装边界：目录不存在 ≠ 迁移失败——应创建目录并正常写 v2 标记
+        Path cacheDir = tempDir.resolve("music-cache"); // 不存在
+        MusicCache cache = new MusicCache(cacheDir);
+        assertTrue(cache.ensureInitialized(), "全新安装必须正常初始化");
+        assertTrue(Files.isDirectory(cacheDir), "初始化必须创建缓存目录");
+        assertEquals("2", Files.readString(cacheDir.resolve(".format-version")).strip(),
+                "全新安装必须写入 v2 标记");
+        assertTrue(cache.ensureInitialized(), "初始化必须幂等");
+    }
+
+    @Test
+    void ensureInitializedIsIdempotentAndNeverDeletesClaimedParts() throws IOException {
+        // 幂等标志是正确性约束：重复清理若不挡住，会误删 worker 已 begin、正在写的新 .part
+        MusicCache cache = new MusicCache(tempDir);
+        assertTrue(cache.ensureInitialized(), "首次初始化必须成功");
+        Path fresh = cache.beginPartFile("999", 1L);
+        Files.write(fresh, new byte[10]);
+        assertTrue(cache.ensureInitialized(), "重复初始化必须成功（幂等）");
+        assertTrue(Files.exists(fresh), "重复初始化不得误删已认领的 .part");
     }
 
     @Test
@@ -47,6 +87,20 @@ class MusicCacheTest {
         Path partB = cache.beginPartFile("111", 2L);
         assertNotEquals(partA, partB, "同一 songId 不同 playbackId 的 .part 必须隔离");
         assertTrue(partA.getFileName().toString().contains(".1."));
+    }
+
+    @Test
+    void invalidateDeletesOnlyCompletedCache() throws IOException {
+        // 坏缓存修复（审查 #5）：invalidate 只删正式缓存，下次播放重新下载；
+        // 不存在的 songId 静默无异常
+        MusicCache cache = new MusicCache(tempDir);
+        Path part = cache.beginPartFile("333", 1L);
+        Files.write(part, new byte[10]);
+        cache.finalizePartFile(part, "333");
+        assertTrue(cache.getCachedFile("333").isPresent());
+        cache.invalidate("333");
+        assertTrue(cache.getCachedFile("333").isEmpty(), "invalidate 必须删除正式缓存");
+        assertDoesNotThrow(() -> cache.invalidate("不存在"));
     }
 
     @Test

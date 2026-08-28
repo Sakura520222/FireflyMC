@@ -12,6 +12,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 import java.util.function.LongSupplier;
 
@@ -56,8 +57,8 @@ public class MusicQueueManager {
         }
     }
 
-    /** FAILED 终态通知（集成层给点歌者发提示消息） */
-    public interface FailureNotifier extends Consumer<QueuedSong> {}
+    /** FAILED 终态通知（集成层按失败性质给点歌者发不同提示） */
+    public interface FailureNotifier extends BiConsumer<QueuedSong, MusicPlaybackFailedPayload.FailureCode> {}
 
     private final LongSupplier clock; // System.nanoTime 语义
     private final StartBroadcaster startBroadcaster;
@@ -70,8 +71,8 @@ public class MusicQueueManager {
     /** 玩家在系统内（播放中+排队）的自点歌曲数；0 = 可点 */
     private final Map<UUID, Integer> activeSongs = new HashMap<>();
     private final Set<UUID> pendingPlayers = new HashSet<>();
-    /** playbackId -> 上报失败的客户端集合（去重） */
-    private final Map<Long, Set<UUID>> failedClients = new HashMap<>();
+    /** playbackId -> 上报失败的客户端 → 首个失败码（去重；仅确定性失败入表） */
+    private final Map<Long, Map<UUID, MusicPlaybackFailedPayload.FailureCode>> failedClients = new HashMap<>();
     /** 在途搜索会话（特权者可并发多个，按 session 身份认领移除；各自带硬超时） */
     private final Map<UUID, ArrayDeque<SearchSession>> pendingSessions = new HashMap<>();
     /** 已进入客户端代搜索的会话签发的防伪造 token（sessionId → token） */
@@ -90,7 +91,7 @@ public class MusicQueueManager {
                              StopBroadcaster stopBroadcaster,
                              QueueBroadcaster queueBroadcaster,
                              CapabilityLookup capabilityLookup) {
-        this(clock, startBroadcaster, stopBroadcaster, queueBroadcaster, capabilityLookup, song -> {});
+        this(clock, startBroadcaster, stopBroadcaster, queueBroadcaster, capabilityLookup, (song, code) -> {});
     }
 
     public MusicQueueManager(LongSupplier clock,
@@ -292,11 +293,19 @@ public class MusicQueueManager {
         if (currentSong == null || playbackId != currentPlaybackId) {
             return; // 旧实例迟到上报，不误伤
         }
-        Set<UUID> failed = failedClients.computeIfAbsent(playbackId, k -> new HashSet<>());
-        if (!failed.add(client)) {
+        // 网络型失败（播放中瞬断/瞬态连接失败）是客户端局部网络问题，不代表音源不可播，
+        // 不得投全局跳歌票（Issue #64：单人一次瞬断即跳歌、双人同抖即误杀）——
+        // 客户端自行重开流恢复，恢复失败静音到曲终，由权威计时自然切歌
+        if (code == MusicPlaybackFailedPayload.FailureCode.STREAM_INTERRUPTED
+                || code == MusicPlaybackFailedPayload.FailureCode.NETWORK_FAILED) {
+            return;
+        }
+        Map<UUID, MusicPlaybackFailedPayload.FailureCode> failed =
+                failedClients.computeIfAbsent(playbackId, k -> new HashMap<>());
+        if (failed.putIfAbsent(client, code) != null) {
             return; // 同玩家同实例去重
         }
-        if (shouldFailEarly(failed)) {
+        if (shouldFailEarly(failed.keySet())) {
             finishCurrent(MusicStopPayload.Reason.FAILED);
         }
     }
@@ -374,9 +383,13 @@ public class MusicQueueManager {
         QueuedSong finished = currentSong;
         currentSong = null;
         decrementActive(requester);
-        failedClients.remove(id);
+        // FAILED 通知需主导失败码（先取后清；quorum 只收音源型码，此处取首个上报者）
+        Map<UUID, MusicPlaybackFailedPayload.FailureCode> failed = failedClients.remove(id);
         if (reason == MusicStopPayload.Reason.FAILED) {
-            failureNotifier.accept(finished); // 播放失败：通知点歌者（可能为付费歌曲等）
+            MusicPlaybackFailedPayload.FailureCode code = failed == null || failed.isEmpty()
+                    ? MusicPlaybackFailedPayload.FailureCode.MP3_DECODE_FAILED
+                    : failed.values().iterator().next();
+            failureNotifier.accept(finished, code);
         }
         if (!queue.isEmpty()) {
             startNext(); // 下一首立即开始（Start 即隐式 stop 旧曲）

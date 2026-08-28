@@ -19,18 +19,35 @@ public final class JavaSoundOutput {
         this.sampleRate = sampleRate;
     }
 
-    /** 尝试以 MP3 解码参数打开线路；失败返回 null */
+    /**
+     * 尝试以 MP3 解码参数打开线路；失败重试（100ms × 10）后仍失败返回 null。
+     * 切歌瞬间旧 worker 的 SourceDataLine 可能尚未释放（LineUnavailableException）——
+     * 重试等待而非立即放弃，避免整首歌永久静音（Issue #64）。
+     * IllegalArgumentException（格式不支持）虽非竞争场景，统一重试开销可忽略。
+     */
     public static JavaSoundOutput tryOpen(int sampleRate, int channels) {
-        try {
-            AudioFormat format = new AudioFormat(sampleRate, 16, channels, true, false);
-            SourceDataLine line = (SourceDataLine) AudioSystem.getLine(
-                    new javax.sound.sampled.DataLine.Info(SourceDataLine.class, format));
-            line.open(format, 4096 * 8); // 缓冲约 0.7s @44.1k stereo
-            line.start();
-            return new JavaSoundOutput(line, sampleRate);
-        } catch (LineUnavailableException | IllegalArgumentException e) {
-            return null;
+        for (int attempt = 1; attempt <= 10; attempt++) {
+            try {
+                AudioFormat format = new AudioFormat(sampleRate, 16, channels, true, false);
+                SourceDataLine line = (SourceDataLine) AudioSystem.getLine(
+                        new javax.sound.sampled.DataLine.Info(SourceDataLine.class, format));
+                line.open(format, 4096 * 8); // 缓冲约 0.7s @44.1k stereo
+                line.start();
+                return new JavaSoundOutput(line, sampleRate);
+            } catch (LineUnavailableException | IllegalArgumentException e) {
+                if (attempt < 10) {
+                    try {
+                        Thread.sleep(100L);
+                    } catch (InterruptedException ie) {
+                        Thread.currentThread().interrupt();
+                        return null; // 取消场景：立即放弃
+                    }
+                }
+            }
         }
+        firefly520.fireflymc.FireflyMCMod.LOGGER.warn(
+                "[Music] 音频设备打开重试 10 次仍失败 sampleRate={} channels={}", sampleRate, channels);
+        return null;
     }
 
     /** 阻塞式写入（write 本身即背压） */
