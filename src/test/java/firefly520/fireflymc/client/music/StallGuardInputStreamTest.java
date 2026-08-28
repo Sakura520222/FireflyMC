@@ -51,6 +51,19 @@ class StallGuardInputStreamTest {
     }
 
     @Test
+    void countsBytesRead() throws IOException {
+        // 字节级完整性判断的计数基础：实收字节 vs Content-Length
+        TrackingStream inner = new TrackingStream(new byte[]{1, 2, 3, 4, 5, 6, 7});
+        StallGuardInputStream guard = new StallGuardInputStream(inner, SCHEDULER, 100);
+        assertEquals(0L, guard.bytesRead());
+        guard.read(new byte[4]);
+        assertEquals(4L, guard.bytesRead(), "数组 read 必须累计实收字节数");
+        guard.read();
+        assertEquals(5L, guard.bytesRead(), "单字节 read 计 1");
+        guard.close();
+    }
+
+    @Test
     void firesWithoutReads() throws IOException, InterruptedException {
         TrackingStream inner = new TrackingStream(new byte[10]);
         StallGuardInputStream guard = new StallGuardInputStream(inner, SCHEDULER, 50);

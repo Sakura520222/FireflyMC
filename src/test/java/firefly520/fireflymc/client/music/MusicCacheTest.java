@@ -21,16 +21,30 @@ class MusicCacheTest {
     }
 
     @Test
-    void constructorDoesNoIoAndEnsureInitializedCleans() throws IOException {
-        // 崩溃/强杀残留的 .part 无人认领：构造不做任何 I/O（主线程类初始化卡顿修复），
-        // 清理由 ensureInitialized（首个播放 worker 调用）承担；完成的 .mp3 保留
+    void legacyCacheWithoutMarkerIsWipedOnInitialize() throws IOException {
+        // 3.0.1 升级迁移（无格式标记 = 旧格式）：3.0.1 的"EOF 无异常即落盘"可能存有
+        // 截断的半截 MP3，且无法事后区分好坏——正式缓存与 .part 全量作废并写入 v2 标记
+        Files.write(tempDir.resolve("123456.mp3"), new byte[10]);
         Files.write(tempDir.resolve("123456.1.mp3.part"), new byte[10]);
-        Files.write(tempDir.resolve("654321.mp3"), new byte[10]);
         MusicCache cache = new MusicCache(tempDir);
-        assertTrue(Files.exists(tempDir.resolve("123456.1.mp3.part")), "构造函数不得做 I/O（.part 应仍在）");
         cache.ensureInitialized();
-        assertFalse(Files.exists(tempDir.resolve("123456.1.mp3.part")), "残留 .part 必须被清理");
-        assertTrue(Files.exists(tempDir.resolve("654321.mp3")), "已完成缓存不得误删");
+        assertFalse(Files.exists(tempDir.resolve("123456.mp3")), "旧格式正式缓存必须作废");
+        assertFalse(Files.exists(tempDir.resolve("123456.1.mp3.part")), "旧格式 .part 必须作废");
+        assertEquals("2", Files.readString(tempDir.resolve(".format-version")).strip(),
+                "迁移后必须写入格式标记");
+    }
+
+    @Test
+    void currentFormatCacheSurvivesInitialize() throws IOException {
+        // 已是 v2 格式（标记存在）：残留 .part 清理，正式缓存保留
+        MusicCache first = new MusicCache(tempDir);
+        first.ensureInitialized(); // 写入 v2 标记
+        Files.write(tempDir.resolve("654321.mp3"), new byte[10]);
+        Files.write(tempDir.resolve("654321.9.mp3.part"), new byte[10]);
+        MusicCache cache = new MusicCache(tempDir);
+        cache.ensureInitialized();
+        assertTrue(Files.exists(tempDir.resolve("654321.mp3")), "当前格式正式缓存不得误删");
+        assertFalse(Files.exists(tempDir.resolve("654321.9.mp3.part")), "残留 .part 必须被清理");
     }
 
     @Test

@@ -21,10 +21,11 @@ import java.util.concurrent.atomic.AtomicReference;
 /**
  * 播放线程：缓存/HTTP 流 → JLayer 解码 → PCM →（音量乘法）→ SourceDataLine。
  * 边下边播（Tee 双写缓存）；中途加入 discard 快进；无输出设备静音降级。
- * 网络断流（停滞/RST/提前 EOF）经恢复循环重取 CDN 直链 + 快进到权威位置续播，
+ * 网络断流（停滞/RST/字节级截断）经恢复循环重取 CDN 直链 + 快进到权威位置续播，
  * 恢复耗尽静音到曲终且不投全局失败票（Issue #64）。
- * 断流恢复的同步真值是权威单调时钟（authPositionMs）：JavaSound 时钟只反映实际
- * 声音进度，停滞期间会冻结，不能作为恢复点（恢复点用它会导致落后服务端数十秒）。
+ * 两个时钟语义严格分离：权威单调时钟（authPositionMs）只管"房间播到哪"（恢复点）；
+ * 文件完整性只看 HTTP 字节（实收 vs Content-Length）——停滞期间权威时钟持续推进，
+ * 拿它验证数据完整性会随卡顿时长失真；估算时长（240s fallback）同样不可靠。
  * 本线程绝不接触 Minecraft 对象（音量经 AtomicReference 传入）。
  */
 public class MusicPlayer implements Runnable {
@@ -33,12 +34,6 @@ public class MusicPlayer implements Runnable {
     private static final int STREAM_RECOVERY_ATTEMPTS = 3;
     /** 恢复 attempt 间退避基数（随 attempt 递增：0.5s/1s） */
     private static final long RETRY_BACKOFF_MS = 500L;
-    /**
-     * 提前 EOF 截断容差：距权威时长结尾不足此值视为正常播完（时长探测误差保护）。
-     * 止损值 8s（时长估算误差 + line 缓冲滞后）；长期应以下载字节数 vs
-     * Content-Length/Content-Range 做完整性判断，不依赖估算时长。
-     */
-    private static final long EARLY_EOF_TOLERANCE_MS = 8_000L;
 
     /** 本地播放失败码（供 manager 上报；NETWORK/STREAM 属网络型，PERMANENT/DECODE 属音源型） */
     public enum LocalFailure { NONE, NETWORK_FAILED, STREAM_INTERRUPTED, HTTP_PERMANENT_FAILED, MP3_DECODE_FAILED }
@@ -210,6 +205,8 @@ public class MusicPlayer implements Runnable {
     private Attempt streamAttempt(InputStream presetSource, long positionMs,
                                   MusicApiClient.HttpSchemePolicy policy) {
         boolean localMode = presetSource != null;
+        StallGuardInputStream guard = null;   // 网络模式的流看护（含字节计数）
+        long expectedBytes = -1L;             // Content-Length；-1 = 无法证明完整性
         InputStream dataSource;
         if (localMode) {
             dataSource = presetSource;
@@ -234,8 +231,12 @@ public class MusicPlayer implements Runnable {
                 return Attempt.RETRY; // 403/408/429/5xx 等瞬态
             }
             lastStreamScheme = response.uri().getScheme();
+            // 字节级完整性判断的基准：Content-Length 缺失（chunked 响应）时无法证明完整，
+            // 本次可正常播放但数据绝不落盘
+            expectedBytes = response.headers().firstValueAsLong("Content-Length").orElse(-1L);
             // 闲置看护：头后停滞由 watchdog 关闭流走恢复链路（cancel 也经此关闭）
-            httpStream = new StallGuardInputStream(response.body());
+            guard = new StallGuardInputStream(response.body());
+            httpStream = guard;
 
             // Tee 双写缓存（失败 attempt 的 .part 已删除，createFile 不会冲突）
             InputStream raw = httpStream;
@@ -257,7 +258,7 @@ public class MusicPlayer implements Runnable {
         Bitstream bitstream = new Bitstream(dataSource);
         JavaSoundOutput output = null;
         boolean completed = false;      // 走到 EOF（自然播完）
-        boolean earlyEof = false;       // completed 但远未到曲尾：CDN 无异常截断（判定必须在 finally 落盘之前）
+        boolean truncated = false;      // 字节级证明截断：实收 < Content-Length（判定必须在 finally 落盘之前）
         // 静音降级不消费流到 EOF：.part 只有第一帧预读字节，绝不能落盘为有效缓存
         // （否则下次播放命中损坏缓存导致腰斩/解码失败）
         boolean silentDegraded = false;
@@ -299,7 +300,7 @@ public class MusicPlayer implements Runnable {
                         bitstream.closeFrame();
                         header = bitstream.readFrame();
                         if (header == null) {
-                            completed = true; // 快进直达 EOF：流被完整消费（截断与否交给容差判定）
+                            completed = true; // 快进直达 EOF：流被完整消费（截断与否交给字节完整性判定）
                             break;
                         }
                         continue;
@@ -319,11 +320,12 @@ public class MusicPlayer implements Runnable {
                     break;
                 }
             }
-            // 提前 EOF 截断判定必须在 finally（缓存落盘）之前完成：
-            // completed 但距权威时长结尾还远 = CDN 无异常截断，坏 .part 绝不能转正
-            if (completed && !localMode && authPositionMs() < durationMs - EARLY_EOF_TOLERANCE_MS) {
-                earlyEof = true;
-                // 无异常的平静截断同样说明该 https 链路不可靠：下次恢复也强制原始地址
+            // 截断判定必须在 finally（缓存落盘）之前完成，且只看字节不看时长：
+            // 实收 < Content-Length = CDN 平静截断。authPositionMs 在停滞期间持续推进、
+            // 240s fallback 的估算时长都会失真，均不可作为完整性依据
+            if (completed && !localMode && expectedBytes > 0 && guard.bytesRead() < expectedBytes) {
+                truncated = true;
+                // 平静截断同样说明该 https 链路不可靠：下次恢复强制原始地址
                 if ("https".equals(lastStreamScheme)) {
                     httpsStalled = true;
                 }
@@ -337,7 +339,7 @@ public class MusicPlayer implements Runnable {
             // 其余解码异常 = 数据损坏（音源型）。
             // 注意 guard 在字段 httpStream 里——dataSource 已被 BufferedInputStream 包一层，
             // instanceof dataSource 恒为 false
-            boolean stalled = httpStream instanceof StallGuardInputStream guard && guard.isTripped();
+            boolean stalled = guard != null && guard.isTripped();
             boolean streamBroken = stalled || e instanceof javazoom.jl.decoder.BitstreamException;
             firefly520.fireflymc.FireflyMCMod.LOGGER.warn(
                     "[Music] 流中断 songId={} streamBroken={} err={}", songId, streamBroken, String.valueOf(e));
@@ -361,9 +363,11 @@ public class MusicPlayer implements Runnable {
             }
             closeQuietly(dataSource);
             closeQuietly(teeBranch);
-            // 缓存只在"完整播完且非截断"且缓存分支健康时落盘；失败 attempt 的 .part 一律删除，
+            // 缓存只在"字节级证明完整"时落盘（实收 ≥ Content-Length）；无 Content-Length
+            // 的响应可正常播放但无法证明完整，同样不落盘。失败 attempt 的 .part 一律删除，
             // 保证下一 attempt 的 beginPartFile（Files.createFile 语义）不冲突
-            boolean validComplete = completed && !earlyEof && !silentDegraded;
+            boolean byteVerified = expectedBytes > 0 && guard != null && guard.bytesRead() >= expectedBytes;
+            boolean validComplete = completed && !truncated && byteVerified && !silentDegraded;
             if (!localMode && validComplete && partFile != null
                     && (tee == null || !tee.isBranchBroken())) {
                 cache.finalizePartFile(partFile, songId);
@@ -377,10 +381,10 @@ public class MusicPlayer implements Runnable {
             closeQuietly(httpStream);
             httpStream = null;
         }
-        if (earlyEof) {
+        if (truncated) {
             firefly520.fireflymc.FireflyMCMod.LOGGER.warn(
-                    "[Music] 流提前结束 songId={} positionMs={}/{}ms → 恢复",
-                    songId, clampResume(authPositionMs()), durationMs);
+                    "[Music] 流被截断 songId={} received={}/{} bytes → 恢复",
+                    songId, guard.bytesRead(), expectedBytes);
             return Attempt.RETRY;
         }
         return completed ? Attempt.COMPLETED : Attempt.CANCELLED;

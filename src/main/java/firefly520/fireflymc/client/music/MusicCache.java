@@ -17,6 +17,14 @@ import java.util.stream.Stream;
 public class MusicCache {
 
     private static final long MAX_CACHE_BYTES = 256L * 1024 * 1024;
+    /** 缓存目录格式标记文件名 */
+    private static final String FORMAT_MARKER = ".format-version";
+    /**
+     * v2：正式缓存转正需要字节级完整性证明。3.0.1 的"EOF 无异常即落盘"可能已把提前
+     * 截断的半首歌存成 {songId}.mp3，且无法事后区分好坏——检测到旧格式（标记缺失或
+     * < 2）时全量作废正式缓存。缓存是可重建数据，首次启动重新下载远小于 #64 升级后继续复现。
+     */
+    private static final int FORMAT_VERSION = 2;
 
     private final Path cacheDir;
     /** stale .part 清理只执行一次（首个播放 worker 的 ensureInitialized 触发） */
@@ -42,7 +50,29 @@ public class MusicCache {
             return;
         }
         initialized = true;
+        // 一次性格式迁移（升级 3.0.1 → 3.0.2）：旧标记缺失/过旧 → 正式缓存全量作废。
+        // 必须在首个 worker、beginPartFile 之前执行（播放线程串行，无误删风险）
+        if (readFormatVersion() < FORMAT_VERSION) {
+            long wiped = wipeLegacyCache();
+            firefly520.fireflymc.FireflyMCMod.LOGGER.warn(
+                    "[Music] 缓存格式升级 v{}：作废 {} 个旧缓存文件（3.0.1 可能存有截断的半截 MP3）",
+                    FORMAT_VERSION, wiped);
+            writeFormatMarker();
+        }
         cleanStaleParts();
+    }
+
+    /** 读取目录格式版本；标记缺失/损坏/目录不存在 → 0（视为最旧格式） */
+    private int readFormatVersion() {
+        try {
+            Path marker = safeResolve(FORMAT_MARKER);
+            if (marker == null || !Files.isRegularFile(marker)) {
+                return 0;
+            }
+            return Integer.parseInt(Files.readString(marker).strip());
+        } catch (Exception e) {
+            return 0;
+        }
     }
 
     private void cleanStaleParts() {
@@ -54,6 +84,40 @@ public class MusicCache {
         }
     }
 
+    private void writeFormatMarker() {
+        try {
+            Files.createDirectories(cacheDir);
+            Files.writeString(cacheDir.resolve(FORMAT_MARKER), String.valueOf(FORMAT_VERSION));
+        } catch (IOException ignored) {
+        }
+    }
+
+    /** 全量作废旧格式缓存（正式 .mp3 与残留 .part）；返回删除数 */
+    private long wipeLegacyCache() {
+        long[] wiped = {0L};
+        try (Stream<Path> files = Files.list(cacheDir)) {
+            files.filter(p -> {
+                        String name = p.getFileName().toString();
+                        return name.endsWith(".mp3") || name.endsWith(".mp3.part");
+                    })
+                    .forEach(p -> {
+                        deleteQuietly(p);
+                        wiped[0]++;
+                    });
+        } catch (IOException ignored) {
+        }
+        return wiped[0];
+    }
+
+    /** 纵深防护：songId 是服务端不可信输入，解析+归一后必须仍在缓存目录内（防目录逃逸） */
+    private Path safeResolve(String fileName) {
+        Path target = cacheDir.resolve(fileName).normalize();
+        if (!target.toAbsolutePath().startsWith(cacheDir.toAbsolutePath().normalize())) {
+            return null;
+        }
+        return target;
+    }
+
     /** 实际使用的目录（懒创建）：运行目录/music-cache */
     public static MusicCache createDefault() {
         return new MusicCache(Path.of("music-cache"));
@@ -62,7 +126,10 @@ public class MusicCache {
     /** 查询已完成的缓存文件；命中时 touch lastModified（近似 LRU 的关键） */
     public Optional<Path> getCachedFile(String songId) {
         try {
-            Path file = cacheDir.resolve(songId + ".mp3");
+            Path file = safeResolve(songId + ".mp3");
+            if (file == null) {
+                return Optional.empty();
+            }
             if (Files.isRegularFile(file) && Files.size(file) > 0) {
                 Files.setLastModifiedTime(file, FileTime.fromMillis(System.currentTimeMillis()));
                 return Optional.of(file);
@@ -76,7 +143,11 @@ public class MusicCache {
     public Path beginPartFile(String songId, long playbackId) {
         try {
             Files.createDirectories(cacheDir);
-            return Files.createFile(cacheDir.resolve(songId + "." + playbackId + ".mp3.part"));
+            Path part = safeResolve(songId + "." + playbackId + ".mp3.part");
+            if (part == null) {
+                return null; // 路径逃逸：拒绝缓存（降级），播放照常
+            }
+            return Files.createFile(part);
         } catch (IOException e) {
             return null; // null = 本曲不缓存（降级），播放照常
         }
@@ -88,7 +159,11 @@ public class MusicCache {
             return;
         }
         try {
-            Path target = cacheDir.resolve(songId + ".mp3");
+            Path target = safeResolve(songId + ".mp3");
+            if (target == null) {
+                deleteQuietly(partFile); // 路径逃逸：拒绝转正，.part 一并删除
+                return;
+            }
             try {
                 Files.move(partFile, target,
                         StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
@@ -110,7 +185,10 @@ public class MusicCache {
 
     /** 缓存损坏时删除正式缓存文件（下次播放重新下载）；不触碰任何 .part */
     public void invalidate(String songId) {
-        deleteQuietly(cacheDir.resolve(songId + ".mp3"));
+        Path file = safeResolve(songId + ".mp3");
+        if (file != null) {
+            deleteQuietly(file);
+        }
     }
 
     /** 按 lastModified 删最旧，直到低于上限 */

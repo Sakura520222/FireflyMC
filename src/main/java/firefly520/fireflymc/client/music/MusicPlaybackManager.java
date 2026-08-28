@@ -1,6 +1,7 @@
 package firefly520.fireflymc.client.music;
 
 import firefly520.fireflymc.client.ClientMusicFailReporter;
+import firefly520.fireflymc.music.MusicApiClient;
 import firefly520.fireflymc.network.MusicQueueSyncPayload;
 import firefly520.fireflymc.network.MusicStartPayload;
 import firefly520.fireflymc.network.MusicStopPayload;
@@ -39,6 +40,14 @@ public final class MusicPlaybackManager {
     /** 收到 MusicStartPayload：无条件停旧曲再起新曲（服务端权威）。主线程段必须 O(1) */
     public static void start(MusicStartPayload payload) {
         long startNano = System.nanoTime();
+        // songId 是服务端不可信输入且直接参与客户端缓存路径拼接：格式不合法直接拒绝
+        //（不回显原文，防日志注入）
+        if (payload.songId() == null || !MusicApiClient.isValidSongId(payload.songId())) {
+            firefly520.fireflymc.FireflyMCMod.LOGGER.warn(
+                    "[Music] Start payload 携带非法 songId（长度 {}），拒绝播放",
+                    payload.songId() == null ? -1 : payload.songId().length());
+            return;
+        }
         // 切歌竞争修复（Issue #64）：旧 worker 的 SourceDataLine 在旧线程 finally 才释放，
         // 新 worker 必须等旧 worker 完全退出再开音频设备，否则 tryOpen 竞争失败 → 整首静音。
         // 完成信号优先 + join 兜底；等待全部在新线程内完成，绝不阻塞 Minecraft 主线程。
@@ -109,7 +118,8 @@ public final class MusicPlaybackManager {
                         });
                     }
                 }, clockRef);
-        Thread t = new Thread(() -> {
+        // 虚拟线程：切歌路径不再在主线程创建 OS 线程（Windows 下偶发 1~几 ms）
+        Thread t = Thread.ofVirtual().name("fireflymc-music-playback").start(() -> {
             // 连切场景：等待期间又收到新 Start → playbackId 已变，放弃本 worker。
             // abandon() 立即 countDown 完成信号：否则该 latch 永不释放，
             // 下一首会对着永不运行的 worker 白等 awaitExit(2s)（审查 #6）
@@ -137,11 +147,9 @@ public final class MusicPlaybackManager {
                 return;
             }
             player.run();
-        }, "fireflymc-music-playback");
-        t.setDaemon(true);
+        });
         currentWorker = player;
         workerThread = t;
-        t.start();
         logSlow("start", startNano);
     }
 
@@ -149,10 +157,18 @@ public final class MusicPlaybackManager {
     private static void parseLrcAsync(long playbackId, String lrcText) {
         Thread.ofVirtual().name("fireflymc-music-lrc").start(() -> {
             long t0 = System.nanoTime();
-            java.util.TreeMap<Long, String> parsed = LrcParser.parse(lrcText);
+            java.util.TreeMap<Long, String> parsed;
+            try {
+                parsed = LrcParser.parse(lrcText);
+            } catch (RuntimeException e) {
+                // 网络输入兜底：解析失败只影响歌词显示，绝不拖垮播放
+                firefly520.fireflymc.FireflyMCMod.LOGGER.error(
+                        "[Music] LRC 解析失败 playbackId={}", playbackId, e);
+                return;
+            }
             long costUs = (System.nanoTime() - t0) / 1_000L;
             if (costUs > SLOW_LOG_THRESHOLD_US) {
-                firefly520.fireflymc.FireflyMCMod.LOGGER.warn(
+                firefly520.fireflymc.FireflyMCMod.LOGGER.debug(
                         "[Music] LRC 后台解析耗时 {}μs lines={}", costUs, parsed.size());
             }
             Minecraft.getInstance().execute(() -> {
@@ -208,11 +224,11 @@ public final class MusicPlaybackManager {
         logSlow("stopInternal", startNano);
     }
 
-    /** 主线程段耗时观测（>2ms 才记 WARN，验证无残留阻塞 I/O；修复确认后可降 DEBUG/移除） */
+    /** 主线程段耗时观测（>2ms 记 DEBUG，验证无残留阻塞 I/O；DEBUG 级避免观测本身拖慢主线程） */
     private static void logSlow(String op, long startNano) {
         long costUs = (System.nanoTime() - startNano) / 1_000L;
-        if (costUs > SLOW_LOG_THRESHOLD_US) {
-            firefly520.fireflymc.FireflyMCMod.LOGGER.warn(
+        if (costUs > 2_000L) {
+            firefly520.fireflymc.FireflyMCMod.LOGGER.debug(
                     "[Music] {} 主线程耗时 {}μs（阈值 {}μs，疑似残留阻塞 I/O）",
                     op, costUs, SLOW_LOG_THRESHOLD_US);
         }
