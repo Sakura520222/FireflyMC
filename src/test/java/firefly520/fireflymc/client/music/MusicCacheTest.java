@@ -21,13 +21,27 @@ class MusicCacheTest {
     }
 
     @Test
-    void constructorCleansStalePartsButKeepsMp3s() throws IOException {
-        // 崩溃/强杀残留的 .part 无人认领：构造（启动）时必须清理；完成的 .mp3 保留
+    void constructorDoesNoIoAndEnsureInitializedCleans() throws IOException {
+        // 崩溃/强杀残留的 .part 无人认领：构造不做任何 I/O（主线程类初始化卡顿修复），
+        // 清理由 ensureInitialized（首个播放 worker 调用）承担；完成的 .mp3 保留
         Files.write(tempDir.resolve("123456.1.mp3.part"), new byte[10]);
         Files.write(tempDir.resolve("654321.mp3"), new byte[10]);
-        new MusicCache(tempDir);
+        MusicCache cache = new MusicCache(tempDir);
+        assertTrue(Files.exists(tempDir.resolve("123456.1.mp3.part")), "构造函数不得做 I/O（.part 应仍在）");
+        cache.ensureInitialized();
         assertFalse(Files.exists(tempDir.resolve("123456.1.mp3.part")), "残留 .part 必须被清理");
         assertTrue(Files.exists(tempDir.resolve("654321.mp3")), "已完成缓存不得误删");
+    }
+
+    @Test
+    void ensureInitializedIsIdempotentAndNeverDeletesClaimedParts() throws IOException {
+        // 幂等标志是正确性约束：重复清理若不挡住，会误删 worker 已 begin、正在写的新 .part
+        MusicCache cache = new MusicCache(tempDir);
+        cache.ensureInitialized();
+        Path fresh = cache.beginPartFile("999", 1L);
+        Files.write(fresh, new byte[10]);
+        cache.ensureInitialized();
+        assertTrue(Files.exists(fresh), "重复初始化不得误删已认领的 .part");
     }
 
     @Test

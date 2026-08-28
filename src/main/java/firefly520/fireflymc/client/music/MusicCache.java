@@ -19,17 +19,32 @@ public class MusicCache {
     private static final long MAX_CACHE_BYTES = 256L * 1024 * 1024;
 
     private final Path cacheDir;
+    /** stale .part 清理只执行一次（首个播放 worker 的 ensureInitialized 触发） */
+    private boolean initialized;
 
+    /**
+     * 构造不做任何 I/O：实例化发生在 MC 主线程（MusicPlaybackManager 静态字段初始化），
+     * Files.list 扫描+删除在 Windows 上可产生可观停顿（实测首次点歌卡顿源）。
+     * 残留清理延后到 {@link #ensureInitialized()}，由首个播放 worker 线程承担。
+     */
     public MusicCache(Path cacheDir) {
         this.cacheDir = cacheDir;
-        cleanStaleParts();
     }
 
     /**
-     * 清理崩溃/强杀残留的 .part：本实例此刻不可能有播放线程在写
-     * （类初始化链路在首个播放开始前），残留文件无人认领且不计入清理范围，
-     * 反复崩溃会无限累积。
+     * 清理崩溃/强杀残留的 .part（幂等，一次性）。必须在播放线程、本 worker 的
+     * beginPartFile 之前调用：播放线程串行推进（新 worker 先等旧 worker 退出），
+     * 绝不会误删自己即将创建/正在写的新 .part。
+     * 残留文件无人认领，不清理会随反复崩溃无限累积。
      */
+    public synchronized void ensureInitialized() {
+        if (initialized) {
+            return;
+        }
+        initialized = true;
+        cleanStaleParts();
+    }
+
     private void cleanStaleParts() {
         try (Stream<Path> files = Files.list(cacheDir)) {
             files.filter(p -> p.getFileName().toString().endsWith(".mp3.part"))

@@ -119,6 +119,8 @@ public class MusicPlayer implements Runnable {
 
     /** 播放主体。所有 return 路径都经 run() 的 finally 发出完成信号。 */
     private void runPlayback() {
+        // 一次性 stale .part 清理由首个 worker 承担（主线程类初始化不做任何 I/O）
+        cache.ensureInitialized();
         // 权威时钟从 payload 位置起算：打开流/快进的耗时也随真实时间推进，
         // 后续快进目标（liveTarget）自动追平这部分延迟
         resetAuthClock(basePositionMs);
@@ -321,6 +323,10 @@ public class MusicPlayer implements Runnable {
             // completed 但距权威时长结尾还远 = CDN 无异常截断，坏 .part 绝不能转正
             if (completed && !localMode && authPositionMs() < durationMs - EARLY_EOF_TOLERANCE_MS) {
                 earlyEof = true;
+                // 无异常的平静截断同样说明该 https 链路不可靠：下次恢复也强制原始地址
+                if ("https".equals(lastStreamScheme)) {
+                    httpsStalled = true;
+                }
             }
         } catch (Exception e) {
             if (cancelled) {
@@ -425,12 +431,19 @@ public class MusicPlayer implements Runnable {
         }
     }
 
-    /** stop 序列：置取消 → close 网络流（解除 read 阻塞）→ 删 .part（interrupt 由 manager 调） */
+    /**
+     * stop 序列（MC 主线程调用，必须 O(1)）：置取消 + 后台虚拟线程关网络流
+     * （解除阻塞在 CDN read 上的 worker）。主线程不做任何同步 I/O——close 网络/文件句柄
+     * 在 Windows 上（Defender 扫描、句柄清理）可停顿数 ms~数十 ms（实测切歌卡顿源）。
+     * teeBranch/.part 由 worker 的 finally 必然关闭/删除（cancelled → completed=false
+     * → delete 分支）；此处与 finally 可能并发 close 同一流，底层实现幂等，竞态无害。
+     */
     public void cancel() {
         cancelled = true;
-        closeQuietly(httpStream);
-        closeQuietly(teeBranch);
-        cache.deletePartFile(partFile);
+        InputStream stream = httpStream;
+        if (stream != null) {
+            Thread.ofVirtual().name("fireflymc-music-stream-close").start(() -> closeQuietly(stream));
+        }
     }
 
     /** 包装线程放弃尚未启动的 worker（连切 stale 检查路径）：置取消并立即放行完成信号，

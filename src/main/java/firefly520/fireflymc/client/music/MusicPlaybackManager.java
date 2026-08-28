@@ -11,13 +11,18 @@ import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * 客户端播放生命周期权威（公开方法只在客户端主线程调用——payload handler 已 enqueueWork）。
- * stop 完整序列：失效 playbackId → cancel（close 网络流/删 .part）→ interrupt；
+ * 主线程段必须 O(1)：cancel 不同步做任何 I/O（后台虚拟线程关网络流）、LRC 后台解析、
+ * 缓存 stale 清理由首个播放 worker 承担（实测首次点歌/切歌主线程卡顿修复）。
+ * stop 完整序列：失效 playbackId → cancel（O(1)）→ interrupt；
  * 旧 worker 的任何写回先验证仍是当前 playbackId。
  */
 public final class MusicPlaybackManager {
 
     /** MASTER×MUSIC 音量（tick 线程写，播放线程读） */
     private static final AtomicReference<Float> VOLUME = new AtomicReference<>(1.0f);
+
+    /** 主线程段耗时观测阈值（微秒）：超过才记 WARN */
+    private static final long SLOW_LOG_THRESHOLD_US = 2_000L;
 
     private static final MusicCache CACHE = MusicCache.createDefault();
     private static volatile MusicPlayer currentWorker;
@@ -31,8 +36,9 @@ public final class MusicPlaybackManager {
         VOLUME.set(volume);
     }
 
-    /** 收到 MusicStartPayload：无条件停旧曲再起新曲（服务端权威） */
+    /** 收到 MusicStartPayload：无条件停旧曲再起新曲（服务端权威）。主线程段必须 O(1) */
     public static void start(MusicStartPayload payload) {
+        long startNano = System.nanoTime();
         // 切歌竞争修复（Issue #64）：旧 worker 的 SourceDataLine 在旧线程 finally 才释放，
         // 新 worker 必须等旧 worker 完全退出再开音频设备，否则 tryOpen 竞争失败 → 整首静音。
         // 完成信号优先 + join 兜底；等待全部在新线程内完成，绝不阻塞 Minecraft 主线程。
@@ -40,16 +46,19 @@ public final class MusicPlaybackManager {
         final Thread oldThread = workerThread;
         stopInternal(false);
         currentPlaybackId = payload.playbackId();
-        java.util.TreeMap<Long, String> lrc = LrcParser.parse(payload.lrc());
+
+        // LRC 解析移出主线程（逐行 regex + TreeMap 插入，歌词大时可产生 5~15ms frame-time
+        // spike——实测切歌卡顿源之一）：先以空歌词立即起播，后台解析完成后仅在
+        // playbackId 仍匹配时原子替换；歌词晚几十毫秒出现不可察觉
+        final long myId = payload.playbackId();
 
         // 初始以 Silent 时钟建立状态；player 成功打开 SourceDataLine 后经 ClockRef 替换为精确时钟
         MusicPlaybackState.ClockRef clockRef =
                 new MusicPlaybackState.ClockRef(new PlaybackClock.Silent(payload.positionMs()));
         MusicPlaybackState.setPlaying(new MusicPlaybackState.PlayingInfo(
                 payload.playbackId(), payload.songId(), payload.title(), payload.author(),
-                payload.requesterName(), payload.durationMs(), lrc, clockRef));
-
-        final long myId = payload.playbackId();
+                payload.requesterName(), payload.durationMs(), new java.util.TreeMap<>(), clockRef));
+        parseLrcAsync(myId, payload.lrc());
         MusicPlayer player = new MusicPlayer(
                 myId, payload.songId(), payload.positionMs(), payload.durationMs(),
                 VOLUME, CACHE, new MusicPlayer.Callbacks() {
@@ -133,6 +142,32 @@ public final class MusicPlaybackManager {
         currentWorker = player;
         workerThread = t;
         t.start();
+        logSlow("start", startNano);
+    }
+
+    /** 后台解析歌词（virtual thread，不占主线程），完成后在 playbackId 仍匹配时原子替换 */
+    private static void parseLrcAsync(long playbackId, String lrcText) {
+        Thread.ofVirtual().name("fireflymc-music-lrc").start(() -> {
+            long t0 = System.nanoTime();
+            java.util.TreeMap<Long, String> parsed = LrcParser.parse(lrcText);
+            long costUs = (System.nanoTime() - t0) / 1_000L;
+            if (costUs > SLOW_LOG_THRESHOLD_US) {
+                firefly520.fireflymc.FireflyMCMod.LOGGER.warn(
+                        "[Music] LRC 后台解析耗时 {}μs lines={}", costUs, parsed.size());
+            }
+            Minecraft.getInstance().execute(() -> {
+                if (playbackId != currentPlaybackId) {
+                    return; // 已切歌：丢弃过期解析结果
+                }
+                MusicPlaybackState.PlayingInfo info = MusicPlaybackState.current();
+                if (info != null && info.playbackId() == playbackId) {
+                    // 原子替换歌词快照（clock 引用不变 → HUD 时钟连续）
+                    MusicPlaybackState.setPlaying(new MusicPlaybackState.PlayingInfo(
+                            info.playbackId(), info.songId(), info.title(), info.author(),
+                            info.requesterName(), info.durationMs(), parsed, info.clock()));
+                }
+            });
+        });
     }
 
     /** 收到 MusicStopPayload：停止并清空 HUD */
@@ -153,11 +188,13 @@ public final class MusicPlaybackManager {
     }
 
     private static void stopInternal(boolean clearState) {
+        long startNano = System.nanoTime();
         currentPlaybackId = 0L; // 失效 playbackId：旧 worker 写回全部失效
         MusicPlayer worker = currentWorker;
         currentWorker = null;
         if (worker != null) {
-            // cancel()：close 网络流（解除 read 阻塞）+ 删 .part + 置 cancelled；line 由线程 finally 关闭
+            // cancel() 为 O(1)：置取消 + 后台虚拟线程关流；文件资源由 worker finally 清理
+            //（主线程同步 close 网络/文件句柄在 Windows 上可停顿数 ms~数十 ms——切歌卡顿修复）
             worker.cancel();
         }
         Thread t = workerThread;
@@ -167,6 +204,17 @@ public final class MusicPlaybackManager {
         }
         if (clearState) {
             MusicPlaybackState.clearPlaying();
+        }
+        logSlow("stopInternal", startNano);
+    }
+
+    /** 主线程段耗时观测（>2ms 才记 WARN，验证无残留阻塞 I/O；修复确认后可降 DEBUG/移除） */
+    private static void logSlow(String op, long startNano) {
+        long costUs = (System.nanoTime() - startNano) / 1_000L;
+        if (costUs > SLOW_LOG_THRESHOLD_US) {
+            firefly520.fireflymc.FireflyMCMod.LOGGER.warn(
+                    "[Music] {} 主线程耗时 {}μs（阈值 {}μs，疑似残留阻塞 I/O）",
+                    op, costUs, SLOW_LOG_THRESHOLD_US);
         }
     }
 }

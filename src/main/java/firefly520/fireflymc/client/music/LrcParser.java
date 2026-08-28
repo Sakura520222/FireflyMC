@@ -15,6 +15,10 @@ public final class LrcParser {
     /** 匹配行首一个或多个连续时间标签 */
     private static final Pattern TIME_TAGS = Pattern.compile("(\\[\\d{1,3}:\\d{1,2}(?:[.:]\\d{1,3})?])+");
 
+    /** 单个时间标签（带捕获组）。预编译：解析逐行调用，行内 compile 是热路径浪费 */
+    private static final Pattern TIME_TAG =
+            Pattern.compile("\\[(\\d{1,3}):(\\d{1,2})(?:[.:](\\d{1,3}))?]");
+
     private LrcParser() {}
 
     /**
@@ -39,7 +43,7 @@ public final class LrcParser {
             if (text.isEmpty()) {
                 continue;
             }
-            Matcher tagMatcher = Pattern.compile("\\[(\\d{1,3}):(\\d{1,2})(?:[.:](\\d{1,3}))?]").matcher(tags);
+            Matcher tagMatcher = TIME_TAG.matcher(tags);
             while (tagMatcher.find()) {
                 long minutes = Long.parseLong(tagMatcher.group(1));
                 long seconds = Long.parseLong(tagMatcher.group(2));
