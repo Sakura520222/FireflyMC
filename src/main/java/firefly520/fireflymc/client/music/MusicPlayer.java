@@ -21,8 +21,10 @@ import java.util.concurrent.atomic.AtomicReference;
 /**
  * 播放线程：缓存/HTTP 流 → JLayer 解码 → PCM →（音量乘法）→ SourceDataLine。
  * 边下边播（Tee 双写缓存）；中途加入 discard 快进；无输出设备静音降级。
- * 网络断流（停滞/RST/提前 EOF）经恢复循环重取 CDN 直链 + 快进到快照位置续播，
+ * 网络断流（停滞/RST/提前 EOF）经恢复循环重取 CDN 直链 + 快进到权威位置续播，
  * 恢复耗尽静音到曲终且不投全局失败票（Issue #64）。
+ * 断流恢复的同步真值是权威单调时钟（authPositionMs）：JavaSound 时钟只反映实际
+ * 声音进度，停滞期间会冻结，不能作为恢复点（恢复点用它会导致落后服务端数十秒）。
  * 本线程绝不接触 Minecraft 对象（音量经 AtomicReference 传入）。
  */
 public class MusicPlayer implements Runnable {
@@ -31,13 +33,17 @@ public class MusicPlayer implements Runnable {
     private static final int STREAM_RECOVERY_ATTEMPTS = 3;
     /** 恢复 attempt 间退避基数（随 attempt 递增：0.5s/1s） */
     private static final long RETRY_BACKOFF_MS = 500L;
-    /** 提前 EOF 截断容差：距权威时长结尾不足此值视为正常播完（时长探测误差保护） */
-    private static final long EARLY_EOF_TOLERANCE_MS = 3_000L;
+    /**
+     * 提前 EOF 截断容差：距权威时长结尾不足此值视为正常播完（时长探测误差保护）。
+     * 止损值 8s（时长估算误差 + line 缓冲滞后）；长期应以下载字节数 vs
+     * Content-Length/Content-Range 做完整性判断，不依赖估算时长。
+     */
+    private static final long EARLY_EOF_TOLERANCE_MS = 8_000L;
 
     /** 本地播放失败码（供 manager 上报；NETWORK/STREAM 属网络型，PERMANENT/DECODE 属音源型） */
     public enum LocalFailure { NONE, NETWORK_FAILED, STREAM_INTERRUPTED, HTTP_PERMANENT_FAILED, MP3_DECODE_FAILED }
 
-    /** 单次流会话结果；RETRY 为网络型可重试（resumeAtMs 携带恢复位置），其余为终态 */
+    /** 单次流会话结果；RETRY 为网络型可重试（恢复点取权威时钟），其余为终态 */
     private enum Attempt { COMPLETED, CANCELLED, RETRY, OPEN_PERMANENT, DECODE_FAILED }
 
     public interface Callbacks {
@@ -65,8 +71,14 @@ public class MusicPlayer implements Runnable {
     private volatile Path partFile;
     private volatile OutputStream teeBranch;
     private volatile TeeInputStream tee;       // 落盘前检查缓存分支健康（磁盘满不 finalize 残缺 .part）
-    /** 当前 attempt 的恢复位置快照（RETRY 时有效；仅播放线程读写，无需并发保护） */
-    private long resumeAtMs = -1L;
+
+    // ---- 权威单调时钟（仅播放线程读写）：断流恢复的同步真值 ----
+    private long authBaseMs;
+    private long authStartNano;
+    /** 最近一次成功打开的流协议（https/http；断流发生在 https 流上时下次恢复强制原始地址） */
+    private String lastStreamScheme;
+    /** https 流发生过断流：后续恢复 attempt 走 ORIGINAL 策略（原始 Location，多为 http） */
+    private boolean httpsStalled;
 
     public MusicPlayer(long playbackId, String songId, long basePositionMs, long durationMs,
                        AtomicReference<Float> volumeRef,
@@ -94,31 +106,62 @@ public class MusicPlayer implements Runnable {
         }
     }
 
+    /** 权威时钟锚定：以 base 为当前位置重新起算（起播/恢复起播瞬间调用） */
+    private void resetAuthClock(long baseMs) {
+        authBaseMs = baseMs;
+        authStartNano = System.nanoTime();
+    }
+
+    /** 权威位置：房间同步意义的当前进度（停滞期间持续推进，与 line 时钟无关） */
+    private long authPositionMs() {
+        return authBaseMs + (System.nanoTime() - authStartNano) / 1_000_000L;
+    }
+
     /** 播放主体。所有 return 路径都经 run() 的 finally 发出完成信号。 */
     private void runPlayback() {
-        // 缓存命中：本地文件无断流概念，一次播放到底（不做提前 EOF 截断检测）
+        // 权威时钟从 payload 位置起算：打开流/快进的耗时也随真实时间推进，
+        // 后续快进目标（liveTarget）自动追平这部分延迟
+        resetAuthClock(basePositionMs);
+        long positionMs = basePositionMs;
+
+        // 缓存命中：本地文件优先；损坏（不可读/解码失败）→ 失效缓存并落入网络恢复流程，
+        // 绝不能静默吞掉（否则下次仍命中同一坏文件，永久无声）
         Path localFile = cache.getCachedFile(songId).orElse(null);
         if (localFile != null) {
+            Attempt result;
             try (InputStream in = new BufferedInputStream(Files.newInputStream(localFile), 65536)) {
-                reportFinal(streamAttempt(in, basePositionMs), basePositionMs);
+                result = streamAttempt(in, positionMs, MusicApiClient.HttpSchemePolicy.PREFER_HTTPS);
             } catch (IOException e) {
-                // 本地缓存读失败可删缓存重下，非音源本身问题 → 网络型
-                callbacks.onLocalFailure(playbackId, LocalFailure.NETWORK_FAILED);
+                result = Attempt.RETRY; // 文件不可读视为缓存损坏
             }
-            return;
+            if (result == Attempt.COMPLETED || result == Attempt.CANCELLED) {
+                reportFinal(result, positionMs);
+                return;
+            }
+            cache.invalidate(songId);
+            positionMs = clampResume(authPositionMs());
+            // HUD 从权威位置续走（line 已关，JavaSound 时钟冻结）
+            clockRef.set(new PlaybackClock.Silent(positionMs));
+            callbacks.onStreamRecovering(playbackId, positionMs);
+            firefly520.fireflymc.FireflyMCMod.LOGGER.warn(
+                    "[Music] 本地缓存损坏已失效 songId={} positionMs={} → 重新下载", songId, positionMs);
         }
 
-        // 网络模式：断流恢复循环（Issue #64）。每次 attempt 重新走 outer/url 拿 CDN 直链
-        //（HTTPS/HTTP 重新决策 → 中途卡死场景自然回退原始 http），从文件头重新下载 +
-        // discard 快进到快照位置恢复，最终 .part 仍能形成完整 MP3。
-        long positionMs = basePositionMs;
+        // 网络模式：断流恢复循环（Issue #64）。每次 attempt 重新走 outer/url 拿 CDN 直链，
+        // 从文件头重新下载 + discard 快进到权威位置恢复，最终 .part 仍能形成完整 MP3。
         for (int attempt = 1; attempt <= STREAM_RECOVERY_ATTEMPTS && !cancelled; attempt++) {
-            Attempt result = streamAttempt(null, positionMs);
-            long resume = resumeAtMs;
+            // HTTPS 策略：https 流发生过断流 → 后续恢复强制走网易原始 Location（多为 http）。
+            // 否则"HTTPS 每次都能建连但播放中途稳定卡死"时 3 次恢复会全走同一条坏链路
+            MusicApiClient.HttpSchemePolicy policy = (attempt > 1 && httpsStalled)
+                    ? MusicApiClient.HttpSchemePolicy.ORIGINAL
+                    : MusicApiClient.HttpSchemePolicy.PREFER_HTTPS;
+            Attempt result = streamAttempt(null, positionMs, policy);
             if (result == Attempt.RETRY) {
+                // 恢复点 = 权威时钟当前位置（停滞期间持续推进，与房间同步）
+                long resume = clampResume(authPositionMs());
                 if (resume != positionMs) {
-                    // 真断流（有已播放位置）：HUD 时钟切回 Silent（JavaSound 时钟随 line
-                    // 关闭冻结），恢复下载/快进期间 HUD/歌词按真实时间无缝续走
+                    // HUD 时钟切回 Silent（JavaSound 时钟随 line 关闭冻结），
+                    // 恢复下载/快进期间 HUD/歌词按真实时间无缝续走
                     clockRef.set(new PlaybackClock.Silent(resume));
                     callbacks.onStreamRecovering(playbackId, resume);
                     positionMs = resume;
@@ -150,10 +193,8 @@ public class MusicPlayer implements Runnable {
             case COMPLETED -> callbacks.onFinished(playbackId, true);
             case OPEN_PERMANENT -> callbacks.onLocalFailure(playbackId, LocalFailure.HTTP_PERMANENT_FAILED);
             case DECODE_FAILED -> callbacks.onLocalFailure(playbackId, LocalFailure.MP3_DECODE_FAILED);
-            case CANCELLED -> {
-            } // 取消：无回调
-            case RETRY -> {
-            } // 不应到达（恢复循环内消化）
+            case CANCELLED, RETRY -> {
+            } // 取消无回调；RETRY 由恢复循环消化
         }
     }
 
@@ -161,23 +202,23 @@ public class MusicPlayer implements Runnable {
      * 单次"打开流（网络模式）→ 解码 → 播放"会话。
      *
      * @param presetSource 非空 = 本地缓存文件流（无打开/无 tee/无 .part）；null = 网络模式
-     * @return RETRY 表示网络型可重试（resumeAtMs 携带恢复位置），其余为终态
+     * @param policy       CDN 直链协议策略（仅网络模式生效）
+     * @return RETRY 表示网络型可重试（恢复点=权威时钟），其余为终态
      */
-    private Attempt streamAttempt(InputStream presetSource, long positionMs) {
+    private Attempt streamAttempt(InputStream presetSource, long positionMs,
+                                  MusicApiClient.HttpSchemePolicy policy) {
         boolean localMode = presetSource != null;
         InputStream dataSource;
         if (localMode) {
             dataSource = presetSource;
         } else {
-            // 打开流（单次；重试与退避由外层恢复循环统一承担）。每次重新走 outer/url
-            // 拿 CDN 直链，HTTPS 升级失败/中途卡死自然回退原始 http（Issue #64 #5）
+            // 打开流（单次；重试与退避由外层恢复循环统一承担）
             HttpResponse<InputStream> response;
             try {
-                response = MusicApiClient.openAudioStream(songId, null);
+                response = MusicApiClient.openAudioStream(songId, null, policy);
             } catch (Exception e) {
                 firefly520.fireflymc.FireflyMCMod.LOGGER.warn(
                         "[Music] 打开音频流失败 songId={}: {}", songId, String.valueOf(e));
-                resumeAtMs = positionMs;
                 return Attempt.RETRY;
             }
             int code = response.statusCode();
@@ -188,9 +229,9 @@ public class MusicPlayer implements Runnable {
                 if (code == 404 || code == 410) {
                     return Attempt.OPEN_PERMANENT; // 确定性不可播：投音源失败票
                 }
-                resumeAtMs = positionMs;
                 return Attempt.RETRY; // 403/408/429/5xx 等瞬态
             }
+            lastStreamScheme = response.uri().getScheme();
             // 闲置看护：头后停滞由 watchdog 关闭流走恢复链路（cancel 也经此关闭）
             httpStream = new StallGuardInputStream(response.body());
 
@@ -214,10 +255,10 @@ public class MusicPlayer implements Runnable {
         Bitstream bitstream = new Bitstream(dataSource);
         JavaSoundOutput output = null;
         boolean completed = false;      // 走到 EOF（自然播完）
+        boolean earlyEof = false;       // completed 但远未到曲尾：CDN 无异常截断（判定必须在 finally 落盘之前）
         // 静音降级不消费流到 EOF：.part 只有第一帧预读字节，绝不能落盘为有效缓存
         // （否则下次播放命中损坏缓存导致腰斩/解码失败）
         boolean silentDegraded = false;
-        long finalPos = positionMs;
         try {
             Decoder decoder = new Decoder();
             Header header = bitstream.readFrame();
@@ -236,10 +277,11 @@ public class MusicPlayer implements Runnable {
                 silentDegraded = true;
                 return waitSilent(positionMs) ? Attempt.COMPLETED : Attempt.CANCELLED;
             }
-            clockRef.set(output.clock(positionMs)); // 换精确 JavaSound 时钟（恢复场景 base=快照位置）
 
-            // discard 快进（中途加入/断流恢复）：解码并丢弃 positionMs 之前的 PCM
-            boolean seeking = positionMs > 0;
+            // discard 快进（中途加入/断流恢复）：解码并丢弃目标位置之前的 PCM。
+            // 目标取权威时钟实时值（liveTarget）：打开流/快进自身的耗时也被追平，
+            // 恢复后音频从"房间当前进度"起播，而非落后于服务端
+            boolean seeking = Math.max(positionMs, authPositionMs()) > 0;
             long discardedSamples = 0L;
 
             while (!cancelled) {
@@ -250,16 +292,20 @@ public class MusicPlayer implements Runnable {
                 if (seeking) {
                     long elapsedMs = discardedSamples * 1000L / ((long) sampleRate * channels);
                     long frameMs = len * 1000L / ((long) sampleRate * channels);
-                    if (elapsedMs + frameMs <= positionMs) {
+                    if (elapsedMs + frameMs <= Math.max(positionMs, authPositionMs())) {
                         discardedSamples += len;
                         bitstream.closeFrame();
                         header = bitstream.readFrame();
                         if (header == null) {
+                            completed = true; // 快进直达 EOF：流被完整消费（截断与否交给容差判定）
                             break;
                         }
                         continue;
                     }
-                    seeking = false; // 越过 base 位置，开始正常播放
+                    // 起播瞬间：权威时钟重锚定到实际起播位置；HUD 换精确 JavaSound 时钟
+                    seeking = false;
+                    resetAuthClock(elapsedMs);
+                    clockRef.set(output.clock(elapsedMs));
                 }
 
                 applyVolume(samples, len);
@@ -271,8 +317,10 @@ public class MusicPlayer implements Runnable {
                     break;
                 }
             }
-            if (!cancelled && output != null) {
-                finalPos = clockRef.positionMs(); // line 关闭前快照（关闭后 frame 计数不可靠）
+            // 提前 EOF 截断判定必须在 finally（缓存落盘）之前完成：
+            // completed 但距权威时长结尾还远 = CDN 无异常截断，坏 .part 绝不能转正
+            if (completed && !localMode && authPositionMs() < durationMs - EARLY_EOF_TOLERANCE_MS) {
+                earlyEof = true;
             }
         } catch (Exception e) {
             if (cancelled) {
@@ -288,8 +336,11 @@ public class MusicPlayer implements Runnable {
             firefly520.fireflymc.FireflyMCMod.LOGGER.warn(
                     "[Music] 流中断 songId={} streamBroken={} err={}", songId, streamBroken, String.valueOf(e));
             if (streamBroken) {
-                // 异常发生时 line 尚在，时钟位置即已播放到的准确位置（clamp 到 [0, durationMs]）
-                resumeAtMs = clampResume(clockRef.positionMs());
+                // 恢复点 = 权威时钟当前位置：停滞 30s 期间它持续推进，恢复后与房间同步；
+                // line 时钟早已冻结，不能作为恢复点（会落后服务端数十秒）
+                if ("https".equals(lastStreamScheme)) {
+                    httpsStalled = true; // 下次恢复强制原始 Location，避开稳定卡死的 https 链路
+                }
                 return Attempt.RETRY;
             }
             return Attempt.DECODE_FAILED;
@@ -304,9 +355,10 @@ public class MusicPlayer implements Runnable {
             }
             closeQuietly(dataSource);
             closeQuietly(teeBranch);
-            // 缓存只在完整播完（EOF）且缓存分支健康时落盘；失败 attempt 的 .part 一律删除，
+            // 缓存只在"完整播完且非截断"且缓存分支健康时落盘；失败 attempt 的 .part 一律删除，
             // 保证下一 attempt 的 beginPartFile（Files.createFile 语义）不冲突
-            if (!localMode && completed && !silentDegraded && partFile != null
+            boolean validComplete = completed && !earlyEof && !silentDegraded;
+            if (!localMode && validComplete && partFile != null
                     && (tee == null || !tee.isBranchBroken())) {
                 cache.finalizePartFile(partFile, songId);
             } else {
@@ -319,12 +371,10 @@ public class MusicPlayer implements Runnable {
             closeQuietly(httpStream);
             httpStream = null;
         }
-        // 提前 EOF 截断检测：距权威时长结尾还远就"自然结束"，多为 CDN 提前断流（无异常的截断）——
-        // 按可恢复断流处理，避免半截音频被缓存落盘、被当成正常播完
-        if (completed && !localMode && finalPos < durationMs - EARLY_EOF_TOLERANCE_MS) {
+        if (earlyEof) {
             firefly520.fireflymc.FireflyMCMod.LOGGER.warn(
-                    "[Music] 流提前结束 songId={} positionMs={}/{}ms → 恢复", songId, finalPos, durationMs);
-            resumeAtMs = clampResume(finalPos);
+                    "[Music] 流提前结束 songId={} positionMs={}/{}ms → 恢复",
+                    songId, clampResume(authPositionMs()), durationMs);
             return Attempt.RETRY;
         }
         return completed ? Attempt.COMPLETED : Attempt.CANCELLED;
@@ -381,6 +431,13 @@ public class MusicPlayer implements Runnable {
         closeQuietly(httpStream);
         closeQuietly(teeBranch);
         cache.deletePartFile(partFile);
+    }
+
+    /** 包装线程放弃尚未启动的 worker（连切 stale 检查路径）：置取消并立即放行完成信号，
+     *  避免 next worker 对着一个永不 countDown 的 latch 白等 2s */
+    void abandon() {
+        cancelled = true;
+        exited.countDown();
     }
 
     /** 完成信号等待：runPlayback 返回（line 已释放）后返回 true；超时/打断返回 false */

@@ -93,6 +93,11 @@ public class MusicCache {
         }
     }
 
+    /** 缓存损坏时删除正式缓存文件（下次播放重新下载）；不触碰任何 .part */
+    public void invalidate(String songId) {
+        deleteQuietly(cacheDir.resolve(songId + ".mp3"));
+    }
+
     /** 按 lastModified 删最旧，直到低于上限 */
     private void evictIfNeeded() {
         try (Stream<Path> files = Files.list(cacheDir)) {

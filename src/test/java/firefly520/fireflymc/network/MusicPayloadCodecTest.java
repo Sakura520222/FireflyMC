@@ -61,6 +61,17 @@ class MusicPayloadCodecTest {
     }
 
     @Test
+    void failureCodeWireIdsAreStable() {
+        // 显式 wire ID（协议值与枚举序号解耦）：重排/新增枚举不再改变旧值语义。
+        // 0/2/3 与 3.0.1 旧 ordinal 交叉时落在语义安全侧（网络型忽略/相同），
+        // 10 为旧版不存在的全新值——旧客户端失败码绝不误读成 HTTP_PERMANENT_FAILED
+        assertEquals(0, MusicPlaybackFailedPayload.FailureCode.NETWORK_FAILED.wireId);
+        assertEquals(2, MusicPlaybackFailedPayload.FailureCode.STREAM_INTERRUPTED.wireId);
+        assertEquals(10, MusicPlaybackFailedPayload.FailureCode.HTTP_PERMANENT_FAILED.wireId);
+        assertEquals(3, MusicPlaybackFailedPayload.FailureCode.MP3_DECODE_FAILED.wireId);
+    }
+
+    @Test
     void failedPayloadRejectsOutOfRangeOrdinal() {
         // 恶意/损坏包的越界枚举序号：必须以 DecoderException 拒绝（可预期的协议错误），
         // 而非裸 ArrayIndexOutOfBoundsException

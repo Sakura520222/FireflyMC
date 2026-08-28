@@ -101,8 +101,11 @@ public final class MusicPlaybackManager {
                     }
                 }, clockRef);
         Thread t = new Thread(() -> {
-            // 连切场景：等待期间又收到新 Start → playbackId 已变，直接退出不碰音频设备
+            // 连切场景：等待期间又收到新 Start → playbackId 已变，放弃本 worker。
+            // abandon() 立即 countDown 完成信号：否则该 latch 永不释放，
+            // 下一首会对着永不运行的 worker 白等 awaitExit(2s)（审查 #6）
             if (currentPlaybackId != myId) {
+                player.abandon();
                 return;
             }
             if (oldWorker != null) {
@@ -121,7 +124,8 @@ public final class MusicPlaybackManager {
                 }
             }
             if (currentPlaybackId != myId) {
-                return; // 再次复查：等待期间被切歌
+                player.abandon(); // 再次复查失败：等待期间被切歌，放行完成信号后退出
+                return;
             }
             player.run();
         }, "fireflymc-music-playback");

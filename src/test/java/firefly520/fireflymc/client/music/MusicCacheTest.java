@@ -50,6 +50,20 @@ class MusicCacheTest {
     }
 
     @Test
+    void invalidateDeletesOnlyCompletedCache() throws IOException {
+        // 坏缓存修复（审查 #5）：invalidate 只删正式缓存，下次播放重新下载；
+        // 不存在的 songId 静默无异常
+        MusicCache cache = new MusicCache(tempDir);
+        Path part = cache.beginPartFile("333", 1L);
+        Files.write(part, new byte[10]);
+        cache.finalizePartFile(part, "333");
+        assertTrue(cache.getCachedFile("333").isPresent());
+        cache.invalidate("333");
+        assertTrue(cache.getCachedFile("333").isEmpty(), "invalidate 必须删除正式缓存");
+        assertDoesNotThrow(() -> cache.invalidate("不存在"));
+    }
+
+    @Test
     void cacheHitTouchesLastModified() throws IOException, InterruptedException {
         MusicCache cache = new MusicCache(tempDir);
         Path part = cache.beginPartFile("222", 1L);

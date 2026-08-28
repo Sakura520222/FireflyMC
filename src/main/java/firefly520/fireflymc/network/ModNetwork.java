@@ -12,7 +12,11 @@ import net.neoforged.neoforge.network.registration.PayloadRegistrar;
  * playToClient 的包处理器使用反射延迟加载客户端类，避免服务端加载客户端类
  */
 public class ModNetwork {
-    public static final String NETWORK_VERSION = "1.3.0";
+    /**
+     * 协议版本。1.4.0：FailureCode 语义重排（NETWORK/PERMANENT 细分）+ 显式 wireId——
+     * 与 3.0.1 混跑会读错失败码（quorum 语义失效），必须强制同版本。
+     */
+    public static final String NETWORK_VERSION = "1.4.0";
 
     public static void registerPayloads(final RegisterPayloadHandlersEvent event) {
         final PayloadRegistrar registrar = event.registrar(FireflyMCMod.MODID)

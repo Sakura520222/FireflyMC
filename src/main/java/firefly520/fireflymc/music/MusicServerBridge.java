@@ -60,10 +60,11 @@ public final class MusicServerBridge {
                     if (s == null) {
                         return;
                     }
-                    // 日志增强：失败聚合结果（code/songId/点歌者）
+                    // 日志增强：失败聚合结果（code/songId/点歌者）。
+                    // title/requesterName 来自客户端代搜索回包（不可信输入）：剔除控制字符防日志注入
                     firefly520.fireflymc.FireflyMCMod.LOGGER.info(
                             "[Music] 播放失败终态 songId={} title={} code={} requester={}",
-                            song.songId(), song.title(), code, song.requesterName());
+                            song.songId(), sanitize(song.title()), code, sanitize(song.requesterName()));
                     String key = code == MusicPlaybackFailedPayload.FailureCode.MP3_DECODE_FAILED
                             ? "fireflymc.music.error.playback_decode_failed"
                             : "fireflymc.music.error.playback_failed";
@@ -185,5 +186,10 @@ public final class MusicServerBridge {
             return "";
         }
         return s.length() <= maxChars ? s : s.substring(0, maxChars);
+    }
+
+    /** 日志脱敏：客户端回包文本剔除控制字符（含 \r\n，防伪造日志行） */
+    private static String sanitize(String s) {
+        return s == null ? "" : s.replaceAll("\\p{Cntrl}", "");
     }
 }

@@ -83,6 +83,14 @@ public final class MusicApiClient {
 
     private MusicApiClient() {}
 
+    /** CDN 直链协议策略 */
+    public enum HttpSchemePolicy {
+        /** 优先升级 HTTPS（仅建连失败才回退原始地址）——默认，主链路尽量加密 */
+        PREFER_HTTPS,
+        /** 严格遵循网易返回的原始 Location（不做 HTTPS 升级）——断流恢复时避开稳定卡死的 https 链路 */
+        ORIGINAL
+    }
+
     /**
      * 打开歌曲音频流（时长探测与客户端播放共用）：
      * 先取 outer url 的 302 Location，CDN 地址为明文 http:// 时**优先升级 HTTPS**
@@ -92,6 +100,12 @@ public final class MusicApiClient {
      * @param rangeHeader Range 头值（探测传 "bytes=0-65535" 以拿 206+Content-Range）；播放传 null
      */
     public static HttpResponse<InputStream> openAudioStream(String songId, String rangeHeader)
+            throws IOException, InterruptedException {
+        return openAudioStream(songId, rangeHeader, HttpSchemePolicy.PREFER_HTTPS);
+    }
+
+    public static HttpResponse<InputStream> openAudioStream(String songId, String rangeHeader,
+                                                            HttpSchemePolicy schemePolicy)
             throws IOException, InterruptedException {
         // Step1：NEVER 跟随，拿真实 CDN Location
         HttpRequest.Builder step1Builder = HttpRequest.newBuilder(URI.create(outerUrl(songId)))
@@ -111,6 +125,10 @@ public final class MusicApiClient {
                 return openFollowing(location, rangeHeader);
             }
             if (location.startsWith("http://")) {
+                if (schemePolicy == HttpSchemePolicy.ORIGINAL) {
+                    // 断流恢复策略：不再尝试 HTTPS 升级，严格走原始地址
+                    return openFollowing(location, rangeHeader);
+                }
                 // Step2：尝试同地址的 https 变体
                 try {
                     HttpResponse<InputStream> upgraded = HTTP.send(
