@@ -49,17 +49,25 @@ public class MusicCache {
         if (initialized) {
             return;
         }
-        initialized = true;
         // 一次性格式迁移（升级 3.0.1 → 3.0.2）：旧标记缺失/过旧 → 正式缓存全量作废。
-        // 必须在首个 worker、beginPartFile 之前执行（播放线程串行，无误删风险）
+        // 必须在首个 worker、beginPartFile 之前执行（播放线程串行，无误删风险）。
+        // fail closed：删除未全部成功（Windows 句柄/杀软占用）时绝不写标记，且
+        // initialized 保持 false——同进程后续播放仍会重试迁移，坏缓存不会因"盖章成功"永久留存
         if (readFormatVersion() < FORMAT_VERSION) {
             long wiped = wipeLegacyCache();
+            if (hasLegacyCacheLeft()) {
+                firefly520.fireflymc.FireflyMCMod.LOGGER.warn(
+                        "[Music] 缓存格式升级 v{} 未完成：已删 {} 个但仍有旧缓存文件删除失败（句柄/杀软占用），下次播放重试迁移",
+                        FORMAT_VERSION, wiped);
+                return; // 本曲按无缓存处理走网络下载；不写标记、不置 initialized
+            }
             firefly520.fireflymc.FireflyMCMod.LOGGER.warn(
                     "[Music] 缓存格式升级 v{}：作废 {} 个旧缓存文件（3.0.1 可能存有截断的半截 MP3）",
                     FORMAT_VERSION, wiped);
             writeFormatMarker();
         }
         cleanStaleParts();
+        initialized = true;
     }
 
     /** 读取目录格式版本；标记缺失/损坏/目录不存在 → 0（视为最旧格式） */
@@ -92,14 +100,17 @@ public class MusicCache {
         }
     }
 
-    /** 全量作废旧格式缓存（正式 .mp3 与残留 .part）；返回删除数 */
+    /** 旧格式缓存文件（正式 .mp3 与残留 .part） */
+    private boolean isLegacyCache(Path p) {
+        String name = p.getFileName().toString();
+        return name.endsWith(".mp3") || name.endsWith(".mp3.part");
+    }
+
+    /** 全量作废旧格式缓存；返回成功删除数（删除失败由调用方二次扫描兜底） */
     private long wipeLegacyCache() {
         long[] wiped = {0L};
         try (Stream<Path> files = Files.list(cacheDir)) {
-            files.filter(p -> {
-                        String name = p.getFileName().toString();
-                        return name.endsWith(".mp3") || name.endsWith(".mp3.part");
-                    })
+            files.filter(this::isLegacyCache)
                     .forEach(p -> {
                         deleteQuietly(p);
                         wiped[0]++;
@@ -107,6 +118,15 @@ public class MusicCache {
         } catch (IOException ignored) {
         }
         return wiped[0];
+    }
+
+    /** 删除后二次扫描：仍有旧格式文件残留 = 迁移未完成（fail closed，不写版本标记） */
+    private boolean hasLegacyCacheLeft() {
+        try (Stream<Path> files = Files.list(cacheDir)) {
+            return files.anyMatch(this::isLegacyCache);
+        } catch (IOException e) {
+            return true; // 无法确认干净 = 视为未完成
+        }
     }
 
     /** 纵深防护：songId 是服务端不可信输入，解析+归一后必须仍在缓存目录内（防目录逃逸） */

@@ -326,30 +326,36 @@ public class MusicPlayer implements Runnable {
             if (completed && !localMode && expectedBytes > 0 && guard.bytesRead() < expectedBytes) {
                 truncated = true;
                 // 平静截断同样说明该 https 链路不可靠：下次恢复强制原始地址
-                if ("https".equals(lastStreamScheme)) {
-                    httpsStalled = true;
-                }
+                markHttpsStalled();
             }
         } catch (Exception e) {
             if (cancelled) {
                 return Attempt.CANCELLED;
             }
-            // 看护触发的停滞中断，与 JLayer 包装的流读取错误（BitstreamException——底层是
-            // CDN RST/中途 EOF 等网络断流，JLayer 不抛裸 IOException）都属网络型可恢复断流；
-            // 其余解码异常 = 数据损坏（音源型）。
-            // 注意 guard 在字段 httpStream 里——dataSource 已被 BufferedInputStream 包一层，
-            // instanceof dataSource 恒为 false
+            // stall（看护关流）= 明确的网络型断流。JLayer 把底层 IO 错误包装为
+            // BitstreamException（不抛裸 IOException），但同一异常也可能是
+            // "字节已完整、MP3 数据本身损坏"——HTTP 完整性与解码有效性是两个维度，
+            // 用字节信息区分：字节不完整/未知 → 网络原因仍有可能，重试；
+            // 字节已完整仍解码失败 → 音源损坏，投 quorum 票（全服跳过坏音源）。
+            // 本地坏缓存（localMode，expectedBytes=-1）同样归 RETRY → invalidate 重下
             boolean stalled = guard != null && guard.isTripped();
-            boolean streamBroken = stalled || e instanceof javazoom.jl.decoder.BitstreamException;
+            boolean byteIncomplete = expectedBytes > 0 && guard != null && guard.bytesRead() < expectedBytes;
             firefly520.fireflymc.FireflyMCMod.LOGGER.warn(
-                    "[Music] 流中断 songId={} streamBroken={} err={}", songId, streamBroken, String.valueOf(e));
-            if (streamBroken) {
+                    "[Music] 流中断 songId={} stalled={} byteIncomplete={} received={}/{} err={}",
+                    songId, stalled, byteIncomplete,
+                    guard == null ? -1L : guard.bytesRead(), expectedBytes, String.valueOf(e));
+            if (stalled) {
                 // 恢复点 = 权威时钟当前位置：停滞 30s 期间它持续推进，恢复后与房间同步；
                 // line 时钟早已冻结，不能作为恢复点（会落后服务端数十秒）
-                if ("https".equals(lastStreamScheme)) {
-                    httpsStalled = true; // 下次恢复强制原始 Location，避开稳定卡死的 https 链路
-                }
+                markHttpsStalled();
                 return Attempt.RETRY;
+            }
+            if (e instanceof javazoom.jl.decoder.BitstreamException) {
+                if (expectedBytes <= 0 || byteIncomplete) {
+                    markHttpsStalled();
+                    return Attempt.RETRY; // 字节不完整/未知：网络原因仍有可能
+                }
+                return Attempt.DECODE_FAILED; // 字节完整仍解码失败：音源本身损坏
             }
             return Attempt.DECODE_FAILED;
         } finally {
@@ -388,6 +394,13 @@ public class MusicPlayer implements Runnable {
             return Attempt.RETRY;
         }
         return completed ? Attempt.COMPLETED : Attempt.CANCELLED;
+    }
+
+    /** 当前流为 https 时标记链路不可靠：后续恢复 attempt 强制原始 Location（多为 http） */
+    private void markHttpsStalled() {
+        if ("https".equals(lastStreamScheme)) {
+            httpsStalled = true;
+        }
     }
 
     /** 恢复位置 clamp：[0, durationMs] */

@@ -134,7 +134,12 @@ public final class MusicApiClient {
                     HttpResponse<InputStream> upgraded = HTTP.send(
                             buildAudioGet("https://" + location.substring("http://".length()), rangeHeader),
                             HttpResponse.BodyHandlers.ofInputStream());
-                    if (upgraded.statusCode() == 200 || upgraded.statusCode() == 206) {
+                    // 播放请求（无 Range）不接受 unsolicited 206：其 Content-Length 只是本段
+                    // body 长度，会让部分 MP3 被误判"字节完整"——只认 200，否则关流回退原始地址
+                    boolean acceptable = rangeHeader != null
+                            ? upgraded.statusCode() == 200 || upgraded.statusCode() == 206
+                            : upgraded.statusCode() == 200;
+                    if (acceptable) {
                         return upgraded;
                     }
                     closeQuietly(upgraded.body());
