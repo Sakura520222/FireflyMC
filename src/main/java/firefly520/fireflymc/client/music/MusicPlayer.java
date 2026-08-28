@@ -74,6 +74,8 @@ public class MusicPlayer implements Runnable {
     private String lastStreamScheme;
     /** https 流发生过断流：后续恢复 attempt 走 ORIGINAL 策略（原始 Location，多为 http） */
     private boolean httpsStalled;
+    /** 本次播放缓存是否可用（初始化/迁移未完成时为 false：禁用缓存读写） */
+    private boolean cacheReady;
 
     public MusicPlayer(long playbackId, String songId, long basePositionMs, long durationMs,
                        AtomicReference<Float> volumeRef,
@@ -114,8 +116,10 @@ public class MusicPlayer implements Runnable {
 
     /** 播放主体。所有 return 路径都经 run() 的 finally 发出完成信号。 */
     private void runPlayback() {
-        // 一次性 stale .part 清理由首个 worker 承担（主线程类初始化不做任何 I/O）
-        cache.ensureInitialized();
+        // 一次性 stale .part 清理/格式迁移由首个 worker 承担（主线程类初始化不做任何 I/O）；
+        // 迁移未完成 → cacheReady=false，本次播放彻底禁用缓存读写：既不命中旧格式坏缓存，
+        // 也不写新缓存（marker 未落盘前写入的合法 v2 缓存会被下次重试迁移误删）
+        cacheReady = cache.ensureInitialized();
         // 权威时钟从 payload 位置起算：打开流/快进的耗时也随真实时间推进，
         // 后续快进目标（liveTarget）自动追平这部分延迟
         resetAuthClock(basePositionMs);
@@ -123,7 +127,7 @@ public class MusicPlayer implements Runnable {
 
         // 缓存命中：本地文件优先；损坏（不可读/解码失败）→ 失效缓存并落入网络恢复流程，
         // 绝不能静默吞掉（否则下次仍命中同一坏文件，永久无声）
-        Path localFile = cache.getCachedFile(songId).orElse(null);
+        Path localFile = cacheReady ? cache.getCachedFile(songId).orElse(null) : null;
         if (localFile != null) {
             Attempt result;
             try (InputStream in = new BufferedInputStream(Files.newInputStream(localFile), 65536)) {
@@ -238,10 +242,11 @@ public class MusicPlayer implements Runnable {
             guard = new StallGuardInputStream(response.body());
             httpStream = guard;
 
-            // Tee 双写缓存（失败 attempt 的 .part 已删除，createFile 不会冲突）
+            // Tee 双写缓存（失败 attempt 的 .part 已删除，createFile 不会冲突）；
+            // cacheReady=false（初始化/迁移未完成）时整曲禁用缓存写入
             InputStream raw = httpStream;
             tee = null;
-            partFile = cache.beginPartFile(songId, playbackId);
+            partFile = cacheReady ? cache.beginPartFile(songId, playbackId) : null;
             if (partFile != null) {
                 try {
                     teeBranch = Files.newOutputStream(partFile);

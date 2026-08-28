@@ -44,10 +44,23 @@ public class MusicCache {
      * beginPartFile 之前调用：播放线程串行推进（新 worker 先等旧 worker 退出），
      * 绝不会误删自己即将创建/正在写的新 .part。
      * 残留文件无人认领，不清理会随反复崩溃无限累积。
+     *
+     * @return true = 缓存可用（本次可读写）；false = 初始化/迁移未完成，调用方必须
+     *         <b>完全禁用缓存读写</b>——既不能命中旧格式坏缓存，也不能写入新缓存
+     *         （marker 未落盘前写入的合法 v2 缓存会在下次重试迁移时被误删）
      */
-    public synchronized void ensureInitialized() {
+    public synchronized boolean ensureInitialized() {
         if (initialized) {
-            return;
+            return true;
+        }
+        try {
+            // 先建目录：全新安装连 music-cache/ 都不存在，Files.list 会把"目录缺失"
+            // 误判成"旧文件删除失败"。空目录 = 无 legacy = 正常写 v2 标记
+            Files.createDirectories(cacheDir);
+        } catch (IOException e) {
+            firefly520.fireflymc.FireflyMCMod.LOGGER.warn(
+                    "[Music] 缓存目录创建失败 {}，本次禁用缓存: {}", cacheDir, String.valueOf(e));
+            return false;
         }
         // 一次性格式迁移（升级 3.0.1 → 3.0.2）：旧标记缺失/过旧 → 正式缓存全量作废。
         // 必须在首个 worker、beginPartFile 之前执行（播放线程串行，无误删风险）。
@@ -59,15 +72,20 @@ public class MusicCache {
                 firefly520.fireflymc.FireflyMCMod.LOGGER.warn(
                         "[Music] 缓存格式升级 v{} 未完成：已删 {} 个但仍有旧缓存文件删除失败（句柄/杀软占用），下次播放重试迁移",
                         FORMAT_VERSION, wiped);
-                return; // 本曲按无缓存处理走网络下载；不写标记、不置 initialized
+                return false; // 调用方必须禁用缓存读写（不读旧缓存、不写新缓存）
             }
             firefly520.fireflymc.FireflyMCMod.LOGGER.warn(
                     "[Music] 缓存格式升级 v{}：作废 {} 个旧缓存文件（3.0.1 可能存有截断的半截 MP3）",
                     FORMAT_VERSION, wiped);
-            writeFormatMarker();
+            if (!writeFormatMarker()) {
+                // 标记写失败：重启后 marker 仍缺失会再次全量迁移——本轮禁用缓存，
+                // 避免本轮生成的合法 v2 缓存被重启后的迁移误删
+                return false;
+            }
         }
         cleanStaleParts();
         initialized = true;
+        return true;
     }
 
     /** 读取目录格式版本；标记缺失/损坏/目录不存在 → 0（视为最旧格式） */
@@ -92,11 +110,16 @@ public class MusicCache {
         }
     }
 
-    private void writeFormatMarker() {
+    /** 写入格式标记；失败返回 false（调用方视为初始化未完成，禁用缓存） */
+    private boolean writeFormatMarker() {
         try {
             Files.createDirectories(cacheDir);
             Files.writeString(cacheDir.resolve(FORMAT_MARKER), String.valueOf(FORMAT_VERSION));
-        } catch (IOException ignored) {
+            return true;
+        } catch (IOException e) {
+            firefly520.fireflymc.FireflyMCMod.LOGGER.warn(
+                    "[Music] 缓存格式标记写入失败，本次禁用缓存: {}", String.valueOf(e));
+            return false;
         }
     }
 

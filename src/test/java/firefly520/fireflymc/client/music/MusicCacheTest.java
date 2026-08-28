@@ -27,7 +27,7 @@ class MusicCacheTest {
         Files.write(tempDir.resolve("123456.mp3"), new byte[10]);
         Files.write(tempDir.resolve("123456.1.mp3.part"), new byte[10]);
         MusicCache cache = new MusicCache(tempDir);
-        cache.ensureInitialized();
+        assertTrue(cache.ensureInitialized(), "迁移成功必须返回 true");
         assertFalse(Files.exists(tempDir.resolve("123456.mp3")), "旧格式正式缓存必须作废");
         assertFalse(Files.exists(tempDir.resolve("123456.1.mp3.part")), "旧格式 .part 必须作废");
         assertEquals("2", Files.readString(tempDir.resolve(".format-version")).strip(),
@@ -38,23 +38,35 @@ class MusicCacheTest {
     void currentFormatCacheSurvivesInitialize() throws IOException {
         // 已是 v2 格式（标记存在）：残留 .part 清理，正式缓存保留
         MusicCache first = new MusicCache(tempDir);
-        first.ensureInitialized(); // 写入 v2 标记
+        assertTrue(first.ensureInitialized(), "首次初始化必须成功"); // 写入 v2 标记
         Files.write(tempDir.resolve("654321.mp3"), new byte[10]);
         Files.write(tempDir.resolve("654321.9.mp3.part"), new byte[10]);
         MusicCache cache = new MusicCache(tempDir);
-        cache.ensureInitialized();
+        assertTrue(cache.ensureInitialized(), "v2 格式初始化必须成功");
         assertTrue(Files.exists(tempDir.resolve("654321.mp3")), "当前格式正式缓存不得误删");
         assertFalse(Files.exists(tempDir.resolve("654321.9.mp3.part")), "残留 .part 必须被清理");
+    }
+
+    @Test
+    void freshInstallWithoutDirectoryInitializesCleanly() throws IOException {
+        // 新安装边界：目录不存在 ≠ 迁移失败——应创建目录并正常写 v2 标记
+        Path cacheDir = tempDir.resolve("music-cache"); // 不存在
+        MusicCache cache = new MusicCache(cacheDir);
+        assertTrue(cache.ensureInitialized(), "全新安装必须正常初始化");
+        assertTrue(Files.isDirectory(cacheDir), "初始化必须创建缓存目录");
+        assertEquals("2", Files.readString(cacheDir.resolve(".format-version")).strip(),
+                "全新安装必须写入 v2 标记");
+        assertTrue(cache.ensureInitialized(), "初始化必须幂等");
     }
 
     @Test
     void ensureInitializedIsIdempotentAndNeverDeletesClaimedParts() throws IOException {
         // 幂等标志是正确性约束：重复清理若不挡住，会误删 worker 已 begin、正在写的新 .part
         MusicCache cache = new MusicCache(tempDir);
-        cache.ensureInitialized();
+        assertTrue(cache.ensureInitialized(), "首次初始化必须成功");
         Path fresh = cache.beginPartFile("999", 1L);
         Files.write(fresh, new byte[10]);
-        cache.ensureInitialized();
+        assertTrue(cache.ensureInitialized(), "重复初始化必须成功（幂等）");
         assertTrue(Files.exists(fresh), "重复初始化不得误删已认领的 .part");
     }
 
