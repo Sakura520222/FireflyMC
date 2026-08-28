@@ -2,7 +2,7 @@
 
 ## 仓库信息
 - 仓库名: Sakura520222/FireflyMC
-- 累计反思次数: 10
+- 累计反思次数: 15
 
 ## 代码问题与审查要点
 
@@ -64,7 +64,16 @@
 虚拟线程仅适用于阻塞 IO，绝不能绕过主线程操作游戏状态或发送数据包。Handler/Callback 中禁止无限制启动虚拟线程。
 
 ### 异常日志统一记录
-`catch (Throwable e)` 必须统一记录 `log.error("...", e)`，禁止空 catch 或仅调用失败方法。
+`catch (Throwable e)` 必须统一记录 `log.error("...", e)`，禁止空 catch 或仅调用失败方法。异步任务（虚拟线程、Executor、CompletableFuture）必须捕获 Throwable 并记录，禁止空 catch。
+
+### 失败路径单元测试
+涉及禁用/启用契约（如 `ensureInitialized`）、安全边界（路径校验、文件写入、网络请求）的方法必须至少一个失败路径单元测试。
+
+### 日志计数一致性
+统计类日志（"已删 N 个"）必须仅基于成功操作计数，禁止包含失败操作。
+
+### HttpClient HTTPS 降级禁止
+所有 `HttpClient` 必须显式 `Redirect.NEVER`，或重定向后校验最终 scheme 为 https。
 
 ## 近期审查模式总结
 
@@ -98,6 +107,10 @@
 | 隐私外传配置默认 false | 涉及用户数据上报的配置必须默认 false |
 | WebSocket 三件套 | 新增WS代码须回答：重连、回调线程安全、closeHandler |
 | 长连接兜底路径 | 非常规保持须有：超时上限、fallback清理、reset |
+| 失败路径测试 | 安全边界方法必须至少1个失败路径单元测试 |
+| 日志计数语义 | 统计日志仅基于成功操作，禁止包含失败 |
+| HttpClient HTTPS | 必须 Redirect.NEVER 或校验最终 scheme |
+| 虚拟线程约束 | JDK 21-23 禁止进入 synchronized 锁块 |
 | WorldRenderer 检查清单 | 渲染阶段、PoseStack配对、状态恢复、距离裁剪、功能对等 |
 | 同类缺陷批量修复 | 审查指出模式缺陷须列出所有实例一并修复 |
 | 配置变更逐项审查 | 默认值、边界值、热更新 |
