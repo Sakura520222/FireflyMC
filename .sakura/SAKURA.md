@@ -19,19 +19,19 @@ Java 21 · Gradle · NeoForge 21.1.241 · Java HttpClient(WS) · UDP P2P · Gson
 
 ### 严重
 - **ModNetwork 空 catch**: 4+轮未修🔴，根源在反射分发器，需资深介入
-- **线程安全**: `RelayLobbyWebSocketClient`多线程未同步；`ClientState`静态膨胀缺volatile；`MusicQueueManager`并发会话缺原子/同步
+- **线程安全**: `RelayLobbyWebSocketClient`多线程未同步；`ClientState`静态膨胀缺volatile；`MusicQueueManager`并发会话缺原子/同步；`MusicCache` LRU 删除并发安全未确认
 - **Auth锁定**: 纯客户端可删文件绕过；lockoutMinutes缺校验；disconnect包序竞态
 - **AgenticToolLoop**: tool_calls截断后历史未同步致API拒绝
 
 ### 音乐与网络
 - **HTTPS→HTTP**: `HttpClient.Redirect.ALWAYS`未修复，明文下载风险持续；多入口未统一整改
-- **join()缺超时**: 时长探测等异步阻塞未配 `orTimeout`，pending泄漏
-- **Payload枚举越界**: 多处 `values()[ordinal]` 缺边界检查
+- **join()缺超时**: 时长探测等异步阻塞未配 `orTimeout`；单线程 Executor 中 `join()` 致阻塞风险
+- **Payload枚举越界**: 多处 `values()[ordinal]` 缺边界检查；`FailureCode.ordinal()` 直接用于网络传输，兼容性风险
 - **资源清理**: `JavaSoundOutput`、`HttpClient`、`.part`文件异常路径未统一关闭
-- **日志脱敏**: 歌名/昵称等用户可编辑字段未统一脱敏；新代码仍有未脱敏日志点
-- **缓存完整性**: 半截缓存落盘被当作完整缓存；`finalizePartFile`前未校验长度/校验和
-- **枚举序列化**: `FailureCode.ordinal()` 直接用于网络传输，兼容性风险
-- **异常分支空实现**: `reportFinal` 对 `RETRY` 分支未记录日志/上报/清理
+- **日志脱敏**: 歌名/昵称等用户可编辑字段未统一脱敏；新代码仍有未脱敏日志点；`MusicServerBridge.onClientFailure` 未使用 `sanitize()`
+- **缓存完整性**: 半截缓存落盘被当作完整缓存；`finalizePartFile`前未校验长度/校验和；`ensureInitialized` 失败路径缺单元测试
+- **计数误导**: `wipeLegacyCache` 计数包含删除失败文件，日志与实际不符
+- **早EOF冲突**: 早EOF容差240s与fallback时长冲突，可能导致播放中断误判
 
 ### 设计缺陷
 - **AI Tool安全**: 缺参数校验框架，破坏性操作无额外安全层；图片多模态需隐私默认关闭与日志脱敏
@@ -81,16 +81,24 @@ Java 21 · Gradle · NeoForge 21.1.241 · Java HttpClient(WS) · UDP P2P · Gson
 | 增量审查文件覆盖率约束 | process |
 | 全量两阶段(链路+清单) | process |
 | 增量评分锚定基线 | process |
+| 所有日志点统一脱敏 | major |
+| 计数日志仅统计成功操作 | major |
+| 异常路径须有单元测试 | major |
+| 业务阈值禁止硬编码 | major |
+| 枚举序列化须安全校验 | major |
+| 流播放状态图显式定义 | major |
+| HTTP重定向仅允许HTTPS | major |
 
 ## 常见错误模式
 - **增量隧道视野**: 大PR增量覆盖微量，结构风险不可达
 - **评分漂移**: 局部高分稀释遗留问题紧迫感
 - **备注≠行动**: ≥3轮备注为免责须阻断
 - **静默失败>异常**: tryParse返回null须强制处理
-- **AI Tool错误=安全边界**: 错误响应喂养AI决策
 - **防御编程缺失**: 网络/反射/HTTP均缺防御
+- **测试-契约分离**: fail-closed 路径缺测试导致回归
+- **日志脱敏遗漏**: 新增日志点未走统一脱敏
 
 ## 仓库信息
 - 仓库名: Sakura520222/FireflyMC
 - 语言统计: Java: 884925
-- 累计反思次数: 10
+- 累计反思次数: 15
