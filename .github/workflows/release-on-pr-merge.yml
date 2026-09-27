@@ -26,26 +26,29 @@ jobs:
         with:
           token: ${{ secrets.MY_RELEASE_PAT || secrets.GITHUB_TOKEN }}
           fetch-depth: 0
-          ref: main  # 显式指定 main 分支，避免处于 PR ref 导致 push 失败
+          # 固定到触发本次事件的合并提交，避免构建期间 main 再次变动导致版本/来源不一致
+          ref: ${{ github.event.pull_request.merge_commit_sha || github.ref }}
       
       - name: 提取 PR 信息
         id: extract_pr_info
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_LABELS: ${{ join(github.event.pull_request.labels.*.name, ',') }}
         run: |
-          echo "PR 标题: ${{ github.event.pull_request.title }}"
+          echo "PR 标题: $PR_TITLE"
           echo "PR 编号: ${{ github.event.pull_request.number }}"
           echo "合并时间: $(date +'%Y-%m-%d')"
-          
+
           # 提取 PR 标签
-          LABELS="${{ join(github.event.pull_request.labels.*.name, ',') }}"
-          echo "PR 标签: $LABELS"
-          echo "labels=$LABELS" >> $GITHUB_OUTPUT
+          echo "PR 标签: $PR_LABELS"
+          echo "labels=$PR_LABELS" >> $GITHUB_OUTPUT
       
       - name: 分析 PR 类型
         id: analyze_type
+        env:
+          TITLE: ${{ github.event.pull_request.title }}
+          LABELS: ${{ steps.extract_pr_info.outputs.labels }}
         run: |
-          TITLE="${{ github.event.pull_request.title }}"
-          LABELS="${{ steps.extract_pr_info.outputs.labels }}"
-          
           # 根据 PR 标签确定类型
           if echo "$LABELS" | grep -q "enhancement"; then
             CHANGE_TYPE="新增"
@@ -377,11 +380,12 @@ jobs:
       contents: write
     
     steps:
-      - name: 检出代码（使用合并后的 main 分支）
+      - name: 检出代码（固定到触发的合并提交）
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          ref: main  # 确保使用的是合并后的 main 分支代码
+          # 固定到触发本次事件的合并提交，确保构建产物与首个 job 读取的版本/来源一致
+          ref: ${{ github.event.pull_request.merge_commit_sha || github.ref }}
       
       - name: 验证项目结构
         run: |
@@ -487,6 +491,8 @@ jobs:
       
       - name: 构建模组
         if: steps.check_assets.outputs.should_upload == 'true'
+        env:
+          VERSION: ${{ steps.get_version.outputs.VERSION }}
         run: |
           echo "🔨 正在构建 FireflyMC 模组..."
 
@@ -496,16 +502,17 @@ jobs:
 
           echo "✅ 模组构建完成"
 
-          # 查找生成的 JAR 文件
-          JAR_FILE=$(find build/libs -name "*.jar" -type f | head -n 1)
+          # 精确匹配主产物（build.gradle 中 archivesName = mod_id = fireflymc），
+          # 不再取 build/libs 下第一个 jar，避免多 jar 时误选
+          JAR_FILE="build/libs/fireflymc-${VERSION}.jar"
 
-          if [ -n "$JAR_FILE" ]; then
+          if [ -f "$JAR_FILE" ]; then
             echo "📦 找到 JAR 文件: $JAR_FILE"
             # 复制 JAR 文件到根目录以方便上传
-            cp "$JAR_FILE" "FireflyMC-${{ steps.get_version.outputs.VERSION }}.jar"
+            cp "$JAR_FILE" "FireflyMC-${VERSION}.jar"
             echo "✅ JAR 文件已复制"
           else
-            echo "❌ 未找到生成的 JAR 文件"
+            echo "❌ 未找到生成的 JAR 文件: $JAR_FILE"
             exit 1
           fi
       
