@@ -13,6 +13,7 @@ import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.net.InetAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.util.concurrent.ExecutorService;
@@ -85,7 +86,9 @@ public class P2PGuestProxy {
         if (!running.compareAndSet(false, true)) {
             return localPort;
         }
-        serverSocket = new ServerSocket(0);
+        // MC 通过 IPv4 字面量 127.0.0.1 连接代理；preferIPv6Addresses=system 时 getLoopbackAddress()
+        // 返回 ::1，绑定它会与拨号地址不匹配（连接被拒），故显式绑定 IPv4 回环地址。
+        serverSocket = new ServerSocket(0, 50, InetAddress.getByName("127.0.0.1"));
         serverSocket.setReuseAddress(true);
         localPort = serverSocket.getLocalPort();
         executor.execute(this::acceptLoop);
