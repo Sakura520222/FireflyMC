@@ -1,5 +1,7 @@
 package firefly520.fireflymc;
 
+import java.util.function.BooleanSupplier;
+import java.util.function.Supplier;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.fml.ModContainer;
@@ -21,6 +23,8 @@ import firefly520.fireflymc.client.relay.SingleplayerRelayClientEvents;
 import firefly520.fireflymc.auth.PlayerPasswordManager;
 import firefly520.fireflymc.network.ModNetwork;
 import firefly520.fireflymc.playtime.PlaytimeManager;
+import firefly520.fireflymc.story.StoryEngine;
+import firefly520.fireflymc.story.sync.StorySyncService;
 import firefly520.fireflymc.title.TitleManager;
 import firefly520.fireflymc.util.ServerLanguageLoader;
 
@@ -36,6 +40,10 @@ public class FireflyMCMod {
 
     // 1.5. 注册服务端配置
     modContainer.registerConfig(ModConfig.Type.SERVER, ServerConfig.SERVER_SPEC);
+
+    // 1.6. 注册剧情系统附件、资源重载与服务器生命周期
+    StoryEngine.register(modEventBus);
+    StorySyncService.install();
 
     // 2. 注册配置热重载事件（MOD 总线）
     modEventBus.addListener(this::onConfigReload);
@@ -98,6 +106,27 @@ public class FireflyMCMod {
   // 配置热重载时更新缓存
   private void onConfigReload(ModConfigEvent event) {
     PlaytimeManager.getInstance().onConfigReload();
+    Boolean storyEnabled = resolveStoryEnabled(
+        event,
+        () -> event.getConfig().getType(),
+        () -> ServerConfig.SERVER.storyEnabled.get());
+    if (storyEnabled != null) {
+      StoryEngine.onConfigReload(storyEnabled);
+    }
+  }
+
+  static Boolean resolveStoryEnabled(
+      ModConfigEvent event,
+      Supplier<ModConfig.Type> configType,
+      BooleanSupplier storyEnabled
+  ) {
+    if (!(event instanceof ModConfigEvent.Loading || event instanceof ModConfigEvent.Reloading)) {
+      return null;
+    }
+    if (configType.get() != ModConfig.Type.SERVER) {
+      return null;
+    }
+    return storyEnabled.getAsBoolean();
   }
 
   // 服务端启动完成后加载中文语言文件
