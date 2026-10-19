@@ -14,7 +14,7 @@ public class ClientState {
      */
     public static final Map<String, String> titleMap = new ConcurrentHashMap<>();
     /**
-     * 本次会话是否已显示过准则
+     * 本次服务器连接是否已确认过准则（仅显示不算确认，换服或重连时清空）
      * 用于判断是否需要显示确认按钮（首次需要确认，后续自动消失）
      */
     public static boolean hasSeenRulesThisSession = false;

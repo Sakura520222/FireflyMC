@@ -1,0 +1,13 @@
+{
+  "chapter": "fireflymc:prologue",
+  "title": {"translate": "story.fireflymc.prologue.quiet_night"},
+  "description": [{"translate": "story.fireflymc.prologue.quiet_night.hint"}],
+  "requirements": [
+    {"id": "zombies", "state_version": 1, "type": "fireflymc:kill", "entity": "minecraft:zombie", "count": 3}
+  ],
+  "on_complete": [
+    {"type": "fireflymc:send_message", "text": {"translate": "story.fireflymc.prologue.quiet_night.done"}},
+    {"type": "fireflymc:send_message", "text": {"translate": "story.fireflymc.prologue.old_trail.hint", "color": "aqua"}},
+    {"type": "fireflymc:unlock_quest", "quest": "fireflymc:prologue/old_trail"}
+  ]
+}

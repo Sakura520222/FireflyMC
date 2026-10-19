@@ -5,6 +5,7 @@ import firefly520.fireflymc.client.auth.ClientAuthLockoutManager;
 import firefly520.fireflymc.client.eventws.ClientEventNotificationConfig;
 import firefly520.fireflymc.client.eventws.ClientEventNotificationMessage;
 import firefly520.fireflymc.client.eventws.ClientEventWebSocketClient;
+import firefly520.fireflymc.client.story.ClientStoryState;
 import firefly520.fireflymc.client.screen.PasswordAuthScreen;
 import firefly520.fireflymc.client.screen.RulesScreen;
 import firefly520.fireflymc.network.CrossChatRelayPayload;
@@ -12,16 +13,48 @@ import firefly520.fireflymc.network.AuthLockoutPayload;
 import firefly520.fireflymc.network.ModHandshakePayload;
 import firefly520.fireflymc.network.ModHandshakeReplyPayload;
 import firefly520.fireflymc.network.PasswordPromptPayload;
+import firefly520.fireflymc.network.StoryProgressSnapshotPayload;
 import firefly520.fireflymc.network.ShowRulesPayload;
 import firefly520.fireflymc.network.TitleSyncPayload;
 import net.minecraft.client.Minecraft;
+import net.minecraft.network.chat.Component;
+import net.neoforged.api.distmarker.Dist;
+import net.neoforged.bus.api.SubscribeEvent;
+import net.neoforged.fml.common.EventBusSubscriber;
+import net.neoforged.neoforge.client.event.ClientPlayerNetworkEvent;
 import net.neoforged.neoforge.network.handling.IPayloadContext;
 
 /**
  * 客户端专用数据包处理器
  * 此类仅客户端加载，通过 ModNetwork 中的反射调用
  */
+@EventBusSubscriber(modid = FireflyMCMod.MODID, value = Dist.CLIENT)
 public class ClientPayloadHandler {
+
+    /**
+     * 客户端处理剧情进度镜像：网络回调只入队，实际替换发生在客户端主线程。
+     */
+    public static void handleStoryProgressSnapshot(
+        StoryProgressSnapshotPayload payload,
+        IPayloadContext context
+    ) {
+        context.enqueueWork(() -> ClientStoryState.install(payload));
+    }
+
+    @SubscribeEvent
+    public static void onClientLoggedOut(ClientPlayerNetworkEvent.LoggingOut event) {
+        ClientStoryState.clear();
+        ClientState.hasSeenRulesThisSession = false;
+    }
+
+    /**
+     * 登录新世界/服务器时先清空旧镜像；服务器随后下发的新快照再整体安装。
+     */
+    @SubscribeEvent
+    public static void onClientWorldTransition(ClientPlayerNetworkEvent.LoggingIn event) {
+        ClientStoryState.clear();
+        ClientState.hasSeenRulesThisSession = false;
+    }
 
     /**
      * 客户端处理服务端发来的握手包，回复版本号
@@ -37,8 +70,6 @@ public class ClientPayloadHandler {
         context.enqueueWork(() -> {
             // 结合服务端判断和客户端状态决定是否首次加入
             boolean isFirstJoin = payload.isFirstJoin() && !ClientState.hasSeenRulesThisSession;
-            // 更新客户端状态
-            ClientState.hasSeenRulesThisSession = true;
             // 打开准则弹窗
             Minecraft.getInstance().setScreen(new RulesScreen(isFirstJoin));
         });
@@ -50,8 +81,11 @@ public class ClientPayloadHandler {
     public static void handlePasswordPrompt(PasswordPromptPayload payload, IPayloadContext context) {
         context.enqueueWork(() -> {
             if (payload.remainingAttempts() == PasswordPromptPayload.AUTH_SUCCESS_SIGNAL) {
-                // 验证成功信号，关闭密码弹窗
-                Minecraft.getInstance().setScreen(null);
+                // A delayed success signal must not close the following rules dialog.
+                Minecraft minecraft = Minecraft.getInstance();
+                if (minecraft.screen instanceof PasswordAuthScreen) {
+                    minecraft.setScreen(null);
+                }
             } else {
                 Minecraft.getInstance().setScreen(new PasswordAuthScreen(
                         payload.firstTime(),

@@ -1,0 +1,7 @@
+{
+  "chapter": "fireflymc:prologue",
+  "title": {"text": "Introduction"},
+  "initial": true,
+  "requirements": [],
+  "on_complete": []
+}

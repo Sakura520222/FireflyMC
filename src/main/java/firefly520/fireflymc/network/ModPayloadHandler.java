@@ -5,6 +5,7 @@ import firefly520.fireflymc.ModEventHandler;
 import firefly520.fireflymc.ServerConfig;
 import firefly520.fireflymc.auth.PlayerPasswordManager;
 import firefly520.fireflymc.kit.StarterKitManager;
+import firefly520.fireflymc.story.adapter.StoryGameEvents;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
 import net.neoforged.neoforge.network.PacketDistributor;
@@ -47,6 +48,9 @@ public class ModPayloadHandler {
                     VERIFIED_PLAYERS.put(serverPlayer.getUUID(), true);
                     // 取消验证超时任务
                     ModEventHandler.cancelVerifyTimeout(serverPlayer.getUUID());
+                    // Rules/password may already be complete. Re-run the join completion check
+                    // once the final dedicated-server handshake gate opens.
+                    tryCompleteJoin(serverPlayer);
                 } else {
                     serverPlayer.connection.disconnect(Component.literal(
                         "§cFireflyMC模组版本不匹配！\n" +
@@ -111,17 +115,21 @@ public class ModPayloadHandler {
      */
     private static void tryCompleteJoin(ServerPlayer serverPlayer) {
         UUID playerUuid = serverPlayer.getUUID();
+        boolean modVerified = VERIFIED_PLAYERS.getOrDefault(playerUuid, false);
         boolean rulesConfirmed = CONFIRMED_PLAYERS.getOrDefault(playerUuid, false);
         boolean passwordRequired = ServerConfig.SERVER.playerAuthEnabled.get();
         boolean passwordOk = !passwordRequired || PASSWORD_VERIFIED_PLAYERS.getOrDefault(playerUuid, false);
 
-        if (rulesConfirmed && passwordOk) {
+        if (modVerified && rulesConfirmed && passwordOk) {
             // 取消无敌超时任务
             ModEventHandler.cancelInvulnerabilityTimeout(playerUuid);
             // 取消玩家无敌
             serverPlayer.setInvulnerable(false);
             // 给予新手福利包
             StarterKitManager.giveStarterKit(serverPlayer);
+            // This is the first point after every dedicated-server handshake/rule/password gate
+            // has passed and all pre-existing gated join work has completed.
+            StoryGameEvents.onJoinCompleted(serverPlayer);
         }
     }
 

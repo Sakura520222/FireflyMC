@@ -1,0 +1,14 @@
+{
+  "chapter": "fireflymc:prologue",
+  "title": {"translate": "story.fireflymc.prologue.heard_voice"},
+  "description": [{"translate": "story.fireflymc.prologue.voice"}],
+  "requirements": [
+    {"id": "voice", "type": "fireflymc:flag", "flag": "prologue.heard_voice", "value": true, "scope": "player"}
+  ],
+  "on_complete": [
+    {"type": "fireflymc:set_var", "var": "prologue.memory_resonance", "op": "set", "amount": 1},
+    {"type": "fireflymc:send_message", "text": {"translate": "story.fireflymc.prologue.voice", "color": "#8EEDE2"}},
+    {"type": "fireflymc:send_message", "text": {"translate": "story.fireflymc.prologue.quiet_night.hint", "color": "aqua"}},
+    {"type": "fireflymc:unlock_quest", "quest": "fireflymc:prologue/quiet_night"}
+  ]
+}

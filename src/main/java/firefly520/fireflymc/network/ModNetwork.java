@@ -1,6 +1,7 @@
 package firefly520.fireflymc.network;
 
 import firefly520.fireflymc.FireflyMCMod;
+import net.minecraft.network.chat.Component;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.fml.loading.FMLEnvironment;
 import net.neoforged.neoforge.network.event.RegisterPayloadHandlersEvent;
@@ -13,10 +14,11 @@ import net.neoforged.neoforge.network.registration.PayloadRegistrar;
  */
 public class ModNetwork {
     /**
-     * 协议版本。1.4.0：FailureCode 语义重排（NETWORK/PERMANENT 细分）+ 显式 wireId——
-     * 与 3.0.1 混跑会读错失败码（quorum 语义失效），必须强制同版本。
+     * 协议版本。1.5.0：新增剧情进度快照包；与旧版本包集不兼容，必须强制同版本。
      */
-    public static final String NETWORK_VERSION = "1.4.0";
+    public static final String NETWORK_VERSION = "1.5.0";
+
+    private static final ThreadLocal<Boolean> CLIENT_DIST_OVERRIDE = new ThreadLocal<>();
 
     public static void registerPayloads(final RegisterPayloadHandlersEvent event) {
         final PayloadRegistrar registrar = event.registrar(FireflyMCMod.MODID)
@@ -124,6 +126,87 @@ public class ModNetwork {
                 MusicSearchResultPayload.STREAM_CODEC,
                 ModPayloadHandler::handleMusicSearchResult
         );
+
+        // ===== 剧情 =====
+        // S→C 合并进度快照（服务端权威；客户端只保存只读镜像）
+        registrar.playToClient(
+                StoryProgressSnapshotPayload.TYPE,
+                StoryProgressSnapshotPayload.STREAM_CODEC,
+                (payload, context) -> handleStoryProgressSnapshotOnClient(payload, context)
+        );
+    }
+
+    /**
+     * 使用反射调用客户端剧情快照处理器，避免专用服初始化网络类时加载客户端类。
+     */
+    private static void handleStoryProgressSnapshotOnClient(
+        StoryProgressSnapshotPayload payload,
+        IPayloadContext context
+    ) {
+        Boolean override = CLIENT_DIST_OVERRIDE.get();
+        dispatchStoryProgressSnapshotOnClient(
+            payload,
+            context,
+            override != null ? override : FMLEnvironment.dist == Dist.CLIENT
+        );
+    }
+
+    static void withClientDistOverrideForTest(boolean clientDist, Runnable action) {
+        CLIENT_DIST_OVERRIDE.set(clientDist);
+        try {
+            action.run();
+        } finally {
+            CLIENT_DIST_OVERRIDE.remove();
+        }
+    }
+
+    static void dispatchStoryProgressSnapshotOnClient(
+        StoryProgressSnapshotPayload payload,
+        IPayloadContext context,
+        boolean clientDist
+    ) {
+        dispatchStoryProgressSnapshotOnClient(
+            payload,
+            context,
+            clientDist,
+            handlerName -> Class.forName(handlerName),
+            FireflyMCMod.LOGGER::error
+        );
+    }
+
+    static void dispatchStoryProgressSnapshotOnClient(
+        StoryProgressSnapshotPayload payload,
+        IPayloadContext context,
+        boolean clientDist,
+        ClientHandlerLocator handlerLocator,
+        java.util.function.BiConsumer<String, Throwable> diagnosticReporter
+    ) {
+        if (!clientDist) {
+            return;
+        }
+
+        try {
+            Class<?> handlerClass = handlerLocator.locate(
+                "firefly520.fireflymc.client.ClientPayloadHandler");
+            java.lang.reflect.Method method = handlerClass.getDeclaredMethod(
+                "handleStoryProgressSnapshot",
+                StoryProgressSnapshotPayload.class,
+                IPayloadContext.class
+            );
+            method.invoke(null, payload, context);
+        } catch (Exception exception) {
+            diagnosticReporter.accept(
+                "Failed to dispatch story progress snapshot on client; "
+                    + "disconnecting for fail-closed sync",
+                exception
+            );
+            context.disconnect(Component.literal("Story progress sync failed"));
+        }
+    }
+
+    @FunctionalInterface
+    interface ClientHandlerLocator {
+        Class<?> locate(String handlerName) throws Exception;
     }
 
     /**

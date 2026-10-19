@@ -1,0 +1,16 @@
+{
+  "chapter": "fireflymc:prologue",
+  "title": {"text": "Memory"},
+  "subtitle": {"text": "Listen again"},
+  "requirements": [
+    {
+      "id": "heard_voice",
+      "state_version": 1,
+      "type": "fireflymc:flag",
+      "flag": "prologue.heard_voice",
+      "value": true,
+      "scope": "player"
+    }
+  ],
+  "on_complete": []
+}

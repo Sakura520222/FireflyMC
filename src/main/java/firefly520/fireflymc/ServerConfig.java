@@ -25,6 +25,7 @@ public class ServerConfig {
         public final ModConfigSpec.IntValue itemCleanupIntervalMinutes;
         public final ModConfigSpec.IntValue itemCleanupWarningSeconds;
         public final ModConfigSpec.IntValue itemCleanupCountdownSeconds;
+        public final ModConfigSpec.BooleanValue storyEnabled;
 
         // 玩家密码验证配置
         public final ModConfigSpec.BooleanValue playerAuthEnabled;
@@ -96,6 +97,11 @@ public class ServerConfig {
                     .comment("倒计时提醒时长（秒），在清理前最后N秒通过ActionBar逐秒倒计时，0表示不倒计时")
                     .translation("fireflymc.config.server.item_cleanup_countdown_seconds")
                     .defineInRange("itemCleanupCountdownSeconds", 10, 0, 60);
+
+            storyEnabled = builder
+                    .comment("是否启用剧情引擎（关闭时不阻止定义加载，重新启用后自动调和进度）")
+                    .translation("fireflymc.config.server.story_enabled")
+                    .define("storyEnabled", true);
 
             builder.pop();
 

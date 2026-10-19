@@ -1,0 +1,12 @@
+{
+  "chapter": "fireflymc:prologue",
+  "title": {"translate": "story.fireflymc.prologue.old_trail"},
+  "description": [{"translate": "story.fireflymc.prologue.old_trail.hint"}],
+  "requirements": [
+    {"id": "torches", "type": "fireflymc:inventory", "item": "minecraft:torch", "count": 8}
+  ],
+  "on_complete": [
+    {"type": "fireflymc:send_message", "text": {"translate": "story.fireflymc.prologue.old_trail.done"}},
+    {"type": "fireflymc:unlock_quest", "quest": "fireflymc:prologue/embers_end"}
+  ]
+}

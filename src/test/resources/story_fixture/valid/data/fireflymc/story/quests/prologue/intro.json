@@ -1,0 +1,17 @@
+{
+  "chapter": "fireflymc:prologue",
+  "title": {"text": "Introduction"},
+  "subtitle": {"text": "Follow the light"},
+  "initial": true,
+  "requirements": [],
+  "on_complete": [
+    {
+      "type": "fireflymc:send_message",
+      "text": {"text": "The forest remembers."}
+    },
+    {
+      "type": "fireflymc:unlock_quest",
+      "quest": "fireflymc:prologue/followup"
+    }
+  ]
+}

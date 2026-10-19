@@ -1,0 +1,14 @@
+{
+  "chapter": "fireflymc:prologue",
+  "title": {"translate": "story.fireflymc.prologue.first_light"},
+  "subtitle": {"translate": "story.fireflymc.prologue.subtitle"},
+  "description": [{"translate": "story.fireflymc.prologue.open"}],
+  "initial": true,
+  "requirements": [],
+  "on_complete": [
+    {"type": "fireflymc:show_title", "title": {"translate": "story.fireflymc.prologue.title", "color": "#8EEDE2"}, "subtitle": {"translate": "story.fireflymc.prologue.subtitle"}, "fade_in": 20, "stay": 80, "fade_out": 20},
+    {"type": "fireflymc:send_message", "text": {"translate": "story.fireflymc.prologue.open"}},
+    {"type": "fireflymc:send_message", "text": {"translate": "story.fireflymc.prologue.find_memory.hint", "color": "aqua"}},
+    {"type": "fireflymc:unlock_quest", "quest": "fireflymc:prologue/find_memory"}
+  ]
+}
