@@ -1,0 +1,7 @@
+{
+  "chapter":"fireflymc:coverage",
+  "title":{"text":"Fixture bootstrap"},
+  "initial":true,
+  "requirements":[],
+  "on_complete":[{"type":"fireflymc:unlock_quest","quest":"fireflymc:coverage/probes"}]
+}

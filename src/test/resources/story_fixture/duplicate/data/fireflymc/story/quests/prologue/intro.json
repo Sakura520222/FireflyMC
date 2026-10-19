@@ -1,0 +1,19 @@
+{
+  "chapter": "fireflymc:prologue",
+  "title": {"text": "Introduction"},
+  "requirements": [
+    {
+      "id": "memory",
+      "type": "fireflymc:pickup",
+      "item": "minecraft:echo_shard",
+      "count": 1
+    },
+    {
+      "id": "memory",
+      "type": "fireflymc:pickup",
+      "item": "minecraft:apple",
+      "count": 1
+    }
+  ],
+  "on_complete": []
+}

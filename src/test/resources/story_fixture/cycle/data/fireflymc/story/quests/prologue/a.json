@@ -1,0 +1,9 @@
+{
+  "chapter": "fireflymc:prologue",
+  "title": {"text": "A"},
+  "initial": true,
+  "requirements": [],
+  "on_complete": [
+    {"type": "fireflymc:unlock_quest", "quest": "fireflymc:prologue/b"}
+  ]
+}

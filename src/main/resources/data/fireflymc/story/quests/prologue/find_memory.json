@@ -1,0 +1,13 @@
+{
+  "chapter": "fireflymc:prologue",
+  "title": {"translate": "story.fireflymc.prologue.find_memory"},
+  "description": [{"translate": "story.fireflymc.prologue.find_memory.hint"}],
+  "requirements": [
+    {"id": "memory", "state_version": 1, "type": "fireflymc:pickup", "item": "minecraft:echo_shard", "count": 1}
+  ],
+  "on_complete": [
+    {"type": "fireflymc:set_flag", "flag": "prologue.heard_voice", "value": true, "scope": "player"},
+    {"type": "fireflymc:play_sound", "sound": "minecraft:block.amethyst_block.chime", "volume": 0.8, "pitch": 1.0},
+    {"type": "fireflymc:unlock_quest", "quest": "fireflymc:prologue/heard_voice"}
+  ]
+}

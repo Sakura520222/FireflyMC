@@ -1,0 +1,28 @@
+{
+  "chapter": "fireflymc:coverage",
+  "title": {"text": "All v1 conditions and actions; test resources only"},
+  "initial": false,
+  "requirements": [
+    {"id":"pickup","type":"fireflymc:pickup","item":"minecraft:echo_shard","count":2},
+    {"id":"inventory","type":"fireflymc:inventory","item":"minecraft:torch","count":8},
+    {"id":"kill","type":"fireflymc:kill","entity":"minecraft:zombie","count":3},
+    {"id":"dimension","type":"fireflymc:enter_dimension","dimension":"minecraft:overworld"},
+    {"id":"biome","type":"fireflymc:enter_biome","biome":"minecraft:plains"},
+    {"id":"structure","type":"fireflymc:enter_structure","structure":"minecraft:swamp_hut"},
+    {"id":"advancement","type":"fireflymc:advancement","advancement":"minecraft:story/mine_stone"},
+    {"id":"flag","type":"fireflymc:flag","flag":"coverage.ready","value":true,"scope":"player"},
+    {"id":"location","type":"fireflymc:location","dimension":"minecraft:overworld","x":0,"y":64,"z":0,"radius":5},
+    {"id":"event","state_version":2,"type":"fireflymc:custom_event","event":"fireflymc:coverage/signal","count":2}
+  ],
+  "on_complete": [
+    {"type":"fireflymc:set_flag","flag":"coverage.complete","value":true,"scope":"world"},
+    {"type":"fireflymc:set_var","var":"coverage.steps","op":"add","amount":1,"min":0,"max":10},
+    {"type":"fireflymc:give_item","item":"minecraft:bread","count":1},
+    {"type":"fireflymc:play_sound","sound":"minecraft:block.amethyst_block.chime","volume":1,"pitch":1},
+    {"type":"fireflymc:show_title","title":{"text":"Fixture complete"},"fade_in":0,"stay":20,"fade_out":0},
+    {"type":"fireflymc:send_message","text":{"text":"Fixture complete"}},
+    {"type":"fireflymc:execute_command","command":"say story fixture"},
+    {"type":"fireflymc:teleport","dimension":"minecraft:overworld","x":16,"y":65,"z":16},
+    {"type":"fireflymc:unlock_quest","quest":"fireflymc:coverage/end"}
+  ]
+}

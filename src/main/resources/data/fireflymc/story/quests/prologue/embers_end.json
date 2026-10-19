@@ -1,0 +1,12 @@
+{
+  "chapter": "fireflymc:prologue",
+  "title": {"translate": "story.fireflymc.prologue.embers_end"},
+  "description": [{"translate": "story.fireflymc.prologue.ending"}],
+  "requirements": [],
+  "on_complete": [
+    {"type": "fireflymc:set_flag", "flag": "prologue.awaiting_firefly", "value": true, "scope": "world"},
+    {"type": "fireflymc:show_title", "title": {"translate": "story.fireflymc.prologue.embers_end", "color": "#8EEDE2"}, "subtitle": {"translate": "story.fireflymc.prologue.ending.subtitle"}, "fade_in": 20, "stay": 100, "fade_out": 40},
+    {"type": "fireflymc:send_message", "text": {"translate": "story.fireflymc.prologue.ending"}},
+    {"type": "fireflymc:give_item", "item": "minecraft:bread", "count": 3}
+  ]
+}

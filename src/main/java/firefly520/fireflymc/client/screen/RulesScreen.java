@@ -45,6 +45,7 @@ public class RulesScreen extends Screen {
     private static final int AUTO_CLOSE_TICKS = 3 * 20;
 
     private final boolean isFirstJoin;
+    private final RulesAcknowledgement acknowledgement;
     private CompletableFuture<RulesContent> rulesFuture;
     private RulesContent rules;
     private boolean rulesLoaded = false;
@@ -59,6 +60,7 @@ public class RulesScreen extends Screen {
     public RulesScreen(boolean isFirstJoin) {
         super(Component.literal("服务器准则"));
         this.isFirstJoin = isFirstJoin;
+        this.acknowledgement = new RulesAcknowledgement(isFirstJoin);
         // 异步加载公告，不阻塞主线程
         this.rulesFuture = CompletableFuture.supplyAsync(RulesLoader::loadRules);
         this.rulesFuture.whenComplete((r, e) -> {
@@ -121,9 +123,7 @@ public class RulesScreen extends Screen {
         if (!isFirstJoin) {
             tickCount++;
             if (tickCount >= AUTO_CLOSE_TICKS) {
-                // 发送确认包并关闭
-                PacketDistributor.sendToServer(new ConfirmRulesPayload());
-                onClose();
+                onConfirm();
             }
         }
     }
@@ -334,15 +334,22 @@ public class RulesScreen extends Screen {
 
     @Override
     public void onClose() {
-        // 更新客户端状态
-        ClientState.hasSeenRulesThisSession = true;
+        // A repeat reminder can be dismissed with ESC before its countdown finishes.
+        // It still owes the server an acknowledgement for this connection.
+        acknowledge(acknowledgement.dismiss());
         super.onClose();
     }
 
     private void onConfirm() {
-        // 发送确认包
-        PacketDistributor.sendToServer(new ConfirmRulesPayload());
+        acknowledge(acknowledgement.confirm());
         onClose();
+    }
+
+    private void acknowledge(boolean shouldSend) {
+        if (shouldSend) {
+            PacketDistributor.sendToServer(new ConfirmRulesPayload());
+            ClientState.hasSeenRulesThisSession = true;
+        }
     }
 
     private void onVisitWebsite() {

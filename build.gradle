@@ -70,6 +70,7 @@ neoForge {
         // The gametest system is also enabled by default for other run configs under the /test command.
         gameTestServer {
             type = "gameTestServer"
+            gameDirectory = project.layout.buildDirectory.dir('gameTestServer').get().asFile
             systemProperty 'neoforge.enabledGameTestNamespaces', project.mod_id
         }
 
@@ -171,6 +172,19 @@ dependencies {
 
 tasks.named('test', Test).configure {
     useJUnitPlatform()
+}
+
+// Materialize tracked IDE GameTest SNBT sources into the isolated GameTest server working
+// directory expected by StructureUtils.DEFAULT_TEST_STRUCTURES_DIR.
+def prepareGameTestStructures = tasks.register('prepareGameTestStructures', Copy) {
+    from(file('src/main/resources/data/fireflymc/structure')) {
+        include '**/*.snbt'
+    }
+    into project.layout.buildDirectory.dir('gameTestServer/gameteststructures')
+}
+
+tasks.named('runGameTestServer').configure {
+    dependsOn prepareGameTestStructures
 }
 
 // This block of code expands all declared replace properties in the specified resource targets.
