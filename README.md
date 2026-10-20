@@ -152,12 +152,8 @@ src/main/java/firefly520/fireflymc/      Java 源码
 src/main/resources/                      资源、语言文件、Mixin 配置
 src/main/templates/META-INF/             NeoForge 模组元数据模板
 docs/                                    项目文档
-.sakura/                                 开发文档与实现参考
+licenses/                                第三方许可证文本（随发布 JAR 分发）
 ```
-
-### 对接文档
-
-- [客户端事件通知 WebSocket 协议](docs/client-event-websocket-protocol.md)
 
 ## 构建产物
 
