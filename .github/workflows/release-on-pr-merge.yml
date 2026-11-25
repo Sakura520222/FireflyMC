@@ -30,22 +30,25 @@ jobs:
       
       - name: 提取 PR 信息
         id: extract_pr_info
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_LABELS: ${{ join(github.event.pull_request.labels.*.name, ',') }}
         run: |
-          echo "PR 标题: ${{ github.event.pull_request.title }}"
-          echo "PR 编号: ${{ github.event.pull_request.number }}"
+          echo "PR 标题: ${PR_TITLE}"
+          echo "PR 编号: ${PR_NUMBER}"
           echo "合并时间: $(date +'%Y-%m-%d')"
           
           # 提取 PR 标签
-          LABELS="${{ join(github.event.pull_request.labels.*.name, ',') }}"
-          echo "PR 标签: $LABELS"
-          echo "labels=$LABELS" >> $GITHUB_OUTPUT
+          echo "PR 标签: ${PR_LABELS}"
+          echo "labels=${PR_LABELS}" >> "$GITHUB_OUTPUT"
       
       - name: 分析 PR 类型
         id: analyze_type
+        env:
+          TITLE: ${{ github.event.pull_request.title }}
+          LABELS: ${{ steps.extract_pr_info.outputs.labels }}
         run: |
-          TITLE="${{ github.event.pull_request.title }}"
-          LABELS="${{ steps.extract_pr_info.outputs.labels }}"
-          
           # 根据 PR 标签确定类型
           if echo "$LABELS" | grep -q "enhancement"; then
             CHANGE_TYPE="新增"
@@ -74,14 +77,44 @@ jobs:
             fi
           fi
           
-          echo "change_type=$CHANGE_TYPE" >> $GITHUB_OUTPUT
+          echo "change_type=$CHANGE_TYPE" >> "$GITHUB_OUTPUT"
           echo "变更类型: $CHANGE_TYPE"
       
       - name: 提取提交信息到文件
+        env:
+          GITHUB_TOKEN: ${{ secrets.MY_RELEASE_PAT || secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          MERGE_SHA: ${{ github.event.pull_request.merge_commit_sha }}
         run: |
-          git log --pretty=format:"%s" ${{ github.event.pull_request.base.sha }}..${{ github.event.pull_request.head.sha }} > "${{ runner.temp }}/commits_list.txt"
-          
-          echo "📝 提交信息已写入 ${{ runner.temp }}/commits_list.txt"
+          COMMITS_FILE="${RUNNER_TEMP}/commits_list.txt"
+          : > "$COMMITS_FILE"
+
+          if [ "${GITHUB_EVENT_NAME}" = "pull_request" ] && [ -n "${PR_NUMBER}" ]; then
+            # 优先通过 GitHub API 获取 PR 提交列表，兼容 Squash / Rebase 合并及已删除源分支的场景
+            if gh api --paginate "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}/commits" \
+              --jq '.[].commit.message | split("\n")[0]' > "$COMMITS_FILE"; then
+              echo "📝 已通过 GitHub API 提取 PR #${PR_NUMBER} 提交信息到 ${COMMITS_FILE}"
+            else
+              echo "⚠️ GitHub API 获取 PR 提交失败，尝试回退到本地 git log"
+              : > "$COMMITS_FILE"
+              if [ -n "${BASE_SHA}" ] && [ -n "${HEAD_SHA}" ]; then
+                # 如果本地缺少 head 提交（例如 Squash / Rebase 合并后检出 main），尝试拉取 PR head ref
+                if ! git cat-file -e "${HEAD_SHA}^{commit}" 2>/dev/null; then
+                  git fetch origin "pull/${PR_NUMBER}/head" --no-tags 2>/dev/null || true
+                fi
+                if git cat-file -e "${BASE_SHA}^{commit}" 2>/dev/null && git cat-file -e "${HEAD_SHA}^{commit}" 2>/dev/null; then
+                  git log --pretty=format:"%s" "${BASE_SHA}..${HEAD_SHA}" > "$COMMITS_FILE"
+                elif [ -n "${MERGE_SHA}" ] && git cat-file -e "${MERGE_SHA}^{commit}" 2>/dev/null; then
+                  git log -1 --pretty=format:"%s" "${MERGE_SHA}" > "$COMMITS_FILE"
+                fi
+              fi
+              echo "📝 已通过回退方案写入提交信息到 ${COMMITS_FILE}"
+            fi
+          else
+            echo "ℹ️ 非 pull_request 事件（${GITHUB_EVENT_NAME}），跳过提取 PR 提交"
+          fi
       
       - name: 读取当前版本
         id: read_version
@@ -159,7 +192,7 @@ jobs:
           declare -A EXISTING_COMMITS
           if [ "$EXISTS" = "true" ] && [ -f "current_body.txt" ]; then
             CURRENT_TYPE=""
-            while IFS= read -r line; do
+            while IFS= read -r line || [ -n "$line" ]; do
               # 匹配分类标题：### 新增功能
               if [[ "$line" =~ ^###[[:space:]]+(.+)$ ]]; then
                 CURRENT_TYPE="${BASH_REMATCH[1]}"
@@ -188,16 +221,23 @@ jobs:
           PATTERN_NORMAL='^[a-zA-Z]+\([^)]+\):'
           PATTERN_SIMPLE='^[a-zA-Z]+:'
           
-          # 添加 PR 标题作为一个"提交"
-          echo "$TITLE" > "${RUNNER_TEMP}/all_commits.txt"
+          # 添加 PR 标题作为一个"提交"（如果存在）
+          : > "${RUNNER_TEMP}/all_commits.txt"
+          if [ -n "$TITLE" ]; then
+            printf '%s\n' "$TITLE" >> "${RUNNER_TEMP}/all_commits.txt"
+          fi
           
           # 追加 PR 内的所有提交
           if [ -s "$COMMITS_FILE" ]; then
             cat "$COMMITS_FILE" >> "${RUNNER_TEMP}/all_commits.txt"
           fi
+
+          # 去除本次 PR 中完全重复的条目（保留原有顺序，避免单提交 PR 标题与提交信息重复）
+          awk 'NF && !seen[$0]++' "${RUNNER_TEMP}/all_commits.txt" > "${RUNNER_TEMP}/all_commits_dedup.txt"
+          mv "${RUNNER_TEMP}/all_commits_dedup.txt" "${RUNNER_TEMP}/all_commits.txt"
           
           # 解析所有提交，按类型分组
-          while IFS= read -r commit; do
+          while IFS= read -r commit || [ -n "$commit" ]; do
             [ -z "$commit" ] && continue
             
             # 提取提交类型
@@ -222,7 +262,7 @@ jobs:
             
             # 添加到对应类型（不加粗）
             # 添加 PR 编号（如果还没有）
-            if [[ "$commit_msg" != *"(PR #"* ]]; then
+            if [ -n "$PR_NUM" ] && [[ "$commit_msg" != *"(PR #"* ]]; then
               commit_msg="$commit_msg (PR #${PR_NUM})"
               # 如果有标签，添加标签信息
               if [ -n "$LABELS" ]; then
@@ -365,7 +405,7 @@ jobs:
         if: always()
         run: |
           rm -f release_notes.txt current_body.txt new_entry.txt header.txt new_section.txt 2>/dev/null || true
-          rm -f "${RUNNER_TEMP}/commits_list.txt" 2>/dev/null || true
+          rm -f "${RUNNER_TEMP}/commits_list.txt" "${RUNNER_TEMP}/all_commits.txt" "${RUNNER_TEMP}/all_commits_dedup.txt" 2>/dev/null || true
           echo "✅ 临时文件已清理"
 
   build-and-upload-assets:
