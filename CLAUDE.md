@@ -10,8 +10,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **核心功能**：游戏内点歌（网易云检索、全服同步播放）、剧情任务系统（数据驱动任务引擎，含序章）、单人世界公开联机（WebSocket 中继大厅 + UDP P2P 打洞）、玩家密码认证（防顶号）、入服规则确认、专服私人 AI 工作台（4.0 持续实施中，进度见完整实施记录）、新手福利包、掉落物自动清理、在线时长限制、客户端事件 WebSocket 通知（含跨服聊天代发到云端/QQ 群）、更新检查。
 - **版本与构建元数据**：集中在 [gradle.properties](gradle.properties)（`mod_version`、`minecraft_version`、`neo_version`、`parchment_*`），版本号以该文件为唯一来源，不要在文档中硬编码后失同步。
 - **开发环境**：Windows 11。命令既可用 Git Bash 执行 `./gradlew ...`，也可用 PowerShell 执行 `.\gradlew.bat ...`；使用仓库内 Gradle Wrapper，无需全局安装 Gradle；需本机 Java 21。
-- **云端服务器源码参考路径（Python，含中继与官网，位于服务器）**：`/home/firefly/Projects/firefly_mc`
-- **移动端论坛 App 源码参考路径（Android，Kotlin/Compose，位于开发机）**：`/home/firefly/Projects/FireflyMC-APP`
+- **云端服务器源码参考路径（Python，含中继与官网，位于服务器）**：`/home/firefly/Projects/firefly_mc`(Linux)、`C:\Users\Firefly\Documents\Projects\firefly_mc`(Windows)
+- **移动端论坛 App 源码参考路径（Android，Kotlin/Compose，位于开发机）**：`/home/firefly/Projects/FireflyMC-APP`(Linux)、`"C:\Users\Firefly\Documents\Projects\FireflyMC-APP"`(Windows)
 - **整合包实机安装路径（版本隔离实例，game dir 即该目录）**：`D:\Game\MC\.minecraft\versions\FireflyMC`——内含 `mods/`（含实装 `fireflymc-*.jar`）、`logs/`（latest.log）、`crash-reports/`、`saves/`、`config/`、`music-cache/`；排查用户整合包崩溃/日志时直接读取该目录。整合包中的 mod 后续随时会增加、删除、禁用，排查时以该目录 `mods/` 的当前实际内容为准，不要依赖历史结论。
 
 ## 常用开发命令 (Gradle)
