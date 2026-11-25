@@ -80,7 +80,7 @@ public final class ClientEventNotificationMessage {
     /**
      * 跨级聊天代发：以指定发送者名义构造 player_chat 消息上行到云端/QQ 群。
      * <p>
-     * 用于服务端发起/转发的聊天内容（AI 回复、{@code /ai} 命令的玩家消息等）——
+     * 用于本人逐条预览确认、服务端固定正文后发布的公开分享——
      * 这些内容不经客户端 ClientChatEvent，需由服务端通过 payload 委托客户端代发。
      *
      * @param senderName 发送者显示名（AI 名或玩家名）

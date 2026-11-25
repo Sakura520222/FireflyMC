@@ -12,3 +12,11 @@
 
 > 发布核对清单：发布前确认发布物包含 JLayer 嵌套 jar 原件、本声明（NOTICE.md）、
 > licenses/jlayer-LGPL-2.1.txt——三者均已由 Gradle jar 任务自动打入 mod jar。
+
+## jsoup (org.jsoup:jsoup)
+
+- 用途：受限网页正文与搜索结果 HTML 解析；不使用其网络访问入口。
+- 版本由 `gradle.properties` 的 `jsoup_version` 固定，以 jarJar 原样分发。
+- 许可证：MIT；原许可证随发布 JAR 提供于 `licenses/jsoup-MIT.txt`。
+- 来源：https://jsoup.org/ ，https://github.com/jhy/jsoup
+- 版权：Copyright © 2009–2026 Jonathan Hedley。

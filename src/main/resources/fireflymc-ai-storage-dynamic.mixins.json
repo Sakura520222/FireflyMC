@@ -1,0 +1,9 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "firefly520.fireflymc.mixin",
+  "compatibilityLevel": "JAVA_21",
+  "plugin": "firefly520.fireflymc.ai.processing.advanced.StorageDynamicMixinPlugin",
+  "mixins": ["StorageDynamicStoreMixin", "StorageDynamicUuidMixin", "StorageDynamicCacheMixin"],
+  "injectors": {"defaultRequire": 1}
+}

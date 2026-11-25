@@ -84,6 +84,29 @@ public final class ClientEventWebSocketClient {
         });
     }
 
+    /** Read-only capability hint; it does not connect or enqueue private AI data. */
+    public boolean canSendConfirmedShare() {
+        return ClientEventNotificationConfig.crossChatEnabled() && connected.get();
+    }
+
+    /** A confirmed share is sent once; ambiguous network errors are never put in the retry queue. */
+    public CompletableFuture<Boolean> sendConfirmedShare(ClientEventNotificationMessage message, String expectedEndpointHash) {
+        CompletableFuture<Boolean> result = new CompletableFuture<>();
+        executor.execute(() -> {
+            WebSocket socket = webSocket;
+            if (message == null || !canSendConfirmedShare() || socket == null || activeUrl == null
+                    || !firefly520.fireflymc.ai.storage.AiJson.digest(activeUrl).equals(expectedEndpointHash)) {
+                result.complete(false); return;
+            }
+            try {
+                socket.sendText(message.toJson(), true)
+                        .orTimeout(ClientEventNotificationConfig.sendTimeoutMillis(), TimeUnit.MILLISECONDS)
+                        .whenComplete((ignored, error) -> result.complete(error == null));
+            } catch (Exception e) { result.complete(false); }
+        });
+        return result;
+    }
+
     public void close() {
         reset("client_logged_out");
     }

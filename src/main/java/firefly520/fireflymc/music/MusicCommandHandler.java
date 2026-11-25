@@ -21,7 +21,7 @@ import java.util.List;
  * 点歌命令。注册到 NeoForge GAME 总线。
  * 不限定 Dist：单人/LAN/专服都要工作（不复制 SpawnAllCommandHandler 的 DEDICATED_SERVER 限定坑）。
  *
- * /点歌 <歌名>
+ * /点歌 <歌名>（用户明确保留的快捷别名）
  * /fireflymc music request <歌名> | queue | skip | stop
  */
 @EventBusSubscriber
@@ -33,7 +33,7 @@ public class MusicCommandHandler {
     public static void onRegisterCommands(RegisterCommandsEvent event) {
         CommandDispatcher<CommandSourceStack> dispatcher = event.getDispatcher();
 
-        // 中文顶层别名
+        // 产品明确保留点歌快捷别名，与统一子树使用相同业务和权限检查。
         dispatcher.register(Commands.literal("点歌")
                 .then(Commands.argument("keyword", StringArgumentType.greedyString())
                         .executes(ctx -> requestSong(ctx.getSource(), StringArgumentType.getString(ctx, "keyword")))));

@@ -7,7 +7,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **项目类型**：Minecraft 1.21.1 模组（Mod）
 - **Mod Loader**：NeoForge 21.1.x（Gradle 8.10 Wrapper，Java 21，Parchment 映射；具体版本以 [gradle.properties](gradle.properties) 为准）
 - **Mod ID**：`fireflymc`（Group: `top.firefly520.fireflymc`，主入口类 [FireflyMCMod.java](src/main/java/firefly520/fireflymc/FireflyMCMod.java)）
-- **核心功能**：游戏内点歌（网易云检索、全服同步播放）、剧情任务系统（数据驱动任务引擎，含序章）、单人世界公开联机（WebSocket 中继大厅 + UDP P2P 打洞）、玩家密码认证（防顶号）、入服规则确认、AI 聊天（函数调用）、新手福利包、掉落物自动清理、在线时长限制、客户端事件 WebSocket 通知（含跨服聊天代发到云端/QQ 群）、更新检查。
+- **核心功能**：游戏内点歌（网易云检索、全服同步播放）、剧情任务系统（数据驱动任务引擎，含序章）、单人世界公开联机（WebSocket 中继大厅 + UDP P2P 打洞）、玩家密码认证（防顶号）、入服规则确认、专服私人 AI 工作台（4.0 持续实施中，进度见完整实施记录）、新手福利包、掉落物自动清理、在线时长限制、客户端事件 WebSocket 通知（含跨服聊天代发到云端/QQ 群）、更新检查。
 - **版本与构建元数据**：集中在 [gradle.properties](gradle.properties)（`mod_version`、`minecraft_version`、`neo_version`、`parchment_*`），版本号以该文件为唯一来源，不要在文档中硬编码后失同步。
 - **开发环境**：Windows 11。命令既可用 Git Bash 执行 `./gradlew ...`，也可用 PowerShell 执行 `.\gradlew.bat ...`；使用仓库内 Gradle Wrapper，无需全局安装 Gradle；需本机 Java 21。
 - **云端服务器源码参考路径（Python，含中继与官网，位于服务器）**：`/home/firefly/Projects/firefly_mc`
@@ -65,7 +65,7 @@ fireflymc/
 ├── Config.java / ServerConfig.java   # 客户端 / 服务端 TOML 配置
 ├── ModEventHandler.java    # 服务端事件处理
 ├── ItemCleanupManager.java # 掉落物自动清理
-├── ai/                     # AI 聊天（上下文、冷却、函数调用 ai/function/）
+├── ai/                     # 专服私人工作区、永久主会话、Agent、协议适配、工具与知识
 ├── auth/                   # 玩家密码认证（防顶号、尝试锁定）
 ├── command/                # 生成生物等命令处理
 ├── kit/                    # 新手福利包
@@ -123,5 +123,5 @@ fireflymc/
    - [docs/known-issues.md](docs/known-issues.md)：已知问题与技术债务登记（按模块前缀编号，如 `WS-001`）；修改相关模块前先查阅，避免"修复"有意暂缓的问题。
    - [docs/mc-neoforge-lan-bridge-guide.md](docs/mc-neoforge-lan-bridge-guide.md)：LAN 桥接/中继联机设计指南。
    - [docs/superpowers/specs/](docs/superpowers/specs/) 与 [docs/superpowers/plans/](docs/superpowers/plans/)：大功能的设计文档与实施计划（IPv6 中继控制、点歌请求、剧情引擎 v1 等），同目录下有阶段性交付/完成记录。
-   - [docs/FireflyMC-AI-4.0-重构设计.md](docs/FireflyMC-AI-4.0-重构设计.md)：AI 4.0「玩家专属 Minecraft Agent」重构技术方案（设计阶段，未实现）——重做 AI 模块前必读。
+   - [docs/FireflyMC-AI-4.0-重构设计.md](docs/FireflyMC-AI-4.0-重构设计.md)：AI 4.0「玩家专属 Minecraft Agent」最新技术方案，修改 AI 前必读；实际实现及验证进度另见 [完整实施记录](docs/FireflyMC-AI-4.0-完整实施记录.md)，不能将设计承诺直接视为已完成。
 5. **行尾（CRLF/LF）注意**：仓库历经 Windows ↔ Ubuntu 迁移，`core.autocrlf=input`。若 `./gradlew` 报 `/bin/sh^M: bad interpreter`，说明脚本被改回 CRLF 行尾，执行 `sed -i 's/\r$//' gradlew` 修复（git 索引内为 LF）。

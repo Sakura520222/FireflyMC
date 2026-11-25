@@ -1,0 +1,9 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "firefly520.fireflymc.mixin",
+  "compatibilityLevel": "JAVA_21",
+  "plugin": "firefly520.fireflymc.ai.processing.advanced.BuildingDynamicAtlasMixinPlugin",
+  "mixins": ["BuildingDynamicAtlasFindMixin", "BuildingDynamicAtlasCollectionMixin"],
+  "injectors": {"defaultRequire": 1}
+}

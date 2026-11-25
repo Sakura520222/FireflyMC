@@ -1,0 +1,14 @@
+modLoader="javafml"
+loaderVersion="[4,)"
+license="All Rights Reserved"
+[[mods]]
+modId="fireflymc_validation"
+version="1.0"
+displayName="FireflyMC isolated validation"
+description="Opt-in development validation fixtures. Excluded from the distributable mod."
+[[dependencies.fireflymc_validation]]
+modId="fireflymc"
+type="required"
+versionRange="[0,)"
+ordering="AFTER"
+side="BOTH"

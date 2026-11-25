@@ -44,6 +44,7 @@ public class FireflyMCMod {
     // 1.6. 注册剧情系统附件、资源重载与服务器生命周期
     StoryEngine.register(modEventBus);
     StorySyncService.install();
+    firefly520.fireflymc.ai.material.MaterialSourceIdentity.register(modEventBus);
 
     // 2. 注册配置热重载事件（MOD 总线）
     modEventBus.addListener(this::onConfigReload);
@@ -53,6 +54,7 @@ public class FireflyMCMod {
 
     // 3. 客户端专用注册
     if (FMLEnvironment.dist == Dist.CLIENT) {
+      firefly520.fireflymc.client.ai.AiClientBootstrap.register(modEventBus);
       modContainer.registerExtensionPoint(
               IConfigScreenFactory.class,
               ConfigurationScreen::new

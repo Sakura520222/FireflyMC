@@ -109,7 +109,9 @@ public final class StoryGameTests {
                 zombie.setPos(player.getX(), player.getY(), player.getZ());
                 helper.getLevel().addFreshEntity(zombie);
                 try {
-                    zombie.hurt(player.damageSources().playerAttack(player), Float.MAX_VALUE);
+                    // Finite damage remains lethal without overflowing optional damage/attribute modifiers.
+                    helper.assertTrue(zombie.hurt(player.damageSources().playerAttack(player), 1000.0F)
+                            && zombie.isDeadOrDying(), "finite native player attack must kill the fixture zombie");
                 } finally {
                     zombie.discard();
                 }

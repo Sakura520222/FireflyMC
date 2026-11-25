@@ -55,6 +55,21 @@ FireflyMC服务器专用mod
 [[mixins]]
 config="mixins.fireflymc.json"
 
+[[mixins]]
+config="fireflymc-ai-travel.mixins.json"
+
+[[mixins]]
+config="fireflymc-ai-trees.mixins.json"
+
+[[mixins]]
+config="mixins.fireflymc-ownership.json"
+
+[[mixins]]
+config="fireflymc-ai-storage-dynamic.mixins.json"
+
+[[mixins]]
+config="fireflymc-ai-atlas-recipes.mixins.json"
+
 # The [[accessTransformers]] block allows you to declare where your AT file is.
 # If this block is omitted, a fallback attempt will be made to load an AT from META-INF/accesstransformer.cfg
 #[[accessTransformers]]

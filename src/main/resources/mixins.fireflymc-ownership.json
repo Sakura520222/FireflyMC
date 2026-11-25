@@ -1,0 +1,15 @@
+{
+  "required": true,
+  "package": "firefly520.fireflymc.mixin",
+  "compatibilityLevel": "JAVA_21",
+  "mixins": [
+    "AiOwnershipChunkAccessMixin",
+    "AiOwnershipChunkMixin",
+    "AiOwnershipSectionMixin",
+    "AiOwnershipPaletteMixin",
+    "AiOwnershipPaletteDataAccess",
+    "AiOwnershipBitStorageMixin",
+    "AiOwnershipSerializationMixin"
+  ],
+  "injectors": { "defaultRequire": 1 }
+}
