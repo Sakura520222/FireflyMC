@@ -28,6 +28,8 @@ public class Config {
     public final ModConfigSpec.ConfigValue<Integer> SINGLEPLAYER_RELAY_P2P_RETRANSMIT_MILLIS;
     public final ModConfigSpec.ConfigValue<Integer> SINGLEPLAYER_RELAY_P2P_WINDOW_SIZE;
     public final ModConfigSpec.BooleanValue SINGLEPLAYER_RELAY_P2P_IPV6_ENABLED;
+    public final ModConfigSpec.BooleanValue OFFICIAL_SERVER_LIST_ENABLED;
+    public final ModConfigSpec.ConfigValue<String> OFFICIAL_SERVER_LIST_URL;
     public final ModConfigSpec.BooleanValue IPV6_PROBE_ENABLED;
     public final ModConfigSpec.BooleanValue IPV6_PROBE_AUTO_ON_SP_JOIN;
     public final ModConfigSpec.ConfigValue<Integer> IPV6_PROBE_TIMEOUT_SECONDS;
@@ -115,6 +117,21 @@ public class Config {
         .comment("Try direct IPv6 connection first when both peers have public IPv6 addresses")
         .translation("fireflymc.config.singleplayer_relay.p2p_ipv6_enabled")
         .define("p2pIpv6Enabled", true);
+
+      builder.pop();
+
+      builder.push("official_server_list")
+        .translation("fireflymc.configuration.official_server_list");
+
+      OFFICIAL_SERVER_LIST_ENABLED = builder
+        .comment("Show the official servers published by the FireflyMC backend in the multiplayer server list. A local entry with the same address is hidden in favour of the official one")
+        .translation("fireflymc.config.official_server_list.enabled")
+        .define("enabled", true);
+
+      OFFICIAL_SERVER_LIST_URL = builder
+        .comment("HTTP URL that returns the official server list as JSON: {\"servers\":[{\"name\":\"...\",\"address\":\"host:port\"}]}")
+        .translation("fireflymc.config.official_server_list.url")
+        .define("url", "https://mc.firefly520.top/api/servers");
 
       builder.pop();
 
